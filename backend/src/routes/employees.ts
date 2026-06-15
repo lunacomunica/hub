@@ -9,14 +9,13 @@ const router = Router();
 
 // ─── Multer setup ────────────────────────────────────────────────────────────
 
-const UPLOAD_DIR = path.join(__dirname, '../../../uploads/payslips');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const UPLOAD_DIR = '/tmp/uploads/payslips';
+const PHOTO_DIR = '/tmp/uploads/photos';
+const TEMP_DIR = '/tmp/uploads/temp';
 
-const PHOTO_DIR = path.join(__dirname, '../../../uploads/photos');
-if (!fs.existsSync(PHOTO_DIR)) fs.mkdirSync(PHOTO_DIR, { recursive: true });
-
-const TEMP_DIR = path.join(__dirname, '../../../uploads/temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+[UPLOAD_DIR, PHOTO_DIR, TEMP_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
