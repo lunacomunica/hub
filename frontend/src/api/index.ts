@@ -4,13 +4,28 @@ const BASE = '/api';
 
 async function req<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('auth-token');
-  const res = await fetch(`${BASE}${url}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${url}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('O servidor demorou demais para responder. Tente novamente.');
+    }
+    throw new Error('Não foi possível conectar ao servidor. Verifique sua conexão.');
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
   if (res.status === 401) {
     localStorage.removeItem('auth-token');
     window.location.href = '/login';
