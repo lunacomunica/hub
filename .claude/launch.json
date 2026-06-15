@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "financeiro-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=frontend"],
+      "port": 5175,
+      "cwd": "/Users/vanessaraeski/financeiro-agencia"
+    }
+  ]
+}
