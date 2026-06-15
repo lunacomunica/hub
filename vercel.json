@@ -2,29 +2,11 @@
   "experimentalServices": {
     "frontend": {
       "root": "frontend",
-      "framework": "vite",
-      "installCommand": "npm install",
-      "buildCommand": "npm run build",
-      "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
-      ]
+      "framework": "vite"
     },
     "api": {
       "root": ".",
-      "framework": null,
-      "installCommand": "npm install --prefix backend",
-      "builds": [
-        { "src": "api/index.ts", "use": "@vercel/node" }
-      ],
-      "rewrites": [
-        { "source": "/api/:path*", "destination": "/api/index" }
-      ],
-      "functions": {
-        "api/index.ts": {
-          "memory": 1024,
-          "maxDuration": 30
-        }
-      }
+      "framework": null
     }
   }
 }
