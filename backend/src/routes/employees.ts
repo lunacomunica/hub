@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { AuthRequest } from '../middleware/auth';
-import db from '../db';
+import pool from '../db';
 
 const router = Router();
 
@@ -159,7 +159,7 @@ function calcProvisions(employee: {
     return { monthly_provision: 0, ferias_accrued: 0, decimo_accrued: 0 };
   }
 
-  const salary = employee.salary;
+  const salary = Number(employee.salary);
   const admission = new Date(employee.admission_date);
   const today = new Date();
 
@@ -186,11 +186,11 @@ function calcProvisions(employee: {
 
 // ─── GET / — list all employees ──────────────────────────────────────────────
 
-router.get('/', (req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const employees = db.prepare('SELECT * FROM employees ORDER BY name ASC').all() as any[];
+    const { rows: employees } = await pool.query('SELECT * FROM employees ORDER BY name ASC');
 
-    const result = employees.map((emp) => ({
+    const result = employees.map((emp: any) => ({
       ...emp,
       provisions: calcProvisions(emp),
     }));
@@ -203,7 +203,7 @@ router.get('/', (req: AuthRequest, res: Response) => {
 
 // ─── POST / — create employee ─────────────────────────────────────────────────
 
-router.post('/', (req: AuthRequest, res: Response) => {
+router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const {
       name,
@@ -223,25 +223,25 @@ router.post('/', (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Campos obrigatórios: name, role, salary, admission_date' });
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO employees (name, cpf, email, phone, role, department, salary, admission_date, status, notes, avatar_color)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const info = stmt.run(
-      name,
-      cpf ?? null,
-      email ?? null,
-      phone ?? null,
-      role,
-      department ?? null,
-      Number(salary),
-      admission_date,
-      status ?? 'ativo',
-      notes ?? null,
-      avatar_color ?? '#6366f1',
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO employees (name, cpf, email, phone, role, department, salary, admission_date, status, notes, avatar_color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [
+        name,
+        cpf ?? null,
+        email ?? null,
+        phone ?? null,
+        role,
+        department ?? null,
+        Number(salary),
+        admission_date,
+        status ?? 'ativo',
+        notes ?? null,
+        avatar_color ?? '#6366f1',
+      ]
     );
 
-    const created = db.prepare('SELECT * FROM employees WHERE id = ?').get(info.lastInsertRowid) as any;
     res.status(201).json({ ...created, provisions: calcProvisions(created) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -250,31 +250,32 @@ router.post('/', (req: AuthRequest, res: Response) => {
 
 // ─── PUT /:id — update employee ───────────────────────────────────────────────
 
-router.put('/:id', (req: AuthRequest, res: Response) => {
+router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(id)) as any;
+    const { rows: [employee] } = await pool.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     const fields = ['name', 'cpf', 'email', 'phone', 'role', 'department', 'salary', 'admission_date', 'status', 'notes', 'avatar_color'];
     const updates: string[] = [];
     const values: any[] = [];
+    let paramIdx = 1;
 
     for (const field of fields) {
       if (req.body[field] !== undefined) {
-        updates.push(`${field} = ?`);
+        updates.push(`${field} = $${paramIdx++}`);
         values.push(req.body[field]);
       }
     }
 
     if (updates.length === 0) return res.status(400).json({ error: 'Nenhum campo para atualizar' });
 
-    updates.push(`updated_at = datetime('now')`);
+    updates.push(`updated_at = NOW()`);
     values.push(Number(id));
 
-    db.prepare(`UPDATE employees SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    await pool.query(`UPDATE employees SET ${updates.join(', ')} WHERE id = $${paramIdx}`, values);
 
-    const updated = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(id)) as any;
+    const { rows: [updated] } = await pool.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     res.json({ ...updated, provisions: calcProvisions(updated) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -283,13 +284,13 @@ router.put('/:id', (req: AuthRequest, res: Response) => {
 
 // ─── DELETE /:id — soft deactivate ───────────────────────────────────────────
 
-router.delete('/:id', (req: AuthRequest, res: Response) => {
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(Number(id));
+    const { rows: [employee] } = await pool.query('SELECT id FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
-    db.prepare(`UPDATE employees SET status = 'inativo', updated_at = datetime('now') WHERE id = ?`).run(Number(id));
+    await pool.query(`UPDATE employees SET status = 'inativo', updated_at = NOW() WHERE id = $1`, [Number(id)]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -298,10 +299,10 @@ router.delete('/:id', (req: AuthRequest, res: Response) => {
 
 // ─── POST /:id/salary-change ──────────────────────────────────────────────────
 
-router.post('/:id/salary-change', (req: AuthRequest, res: Response) => {
+router.post('/:id/salary-change', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(id)) as any;
+    const { rows: [employee] } = await pool.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     const { new_salary, new_role, change_date, reason } = req.body;
@@ -310,32 +311,37 @@ router.post('/:id/salary-change', (req: AuthRequest, res: Response) => {
     }
 
     // Record history
-    db.prepare(`
-      INSERT INTO employee_salary_history (employee_id, previous_salary, new_salary, previous_role, new_role, change_date, reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      Number(id),
-      employee.salary,
-      Number(new_salary),
-      employee.role,
-      new_role ?? employee.role,
-      change_date,
-      reason ?? null,
+    await pool.query(
+      `INSERT INTO employee_salary_history (employee_id, previous_salary, new_salary, previous_role, new_role, change_date, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        Number(id),
+        employee.salary,
+        Number(new_salary),
+        employee.role,
+        new_role ?? employee.role,
+        change_date,
+        reason ?? null,
+      ]
     );
 
     // Update employee
-    const updates: string[] = ['salary = ?', `updated_at = datetime('now')`];
-    const values: any[] = [Number(new_salary)];
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIdx = 1;
 
     if (new_role) {
-      updates.unshift('role = ?');
-      values.unshift(new_role);
+      updates.push(`role = $${paramIdx++}`);
+      values.push(new_role);
     }
-
+    updates.push(`salary = $${paramIdx++}`);
+    values.push(Number(new_salary));
+    updates.push(`updated_at = NOW()`);
     values.push(Number(id));
-    db.prepare(`UPDATE employees SET ${updates.join(', ')} WHERE id = ?`).run(...values);
 
-    const updated = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(id)) as any;
+    await pool.query(`UPDATE employees SET ${updates.join(', ')} WHERE id = $${paramIdx}`, values);
+
+    const { rows: [updated] } = await pool.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     res.json({ ...updated, provisions: calcProvisions(updated) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -344,25 +350,26 @@ router.post('/:id/salary-change', (req: AuthRequest, res: Response) => {
 
 // ─── GET /:id/overtime ────────────────────────────────────────────────────────
 
-router.get('/:id/overtime', (req: AuthRequest, res: Response) => {
+router.get('/:id/overtime', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { month, year } = req.query;
 
-    let query = 'SELECT * FROM employee_overtime WHERE employee_id = ?';
+    let query = 'SELECT * FROM employee_overtime WHERE employee_id = $1';
     const params: any[] = [Number(id)];
+    let paramIdx = 2;
 
     if (month && year) {
       const m = String(month).padStart(2, '0');
-      query += ` AND date >= ? AND date <= ?`;
+      query += ` AND date >= $${paramIdx++} AND date <= $${paramIdx++}`;
       params.push(`${year}-${m}-01`, `${year}-${m}-31`);
     } else if (year) {
-      query += ` AND date >= ? AND date <= ?`;
+      query += ` AND date >= $${paramIdx++} AND date <= $${paramIdx++}`;
       params.push(`${year}-01-01`, `${year}-12-31`);
     }
 
     query += ' ORDER BY date DESC';
-    const rows = db.prepare(query).all(...params);
+    const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -371,10 +378,10 @@ router.get('/:id/overtime', (req: AuthRequest, res: Response) => {
 
 // ─── POST /:id/overtime ───────────────────────────────────────────────────────
 
-router.post('/:id/overtime', (req: AuthRequest, res: Response) => {
+router.post('/:id/overtime', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(Number(id));
+    const { rows: [employee] } = await pool.query('SELECT id FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     const { date, hours, rate_multiplier = 1.5, value, notes } = req.body;
@@ -382,12 +389,13 @@ router.post('/:id/overtime', (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Campos obrigatórios: date, hours, value' });
     }
 
-    const info = db.prepare(`
-      INSERT INTO employee_overtime (employee_id, date, hours, rate_multiplier, value, notes)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(Number(id), date, Number(hours), Number(rate_multiplier), Number(value), notes ?? null);
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO employee_overtime (employee_id, date, hours, rate_multiplier, value, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [Number(id), date, Number(hours), Number(rate_multiplier), Number(value), notes ?? null]
+    );
 
-    const created = db.prepare('SELECT * FROM employee_overtime WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -396,13 +404,16 @@ router.post('/:id/overtime', (req: AuthRequest, res: Response) => {
 
 // ─── DELETE /:id/overtime/:oid ────────────────────────────────────────────────
 
-router.delete('/:id/overtime/:oid', (req: AuthRequest, res: Response) => {
+router.delete('/:id/overtime/:oid', async (req: AuthRequest, res: Response) => {
   try {
     const { id, oid } = req.params;
-    const row = db.prepare('SELECT id FROM employee_overtime WHERE id = ? AND employee_id = ?').get(Number(oid), Number(id));
+    const { rows: [row] } = await pool.query(
+      'SELECT id FROM employee_overtime WHERE id = $1 AND employee_id = $2',
+      [Number(oid), Number(id)]
+    );
     if (!row) return res.status(404).json({ error: 'Registro não encontrado' });
 
-    db.prepare('DELETE FROM employee_overtime WHERE id = ?').run(Number(oid));
+    await pool.query('DELETE FROM employee_overtime WHERE id = $1', [Number(oid)]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -411,13 +422,14 @@ router.delete('/:id/overtime/:oid', (req: AuthRequest, res: Response) => {
 
 // ─── GET /:id/payslips ────────────────────────────────────────────────────────
 
-router.get('/:id/payslips', (req: AuthRequest, res: Response) => {
+router.get('/:id/payslips', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const rows = db.prepare(`
-      SELECT id, employee_id, month, year, filename, gross_salary, net_salary, deductions, created_at
-      FROM employee_payslips WHERE employee_id = ? ORDER BY year DESC, month DESC
-    `).all(Number(id));
+    const { rows } = await pool.query(
+      `SELECT id, employee_id, month, year, filename, gross_salary, net_salary, deductions, created_at
+       FROM employee_payslips WHERE employee_id = $1 ORDER BY year DESC, month DESC`,
+      [Number(id)]
+    );
     res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -426,10 +438,10 @@ router.get('/:id/payslips', (req: AuthRequest, res: Response) => {
 
 // ─── POST /:id/payslips — upload ──────────────────────────────────────────────
 
-router.post('/:id/payslips', upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/:id/payslips', upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(Number(id));
+    const { rows: [employee] } = await pool.query('SELECT id FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     if (!req.file) return res.status(400).json({ error: 'Arquivo obrigatório' });
@@ -437,21 +449,22 @@ router.post('/:id/payslips', upload.single('file'), (req: AuthRequest, res: Resp
     const { month, year, gross_salary, net_salary, deductions } = req.body;
     if (!month || !year) return res.status(400).json({ error: 'Campos obrigatórios: month, year' });
 
-    const info = db.prepare(`
-      INSERT INTO employee_payslips (employee_id, month, year, filename, filepath, gross_salary, net_salary, deductions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      Number(id),
-      Number(month),
-      Number(year),
-      req.file.originalname,
-      req.file.filename,
-      gross_salary ? Number(gross_salary) : null,
-      net_salary ? Number(net_salary) : null,
-      deductions ? Number(deductions) : null,
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO employee_payslips (employee_id, month, year, filename, filepath, gross_salary, net_salary, deductions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        Number(id),
+        Number(month),
+        Number(year),
+        req.file.originalname,
+        req.file.filename,
+        gross_salary ? Number(gross_salary) : null,
+        net_salary ? Number(net_salary) : null,
+        deductions ? Number(deductions) : null,
+      ]
     );
 
-    const created = db.prepare('SELECT * FROM employee_payslips WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -460,10 +473,13 @@ router.post('/:id/payslips', upload.single('file'), (req: AuthRequest, res: Resp
 
 // ─── GET /:id/payslips/:pid/download ─────────────────────────────────────────
 
-router.get('/:id/payslips/:pid/download', (req: AuthRequest, res: Response) => {
+router.get('/:id/payslips/:pid/download', async (req: AuthRequest, res: Response) => {
   try {
     const { id, pid } = req.params;
-    const payslip = db.prepare('SELECT * FROM employee_payslips WHERE id = ? AND employee_id = ?').get(Number(pid), Number(id)) as any;
+    const { rows: [payslip] } = await pool.query(
+      'SELECT * FROM employee_payslips WHERE id = $1 AND employee_id = $2',
+      [Number(pid), Number(id)]
+    );
     if (!payslip) return res.status(404).json({ error: 'Holerite não encontrado' });
 
     const filePath = path.join(UPLOAD_DIR, payslip.filepath);
@@ -479,10 +495,13 @@ router.get('/:id/payslips/:pid/download', (req: AuthRequest, res: Response) => {
 
 // ─── DELETE /:id/payslips/:pid ────────────────────────────────────────────────
 
-router.delete('/:id/payslips/:pid', (req: AuthRequest, res: Response) => {
+router.delete('/:id/payslips/:pid', async (req: AuthRequest, res: Response) => {
   try {
     const { id, pid } = req.params;
-    const payslip = db.prepare('SELECT * FROM employee_payslips WHERE id = ? AND employee_id = ?').get(Number(pid), Number(id)) as any;
+    const { rows: [payslip] } = await pool.query(
+      'SELECT * FROM employee_payslips WHERE id = $1 AND employee_id = $2',
+      [Number(pid), Number(id)]
+    );
     if (!payslip) return res.status(404).json({ error: 'Holerite não encontrado' });
 
     const filePath = path.join(UPLOAD_DIR, payslip.filepath);
@@ -490,7 +509,7 @@ router.delete('/:id/payslips/:pid', (req: AuthRequest, res: Response) => {
       try { fs.unlinkSync(filePath); } catch { /* ignore if already gone */ }
     }
 
-    db.prepare('DELETE FROM employee_payslips WHERE id = ?').run(Number(pid));
+    await pool.query('DELETE FROM employee_payslips WHERE id = $1', [Number(pid)]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -499,10 +518,13 @@ router.delete('/:id/payslips/:pid', (req: AuthRequest, res: Response) => {
 
 // ─── GET /:id/feedbacks ───────────────────────────────────────────────────────
 
-router.get('/:id/feedbacks', (req: AuthRequest, res: Response) => {
+router.get('/:id/feedbacks', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const rows = db.prepare('SELECT * FROM employee_feedbacks WHERE employee_id = ? ORDER BY date DESC').all(Number(id));
+    const { rows } = await pool.query(
+      'SELECT * FROM employee_feedbacks WHERE employee_id = $1 ORDER BY date DESC',
+      [Number(id)]
+    );
     res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -511,10 +533,10 @@ router.get('/:id/feedbacks', (req: AuthRequest, res: Response) => {
 
 // ─── POST /:id/feedbacks ──────────────────────────────────────────────────────
 
-router.post('/:id/feedbacks', (req: AuthRequest, res: Response) => {
+router.post('/:id/feedbacks', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(Number(id));
+    const { rows: [employee] } = await pool.query('SELECT id FROM employees WHERE id = $1', [Number(id)]);
     if (!employee) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     const { author, type = 'positivo', content, rating, date } = req.body;
@@ -522,12 +544,13 @@ router.post('/:id/feedbacks', (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Campos obrigatórios: author, content, date' });
     }
 
-    const info = db.prepare(`
-      INSERT INTO employee_feedbacks (employee_id, author, type, content, rating, date)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(Number(id), author, type, content, rating ? Number(rating) : null, date);
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO employee_feedbacks (employee_id, author, type, content, rating, date)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [Number(id), author, type, content, rating ? Number(rating) : null, date]
+    );
 
-    const created = db.prepare('SELECT * FROM employee_feedbacks WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -536,13 +559,16 @@ router.post('/:id/feedbacks', (req: AuthRequest, res: Response) => {
 
 // ─── DELETE /:id/feedbacks/:fid ───────────────────────────────────────────────
 
-router.delete('/:id/feedbacks/:fid', (req: AuthRequest, res: Response) => {
+router.delete('/:id/feedbacks/:fid', async (req: AuthRequest, res: Response) => {
   try {
     const { id, fid } = req.params;
-    const row = db.prepare('SELECT id FROM employee_feedbacks WHERE id = ? AND employee_id = ?').get(Number(fid), Number(id));
+    const { rows: [row] } = await pool.query(
+      'SELECT id FROM employee_feedbacks WHERE id = $1 AND employee_id = $2',
+      [Number(fid), Number(id)]
+    );
     if (!row) return res.status(404).json({ error: 'Feedback não encontrado' });
 
-    db.prepare('DELETE FROM employee_feedbacks WHERE id = ?').run(Number(fid));
+    await pool.query('DELETE FROM employee_feedbacks WHERE id = $1', [Number(fid)]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -551,11 +577,12 @@ router.delete('/:id/feedbacks/:fid', (req: AuthRequest, res: Response) => {
 
 // ─── GET /:id/salary-changes ─────────────────────────────────────────────────
 
-router.get('/:id/salary-changes', (req: AuthRequest, res: Response) => {
+router.get('/:id/salary-changes', async (req: AuthRequest, res: Response) => {
   try {
-    const rows = db.prepare(
-      'SELECT * FROM employee_salary_history WHERE employee_id = ? ORDER BY change_date DESC',
-    ).all(Number(req.params.id));
+    const { rows } = await pool.query(
+      'SELECT * FROM employee_salary_history WHERE employee_id = $1 ORDER BY change_date DESC',
+      [Number(req.params.id)]
+    );
     res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -575,9 +602,9 @@ router.post('/payslips/batch-parse', uploadBatch.single('pdf'), async (req: Auth
       return res.status(422).json({ error: 'Não foi possível extrair funcionários do PDF. Verifique o formato.' });
     }
 
-    const employees = db.prepare(
-      "SELECT id, name FROM employees WHERE status != 'inativo'",
-    ).all() as { id: number; name: string }[];
+    const { rows: employees } = await pool.query<{ id: number; name: string }>(
+      "SELECT id, name FROM employees WHERE status != 'inativo'"
+    );
 
     const results: ParseResult[] = parsed.map(p => {
       const match = matchEmployee(p.name_in_pdf, employees);
@@ -604,7 +631,7 @@ router.post('/payslips/batch-parse', uploadBatch.single('pdf'), async (req: Auth
 
 // ─── POST /payslips/batch-save ────────────────────────────────────────────────
 
-router.post('/payslips/batch-save', (req: AuthRequest, res: Response) => {
+router.post('/payslips/batch-save', async (req: AuthRequest, res: Response) => {
   try {
     const { temp_id, month, year, entries } = req.body;
 
@@ -622,28 +649,27 @@ router.post('/payslips/batch-save', (req: AuthRequest, res: Response) => {
     const permanentPath = path.join(UPLOAD_DIR, permanentFilename);
     fs.renameSync(tempPath, permanentPath);
 
-    const insertStmt = db.prepare(`
-      INSERT INTO employee_payslips (employee_id, month, year, filename, filepath, gross_salary, net_salary, deductions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     let saved = 0;
     const errors: string[] = [];
 
     for (const entry of entries as any[]) {
       try {
-        const emp = db.prepare('SELECT name FROM employees WHERE id = ?').get(Number(entry.employee_id)) as any;
+        const { rows: [emp] } = await pool.query('SELECT name FROM employees WHERE id = $1', [Number(entry.employee_id)]);
         if (!emp) { errors.push(`ID ${entry.employee_id} não encontrado`); continue; }
 
-        insertStmt.run(
-          Number(entry.employee_id),
-          Number(month),
-          Number(year),
-          permanentFilename,
-          permanentFilename,
-          Number(entry.gross),
-          Number(entry.net),
-          Number(entry.deductions),
+        await pool.query(
+          `INSERT INTO employee_payslips (employee_id, month, year, filename, filepath, gross_salary, net_salary, deductions)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            Number(entry.employee_id),
+            Number(month),
+            Number(year),
+            permanentFilename,
+            permanentFilename,
+            Number(entry.gross),
+            Number(entry.net),
+            Number(entry.deductions),
+          ]
         );
         saved++;
       } catch (err: any) {
@@ -659,9 +685,9 @@ router.post('/payslips/batch-save', (req: AuthRequest, res: Response) => {
 
 // ─── GET /:id — single employee ──────────────────────────────────────────────
 
-router.get('/:id', (req: AuthRequest, res: Response) => {
+router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(req.params.id)) as any;
+    const { rows: [emp] } = await pool.query('SELECT * FROM employees WHERE id = $1', [Number(req.params.id)]);
     if (!emp) return res.status(404).json({ error: 'Funcionário não encontrado' });
     res.json({ ...emp, provisions: calcProvisions(emp) });
   } catch (err: any) {
@@ -671,10 +697,10 @@ router.get('/:id', (req: AuthRequest, res: Response) => {
 
 // ─── POST /:id/photo — upload employee photo ─────────────────────────────────
 
-router.post('/:id/photo', uploadPhoto.single('photo'), (req: AuthRequest, res: Response) => {
+router.post('/:id/photo', uploadPhoto.single('photo'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const emp = db.prepare('SELECT id, photo_path FROM employees WHERE id = ?').get(Number(id)) as any;
+    const { rows: [emp] } = await pool.query('SELECT id, photo_path FROM employees WHERE id = $1', [Number(id)]);
     if (!emp) return res.status(404).json({ error: 'Funcionário não encontrado' });
 
     // Remove old photo file if exists
@@ -684,8 +710,7 @@ router.post('/:id/photo', uploadPhoto.single('photo'), (req: AuthRequest, res: R
 
     if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
 
-    db.prepare("UPDATE employees SET photo_path = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(req.file.path, Number(id));
+    await pool.query('UPDATE employees SET photo_path = $1, updated_at = NOW() WHERE id = $2', [req.file.path, Number(id)]);
 
     res.json({ success: true, filename: req.file.filename });
   } catch (err: any) {
@@ -695,9 +720,9 @@ router.post('/:id/photo', uploadPhoto.single('photo'), (req: AuthRequest, res: R
 
 // ─── GET /:id/photo — serve employee photo ────────────────────────────────────
 
-router.get('/:id/photo', (req: AuthRequest, res: Response) => {
+router.get('/:id/photo', async (req: AuthRequest, res: Response) => {
   try {
-    const emp = db.prepare('SELECT photo_path FROM employees WHERE id = ?').get(Number(req.params.id)) as any;
+    const { rows: [emp] } = await pool.query('SELECT photo_path FROM employees WHERE id = $1', [Number(req.params.id)]);
     if (!emp || !emp.photo_path || !fs.existsSync(emp.photo_path)) {
       return res.status(404).json({ error: 'Foto não encontrada' });
     }

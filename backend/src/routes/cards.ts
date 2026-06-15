@@ -1,109 +1,142 @@
 import { Router, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // GET /api/cards
-router.get('/', (req: AuthRequest, res: Response) => {
-  const { active } = req.query;
-  let query = `
-    SELECT
-      c.*,
-      COALESCE((
-        SELECT SUM(e.amount)
-        FROM financial_expenses e
-        WHERE e.card_id = c.id
-          AND strftime('%Y-%m', e.date) = strftime('%Y-%m', 'now')
-          AND e.status != 'cancelado'
-      ), 0) AS used_this_month,
-      COALESCE((
-        SELECT SUM(e.amount)
-        FROM financial_expenses e
-        WHERE e.card_id = c.id AND e.status != 'cancelado'
-          AND (
-            -- faturas cujo fechamento ainda não passou
-            CASE
-              WHEN c.closing_day IS NOT NULL THEN
-                date(e.date) > date('now', '-1 month', 'start of month', '+' || (c.closing_day - 1) || ' days')
-              ELSE
-                strftime('%Y-%m', e.date) = strftime('%Y-%m', 'now')
-            END
-          )
-      ), 0) AS current_invoice
-    FROM company_cards c
-  `;
-  const params: unknown[] = [];
-  if (active !== undefined) {
-    query += ' WHERE c.active = ?';
-    params.push(active === 'true' || active === '1' ? 1 : 0);
-  }
-  query += ' ORDER BY c.name';
+router.get('/', async (req: AuthRequest, res: Response) => {
+  try {
+    const { active } = req.query;
 
-  const cards = db.prepare(query).all(...params);
-  return res.json(cards);
+    // Build the base query — SQLite-specific strftime and CASE replaced with PostgreSQL equivalents
+    let query = `
+      SELECT
+        c.*,
+        COALESCE((
+          SELECT SUM(e.amount)
+          FROM financial_expenses e
+          WHERE e.card_id = c.id
+            AND to_char(e.date::date, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
+            AND e.status != 'cancelado'
+        ), 0) AS used_this_month,
+        COALESCE((
+          SELECT SUM(e.amount)
+          FROM financial_expenses e
+          WHERE e.card_id = c.id AND e.status != 'cancelado'
+            AND (
+              CASE
+                WHEN c.closing_day IS NOT NULL THEN
+                  e.date::date > (date_trunc('month', CURRENT_DATE) - INTERVAL '1 month')::date + (c.closing_day - 1)
+                ELSE
+                  to_char(e.date::date, 'YYYY-MM') = to_char(CURRENT_DATE, 'YYYY-MM')
+              END
+            )
+        ), 0) AS current_invoice
+      FROM company_cards c
+    `;
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    if (active !== undefined) {
+      query += ` WHERE c.active = $${paramIdx++}`;
+      params.push(active === 'true' || active === '1' ? true : false);
+    }
+    query += ' ORDER BY c.name';
+
+    const { rows } = await pool.query(query, params);
+    return res.json(rows);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao buscar cartões' });
+  }
 });
 
 // GET /api/cards/:id
-router.get('/:id', (req: AuthRequest, res: Response) => {
-  const card = db.prepare('SELECT * FROM company_cards WHERE id = ?').get(req.params.id);
-  if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
-  return res.json(card);
+router.get('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows: [card] } = await pool.query('SELECT * FROM company_cards WHERE id = $1', [req.params.id]);
+    if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
+    return res.json(card);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao buscar cartão' });
+  }
 });
 
 // GET /api/cards/:id/expenses — despesas vinculadas ao cartão
-router.get('/:id/expenses', (req: AuthRequest, res: Response) => {
-  const { month, year } = req.query;
-  let query = `
-    SELECT e.*, c.name as category_name
-    FROM financial_expenses e
-    LEFT JOIN financial_categories c ON c.id = e.category_id
-    WHERE e.card_id = ?
-  `;
-  const params: unknown[] = [req.params.id];
-  if (month) { query += ' AND strftime(\'%m\', e.date) = ?'; params.push(String(month).padStart(2, '0')); }
-  if (year)  { query += ' AND strftime(\'%Y\', e.date) = ?'; params.push(String(year)); }
-  query += ' ORDER BY e.date DESC';
-  return res.json(db.prepare(query).all(...params));
+router.get('/:id/expenses', async (req: AuthRequest, res: Response) => {
+  try {
+    const { month, year } = req.query;
+    let query = `
+      SELECT e.*, c.name as category_name
+      FROM financial_expenses e
+      LEFT JOIN financial_categories c ON c.id = e.category_id
+      WHERE e.card_id = $1
+    `;
+    const params: unknown[] = [req.params.id];
+    let paramIdx = 2;
+    if (month) { query += ` AND to_char(e.date::date, 'MM') = $${paramIdx++}`; params.push(String(month).padStart(2, '0')); }
+    if (year)  { query += ` AND to_char(e.date::date, 'YYYY') = $${paramIdx++}`; params.push(String(year)); }
+    query += ' ORDER BY e.date DESC';
+
+    const { rows } = await pool.query(query, params);
+    return res.json(rows);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao buscar despesas do cartão' });
+  }
 });
 
 // POST /api/cards
-router.post('/', (req: AuthRequest, res: Response) => {
-  const { name, last4, brand, credit_limit, closing_day, due_day, notes } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
+router.post('/', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, last4, brand, credit_limit, closing_day, due_day, notes } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
 
-  const result = db.prepare(`
-    INSERT INTO company_cards (name, last4, brand, credit_limit, closing_day, due_day, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(name.trim(), last4 || null, brand || 'outro', credit_limit || 0, closing_day || null, due_day || null, notes || null);
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO company_cards (name, last4, brand, credit_limit, closing_day, due_day, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [name.trim(), last4 || null, brand || 'outro', credit_limit || 0, closing_day || null, due_day || null, notes || null]
+    );
 
-  return res.status(201).json(db.prepare('SELECT * FROM company_cards WHERE id = ?').get(result.lastInsertRowid));
+    return res.status(201).json(created);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao criar cartão' });
+  }
 });
 
 // PUT /api/cards/:id
-router.put('/:id', (req: AuthRequest, res: Response) => {
-  const card = db.prepare('SELECT id FROM company_cards WHERE id = ?').get(req.params.id);
-  if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
+router.put('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows: [card] } = await pool.query('SELECT id FROM company_cards WHERE id = $1', [req.params.id]);
+    if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
 
-  const { name, last4, brand, credit_limit, closing_day, due_day, active, notes } = req.body;
-  if (name !== undefined) db.prepare("UPDATE company_cards SET name = ?, updated_at = datetime('now') WHERE id = ?").run(name, req.params.id);
-  if (last4 !== undefined) db.prepare("UPDATE company_cards SET last4 = ?, updated_at = datetime('now') WHERE id = ?").run(last4 || null, req.params.id);
-  if (brand !== undefined) db.prepare("UPDATE company_cards SET brand = ?, updated_at = datetime('now') WHERE id = ?").run(brand, req.params.id);
-  if (credit_limit !== undefined) db.prepare("UPDATE company_cards SET credit_limit = ?, updated_at = datetime('now') WHERE id = ?").run(credit_limit, req.params.id);
-  if (closing_day !== undefined) db.prepare("UPDATE company_cards SET closing_day = ?, updated_at = datetime('now') WHERE id = ?").run(closing_day || null, req.params.id);
-  if (due_day !== undefined) db.prepare("UPDATE company_cards SET due_day = ?, updated_at = datetime('now') WHERE id = ?").run(due_day || null, req.params.id);
-  if (active !== undefined) db.prepare("UPDATE company_cards SET active = ?, updated_at = datetime('now') WHERE id = ?").run(active ? 1 : 0, req.params.id);
-  if (notes !== undefined) db.prepare("UPDATE company_cards SET notes = ?, updated_at = datetime('now') WHERE id = ?").run(notes || null, req.params.id);
+    const { name, last4, brand, credit_limit, closing_day, due_day, active, notes } = req.body;
+    if (name !== undefined) await pool.query('UPDATE company_cards SET name = $1, updated_at = NOW() WHERE id = $2', [name, req.params.id]);
+    if (last4 !== undefined) await pool.query('UPDATE company_cards SET last4 = $1, updated_at = NOW() WHERE id = $2', [last4 || null, req.params.id]);
+    if (brand !== undefined) await pool.query('UPDATE company_cards SET brand = $1, updated_at = NOW() WHERE id = $2', [brand, req.params.id]);
+    if (credit_limit !== undefined) await pool.query('UPDATE company_cards SET credit_limit = $1, updated_at = NOW() WHERE id = $2', [credit_limit, req.params.id]);
+    if (closing_day !== undefined) await pool.query('UPDATE company_cards SET closing_day = $1, updated_at = NOW() WHERE id = $2', [closing_day || null, req.params.id]);
+    if (due_day !== undefined) await pool.query('UPDATE company_cards SET due_day = $1, updated_at = NOW() WHERE id = $2', [due_day || null, req.params.id]);
+    if (active !== undefined) await pool.query('UPDATE company_cards SET active = $1, updated_at = NOW() WHERE id = $2', [active ? true : false, req.params.id]);
+    if (notes !== undefined) await pool.query('UPDATE company_cards SET notes = $1, updated_at = NOW() WHERE id = $2', [notes || null, req.params.id]);
 
-  return res.json(db.prepare('SELECT * FROM company_cards WHERE id = ?').get(req.params.id));
+    const { rows: [updated] } = await pool.query('SELECT * FROM company_cards WHERE id = $1', [req.params.id]);
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao atualizar cartão' });
+  }
 });
 
 // DELETE /api/cards/:id (soft delete)
-router.delete('/:id', (req: AuthRequest, res: Response) => {
-  const card = db.prepare('SELECT id FROM company_cards WHERE id = ?').get(req.params.id);
-  if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
-  db.prepare("UPDATE company_cards SET active = 0, updated_at = datetime('now') WHERE id = ?").run(req.params.id);
-  return res.json({ success: true });
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows: [card] } = await pool.query('SELECT id FROM company_cards WHERE id = $1', [req.params.id]);
+    if (!card) return res.status(404).json({ error: 'Cartão não encontrado' });
+    await pool.query('UPDATE company_cards SET active = 0, updated_at = NOW() WHERE id = $1', [req.params.id]);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao desativar cartão' });
+  }
 });
 
 export default router;

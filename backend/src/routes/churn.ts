@@ -1,20 +1,20 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 
 const router = Router();
 
-router.get('/summary', (_req: Request, res: Response) => {
+router.get('/summary', async (_req: Request, res: Response) => {
   try {
-    const churned = db.prepare(`
-      SELECT * FROM agency_clients WHERE active = 0 AND churn_date IS NOT NULL
-    `).all() as {
+    const { rows: churned } = await pool.query<{
       id: number; name: string; monthly_fee: number; start_date: string | null;
       churn_date: string; churn_reason: string | null; churn_notes: string | null;
       reactivation_potential: string | null;
-    }[];
+    }>(
+      `SELECT * FROM agency_clients WHERE active = 0 AND churn_date IS NOT NULL`
+    );
 
     const total_churned = churned.length;
-    const mrr_lost = churned.reduce((s, c) => s + c.monthly_fee, 0);
+    const mrr_lost = churned.reduce((s, c) => s + Number(c.monthly_fee), 0);
 
     const lifetimes = churned
       .filter(c => c.start_date && c.churn_date)
@@ -28,14 +28,17 @@ router.get('/summary', (_req: Request, res: Response) => {
       : 0;
 
     const total_ltv_lost = churned.reduce((s, c) => {
-      if (!c.start_date || !c.churn_date) return s + c.monthly_fee;
+      if (!c.start_date || !c.churn_date) return s + Number(c.monthly_fee);
       const months = Math.max(1, Math.round(
         (new Date(c.churn_date).getTime() - new Date(c.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30)
       ));
-      return s + (c.monthly_fee * months);
+      return s + (Number(c.monthly_fee) * months);
     }, 0);
 
-    const active_count = (db.prepare('SELECT COUNT(*) as c FROM agency_clients WHERE active = 1').get() as { c: number }).c;
+    const { rows: [activeRow] } = await pool.query<{ c: string }>(
+      'SELECT COUNT(*) as c FROM agency_clients WHERE active = 1'
+    );
+    const active_count = Number(activeRow.c);
     const churn_rate = active_count + total_churned > 0
       ? ((total_churned / (active_count + total_churned)) * 100).toFixed(1)
       : '0.0';
@@ -52,7 +55,7 @@ router.get('/summary', (_req: Request, res: Response) => {
       monthly_churn.push({
         month: `${m}/${y}`,
         count: rows.length,
-        mrr_lost: rows.reduce((s, c) => s + c.monthly_fee, 0),
+        mrr_lost: rows.reduce((s, c) => s + Number(c.monthly_fee), 0),
       });
     }
 
@@ -63,41 +66,41 @@ router.get('/summary', (_req: Request, res: Response) => {
   }
 });
 
-router.get('/by-reason', (_req: Request, res: Response) => {
+router.get('/by-reason', async (_req: Request, res: Response) => {
   try {
-    const rows = db.prepare(`
-      SELECT
-        COALESCE(churn_reason, 'Não informado') as reason,
-        COUNT(*) as count,
-        SUM(monthly_fee) as mrr_lost
-      FROM agency_clients
-      WHERE active = 0 AND churn_date IS NOT NULL
-      GROUP BY reason
-      ORDER BY count DESC
-    `).all();
+    const { rows } = await pool.query(
+      `SELECT
+         COALESCE(churn_reason, 'Não informado') as reason,
+         COUNT(*) as count,
+         SUM(monthly_fee) as mrr_lost
+       FROM agency_clients
+       WHERE active = 0 AND churn_date IS NOT NULL
+       GROUP BY reason
+       ORDER BY count DESC`
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar churn por motivo' });
   }
 });
 
-router.get('/clients', (_req: Request, res: Response) => {
+router.get('/clients', async (_req: Request, res: Response) => {
   try {
-    const clients = db.prepare(`
-      SELECT * FROM agency_clients
-      WHERE active = 0 AND churn_date IS NOT NULL
-      ORDER BY churn_date DESC
-    `).all() as {
+    const { rows: clients } = await pool.query<{
       id: number; name: string; monthly_fee: number; start_date: string | null;
       churn_date: string; churn_reason: string | null; churn_notes: string | null;
       reactivation_potential: string | null; service_type: string | null;
-    }[];
+    }>(
+      `SELECT * FROM agency_clients
+       WHERE active = 0 AND churn_date IS NOT NULL
+       ORDER BY churn_date DESC`
+    );
 
     const result = clients.map(c => {
       const lifetime_months = c.start_date && c.churn_date
         ? Math.max(1, Math.round((new Date(c.churn_date).getTime() - new Date(c.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30)))
         : null;
-      const ltv = lifetime_months ? c.monthly_fee * lifetime_months : null;
+      const ltv = lifetime_months ? Number(c.monthly_fee) * lifetime_months : null;
       return { ...c, lifetime_months, ltv };
     });
 
@@ -107,38 +110,42 @@ router.get('/clients', (_req: Request, res: Response) => {
   }
 });
 
-router.patch('/:id/churn', (req: Request, res: Response) => {
+router.patch('/:id/churn', async (req: Request, res: Response) => {
   try {
     const { churn_date, churn_reason, churn_notes, reactivation_potential } = req.body;
-    const existing = db.prepare('SELECT id FROM agency_clients WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    db.prepare(`
-      UPDATE agency_clients
-      SET active = 0, churn_date = ?, churn_reason = ?, churn_notes = ?,
-          reactivation_potential = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(churn_date || new Date().toISOString().split('T')[0], churn_reason || null, churn_notes || null, reactivation_potential || 'nao', req.params.id);
+    await pool.query(
+      `UPDATE agency_clients
+       SET active = 0, churn_date = $1, churn_reason = $2, churn_notes = $3,
+           reactivation_potential = $4, updated_at = NOW()
+       WHERE id = $5`,
+      [churn_date || new Date().toISOString().split('T')[0], churn_reason || null, churn_notes || null, reactivation_potential || 'nao', req.params.id]
+    );
 
-    res.json(db.prepare('SELECT * FROM agency_clients WHERE id = ?').get(req.params.id));
+    const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao registrar churn' });
   }
 });
 
-router.patch('/:id/reactivate', (req: Request, res: Response) => {
+router.patch('/:id/reactivate', async (req: Request, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id FROM agency_clients WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    db.prepare(`
-      UPDATE agency_clients
-      SET active = 1, churn_date = NULL, churn_reason = NULL, churn_notes = NULL,
-          reactivation_potential = 'nao', updated_at = datetime('now')
-      WHERE id = ?
-    `).run(req.params.id);
+    await pool.query(
+      `UPDATE agency_clients
+       SET active = 1, churn_date = NULL, churn_reason = NULL, churn_notes = NULL,
+           reactivation_potential = 'nao', updated_at = NOW()
+       WHERE id = $1`,
+      [req.params.id]
+    );
 
-    res.json(db.prepare('SELECT * FROM agency_clients WHERE id = ?').get(req.params.id));
+    const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao reativar cliente' });
   }

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 
 const router = Router();
 
@@ -9,32 +9,34 @@ function computeHealth(marginPercent: number, target: number): string {
   return 'critico';
 }
 
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    const clients = db.prepare('SELECT * FROM agency_clients ORDER BY name').all() as {
+    const { rows: clients } = await pool.query<{
       id: number; name: string; monthly_fee: number; margin_target: number;
-      active: number; start_date: string | null; notes: string | null;
+      active: boolean; start_date: string | null; notes: string | null;
       created_at: string; updated_at: string;
-    }[];
+    }>('SELECT * FROM agency_clients ORDER BY name');
 
-    const result = clients.map((c) => {
-      const costRow = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM client_costs
-        WHERE client_id = ? AND (month = ? OR month IS NULL) AND (year = ? OR year IS NULL)
-      `).get(c.id, month, year) as { total: number };
+    const result = await Promise.all(clients.map(async (c) => {
+      const { rows: [costRow] } = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount), 0) as total
+         FROM client_costs
+         WHERE client_id = $1 AND (month = $2 OR month IS NULL) AND (year = $3 OR year IS NULL)`,
+        [c.id, month, year]
+      );
 
-      const monthly_cost = costRow.total;
-      const margin = c.monthly_fee - monthly_cost;
-      const margin_percent = c.monthly_fee > 0 ? (margin / c.monthly_fee) * 100 : 0;
-      const health = computeHealth(margin_percent, c.margin_target);
+      const monthly_cost = Number(costRow.total);
+      const monthly_fee = Number(c.monthly_fee);
+      const margin = monthly_fee - monthly_cost;
+      const margin_percent = monthly_fee > 0 ? (margin / monthly_fee) * 100 : 0;
+      const health = computeHealth(margin_percent, Number(c.margin_target));
 
       return { ...c, monthly_cost, margin, margin_percent, health };
-    });
+    }));
 
     res.json(result);
   } catch (err) {
@@ -43,21 +45,25 @@ router.get('/', (_req: Request, res: Response) => {
   }
 });
 
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const client = db.prepare('SELECT * FROM agency_clients WHERE id = ?').get(req.params.id) as {
+    const { rows: [client] } = await pool.query<{
       id: number; name: string; monthly_fee: number; margin_target: number;
-      active: number; start_date: string | null; notes: string | null;
+      active: boolean; start_date: string | null; notes: string | null;
       created_at: string; updated_at: string;
-    } | undefined;
+    }>('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
 
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    const costs = db.prepare('SELECT * FROM client_costs WHERE client_id = ? ORDER BY created_at DESC').all(client.id);
-    const totalCost = (costs as { amount: number }[]).reduce((sum, c) => sum + c.amount, 0);
-    const margin = client.monthly_fee - totalCost;
-    const margin_percent = client.monthly_fee > 0 ? (margin / client.monthly_fee) * 100 : 0;
-    const health = computeHealth(margin_percent, client.margin_target);
+    const { rows: costs } = await pool.query(
+      'SELECT * FROM client_costs WHERE client_id = $1 ORDER BY created_at DESC',
+      [client.id]
+    );
+    const totalCost = (costs as { amount: number }[]).reduce((sum, c) => sum + Number(c.amount), 0);
+    const monthly_fee = Number(client.monthly_fee);
+    const margin = monthly_fee - totalCost;
+    const margin_percent = monthly_fee > 0 ? (margin / monthly_fee) * 100 : 0;
+    const health = computeHealth(margin_percent, Number(client.margin_target));
 
     res.json({ ...client, costs, monthly_cost: totalCost, margin, margin_percent, health });
   } catch (err) {
@@ -65,81 +71,90 @@ router.get('/:id', (req: Request, res: Response) => {
   }
 });
 
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
-    const isActive = active !== undefined ? (active ? 1 : 0) : 1;
-    const result = db.prepare(`
-      INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao');
+    const isActive = active !== undefined ? active : true;
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao']
+    );
 
-    res.status(201).json(db.prepare('SELECT * FROM agency_clients WHERE id = ?').get(result.lastInsertRowid));
+    res.status(201).json(created);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao criar cliente' });
   }
 });
 
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { name, monthly_fee, margin_target, active, start_date, notes, service_type } = req.body;
-    const existing = db.prepare('SELECT id FROM agency_clients WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    db.prepare(`
-      UPDATE agency_clients SET name = ?, monthly_fee = ?, margin_target = ?, active = ?,
-        start_date = ?, notes = ?, service_type = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(name, monthly_fee || 0, margin_target || 30, active !== undefined ? (active ? 1 : 0) : 1, start_date || null, notes || null, service_type || null, req.params.id);
+    await pool.query(
+      `UPDATE agency_clients SET name = $1, monthly_fee = $2, margin_target = $3, active = $4,
+        start_date = $5, notes = $6, service_type = $7, updated_at = NOW()
+       WHERE id = $8`,
+      [name, monthly_fee || 0, margin_target || 30, active !== undefined ? active : true, start_date || null, notes || null, service_type || null, req.params.id]
+    );
 
-    res.json(db.prepare('SELECT * FROM agency_clients WHERE id = ?').get(req.params.id));
+    const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar cliente' });
   }
 });
 
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id FROM agency_clients WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
-    db.prepare('DELETE FROM agency_clients WHERE id = ?').run(req.params.id);
+    await pool.query('DELETE FROM agency_clients WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar cliente' });
   }
 });
 
-router.get('/:id/costs', (req: Request, res: Response) => {
+router.get('/:id/costs', async (req: Request, res: Response) => {
   try {
-    const rows = db.prepare('SELECT * FROM client_costs WHERE client_id = ? ORDER BY created_at DESC').all(req.params.id);
+    const { rows } = await pool.query(
+      'SELECT * FROM client_costs WHERE client_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar custos' });
   }
 });
 
-router.post('/:id/costs', (req: Request, res: Response) => {
+router.post('/:id/costs', async (req: Request, res: Response) => {
   try {
     const { description, amount, type, month, year } = req.body;
     if (!description || !amount) return res.status(400).json({ error: 'Campos obrigatórios: description, amount' });
 
-    const result = db.prepare(`
-      INSERT INTO client_costs (client_id, description, amount, type, month, year)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(req.params.id, description, amount, type || 'fixo', month || null, year || null);
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO client_costs (client_id, description, amount, type, month, year)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [req.params.id, description, amount, type || 'fixo', month || null, year || null]
+    );
 
-    res.status(201).json(db.prepare('SELECT * FROM client_costs WHERE id = ?').get(result.lastInsertRowid));
+    res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao adicionar custo' });
   }
 });
 
-router.delete('/:id/costs/:costId', (req: Request, res: Response) => {
+router.delete('/:id/costs/:costId', async (req: Request, res: Response) => {
   try {
-    db.prepare('DELETE FROM client_costs WHERE id = ? AND client_id = ?').run(req.params.costId, req.params.id);
+    await pool.query('DELETE FROM client_costs WHERE id = $1 AND client_id = $2', [req.params.costId, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar custo' });

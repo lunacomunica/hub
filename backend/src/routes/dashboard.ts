@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const now = new Date();
     const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
@@ -14,20 +14,22 @@ router.get('/', (req: Request, res: Response) => {
     const endDate = `${year}-${monthStr}-31`;
 
     // Summary for current month
-    const revenueRow = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM financial_revenues
-      WHERE date >= ? AND date <= ? AND status != 'cancelado'
-    `).get(startDate, endDate) as { total: number };
+    const { rows: [revenueRow] } = await pool.query<{ total: string }>(
+      `SELECT COALESCE(SUM(amount), 0) as total
+       FROM financial_revenues
+       WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
+      [startDate, endDate]
+    );
 
-    const expenseRow = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM financial_expenses
-      WHERE date >= ? AND date <= ? AND status != 'cancelado'
-    `).get(startDate, endDate) as { total: number };
+    const { rows: [expenseRow] } = await pool.query<{ total: string }>(
+      `SELECT COALESCE(SUM(amount), 0) as total
+       FROM financial_expenses
+       WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
+      [startDate, endDate]
+    );
 
-    const totalRevenue = revenueRow.total;
-    const totalExpenses = expenseRow.total;
+    const totalRevenue = Number(revenueRow.total);
+    const totalExpenses = Number(expenseRow.total);
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -40,8 +42,17 @@ router.get('/', (req: Request, res: Response) => {
       const s = `${y}-${m}-01`;
       const e = `${y}-${m}-31`;
 
-      const rev = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues WHERE date >= ? AND date <= ? AND status != 'cancelado'`).get(s, e) as { total: number }).total;
-      const exp = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM financial_expenses WHERE date >= ? AND date <= ? AND status != 'cancelado'`).get(s, e) as { total: number }).total;
+      const { rows: [revRow] } = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [s, e]
+      );
+      const { rows: [expRow] } = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM financial_expenses WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [s, e]
+      );
+
+      const rev = Number(revRow.total);
+      const exp = Number(expRow.total);
 
       monthlyTrend.push({
         month: `${m}/${y}`,
@@ -53,65 +64,69 @@ router.get('/', (req: Request, res: Response) => {
     }
 
     // Revenue by category this month
-    const revenueByCategory = db.prepare(`
-      SELECT fc.name, fc.color, COALESCE(SUM(fr.amount), 0) as total
-      FROM financial_revenues fr
-      LEFT JOIN financial_categories fc ON fr.category_id = fc.id
-      WHERE fr.date >= ? AND fr.date <= ? AND fr.status != 'cancelado'
-      GROUP BY fc.id, fc.name, fc.color
-      ORDER BY total DESC
-    `).all(startDate, endDate);
+    const { rows: revenueByCategory } = await pool.query(
+      `SELECT fc.name, fc.color, COALESCE(SUM(fr.amount), 0) as total
+       FROM financial_revenues fr
+       LEFT JOIN financial_categories fc ON fr.category_id = fc.id
+       WHERE fr.date >= $1 AND fr.date <= $2 AND fr.status != 'cancelado'
+       GROUP BY fc.id, fc.name, fc.color
+       ORDER BY total DESC`,
+      [startDate, endDate]
+    );
 
     // Expense by category this month
-    const expenseByCategory = db.prepare(`
-      SELECT fc.name, fc.color, COALESCE(SUM(fe.amount), 0) as total
-      FROM financial_expenses fe
-      LEFT JOIN financial_categories fc ON fe.category_id = fc.id
-      WHERE fe.date >= ? AND fe.date <= ? AND fe.status != 'cancelado'
-      GROUP BY fc.id, fc.name, fc.color
-      ORDER BY total DESC
-    `).all(startDate, endDate);
+    const { rows: expenseByCategory } = await pool.query(
+      `SELECT fc.name, fc.color, COALESCE(SUM(fe.amount), 0) as total
+       FROM financial_expenses fe
+       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
+       WHERE fe.date >= $1 AND fe.date <= $2 AND fe.status != 'cancelado'
+       GROUP BY fc.id, fc.name, fc.color
+       ORDER BY total DESC`,
+      [startDate, endDate]
+    );
 
     // Top 5 clients by revenue this month
-    const topClients = db.prepare(`
-      SELECT client_name, COALESCE(SUM(amount), 0) as total
-      FROM financial_revenues
-      WHERE date >= ? AND date <= ? AND status != 'cancelado' AND client_name IS NOT NULL
-      GROUP BY client_name
-      ORDER BY total DESC
-      LIMIT 5
-    `).all(startDate, endDate);
+    const { rows: topClients } = await pool.query(
+      `SELECT client_name, COALESCE(SUM(amount), 0) as total
+       FROM financial_revenues
+       WHERE date >= $1 AND date <= $2 AND status != 'cancelado' AND client_name IS NOT NULL
+       GROUP BY client_name
+       ORDER BY total DESC
+       LIMIT 5`,
+      [startDate, endDate]
+    );
 
     // Opportunities summary by stage
-    const opportunitiesSummary = db.prepare(`
-      SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value,
-             COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
-      FROM opportunities
-      WHERE stage NOT IN ('fechado', 'perdido')
-      GROUP BY stage
-    `).all();
+    const { rows: opportunitiesSummary } = await pool.query(
+      `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value,
+              COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
+       FROM opportunities
+       WHERE stage NOT IN ('fechado', 'perdido')
+       GROUP BY stage`
+    );
 
     // Goal progress
-    const goal = db.prepare(`
-      SELECT * FROM sales_goals WHERE month = ? AND year = ?
-    `).get(month, year) as { target_revenue: number; target_new_clients: number; target_recurring: number } | undefined;
+    const { rows: [goal] } = await pool.query<{ target_revenue: number; target_new_clients: number; target_recurring: number }>(
+      'SELECT * FROM sales_goals WHERE month = $1 AND year = $2',
+      [month, year]
+    );
 
     const goalProgress = goal ? {
-      target_revenue: goal.target_revenue,
+      target_revenue: Number(goal.target_revenue),
       actual_revenue: totalRevenue,
-      progress_percent: goal.target_revenue > 0 ? (totalRevenue / goal.target_revenue) * 100 : 0,
+      progress_percent: Number(goal.target_revenue) > 0 ? (totalRevenue / Number(goal.target_revenue)) * 100 : 0,
     } : null;
 
     // Overdue counts
-    const overdueRevenues = (db.prepare(`
-      SELECT COUNT(*) as count FROM financial_revenues
-      WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < date('now'))
-    `).get() as { count: number }).count;
+    const { rows: [overdueRevRow] } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM financial_revenues
+       WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE)`
+    );
 
-    const overdueExpenses = (db.prepare(`
-      SELECT COUNT(*) as count FROM financial_expenses
-      WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < date('now'))
-    `).get() as { count: number }).count;
+    const { rows: [overdueExpRow] } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM financial_expenses
+       WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE)`
+    );
 
     res.json({
       summary: { total_revenue: totalRevenue, total_expenses: totalExpenses, net_profit: netProfit, profit_margin: profitMargin },
@@ -121,7 +136,7 @@ router.get('/', (req: Request, res: Response) => {
       top_clients: topClients,
       opportunities_summary: opportunitiesSummary,
       goal_progress: goalProgress,
-      overdue: { revenues: overdueRevenues, expenses: overdueExpenses },
+      overdue: { revenues: Number(overdueRevRow.count), expenses: Number(overdueExpRow.count) },
     });
   } catch (err) {
     console.error(err);

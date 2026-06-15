@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 
 const router = Router();
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const { month, year, status, is_fixed, is_client_cost, category_id } = req.query;
     let query = `
@@ -13,36 +13,37 @@ router.get('/', (req: Request, res: Response) => {
       WHERE 1=1
     `;
     const params: (string | number)[] = [];
+    let idx = 1;
 
     if (month && year) {
       const m = String(month).padStart(2, '0');
-      query += ` AND fe.date >= ? AND fe.date <= ?`;
+      query += ` AND fe.date >= $${idx++} AND fe.date <= $${idx++}`;
       params.push(`${year}-${m}-01`, `${year}-${m}-31`);
     } else if (year) {
-      query += ` AND fe.date >= ? AND fe.date <= ?`;
+      query += ` AND fe.date >= $${idx++} AND fe.date <= $${idx++}`;
       params.push(`${year}-01-01`, `${year}-12-31`);
     }
 
     if (status) {
-      query += ` AND fe.status = ?`;
+      query += ` AND fe.status = $${idx++}`;
       params.push(status as string);
     }
     if (is_fixed !== undefined) {
-      query += ` AND fe.is_fixed = ?`;
+      query += ` AND fe.is_fixed = $${idx++}`;
       params.push(Number(is_fixed));
     }
     if (is_client_cost !== undefined) {
-      query += ` AND fe.is_client_cost = ?`;
+      query += ` AND fe.is_client_cost = $${idx++}`;
       params.push(Number(is_client_cost));
     }
     if (category_id) {
-      query += ` AND fe.category_id = ?`;
+      query += ` AND fe.category_id = $${idx++}`;
       params.push(Number(category_id));
     }
 
     query += ` ORDER BY fe.date DESC, fe.created_at DESC`;
 
-    const rows = db.prepare(query).all(...params);
+    const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -50,7 +51,7 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
-router.patch('/bulk', (req: Request, res: Response) => {
+router.patch('/bulk', async (req: Request, res: Response) => {
   try {
     const { ids, updates } = req.body;
     if (!ids?.length) return res.status(400).json({ error: 'ids obrigatório' });
@@ -63,16 +64,26 @@ router.patch('/bulk', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
     }
 
-    const setClauses = Object.keys(allowed).map(k => `${k} = ?`).join(', ');
+    const keys = Object.keys(allowed);
+    let paramIndex = 1;
+    const setClauses = keys.map(k => { const s = `${k} = $${paramIndex++}`; return s; }).join(', ');
     const setValues = Object.values(allowed);
-    const placeholders = ids.map(() => '?').join(', ');
+    const idPlaceholders = ids.map(() => `$${paramIndex++}`).join(', ');
 
-    const updateMany = db.transaction(() => {
-      db.prepare(
-        `UPDATE financial_expenses SET ${setClauses}, updated_at = datetime('now') WHERE id IN (${placeholders})`
-      ).run(...setValues, ...ids);
-    });
-    updateMany();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE financial_expenses SET ${setClauses}, updated_at = NOW() WHERE id IN (${idPlaceholders})`,
+        [...setValues, ...ids]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true, updated: ids.length });
   } catch (err) {
@@ -81,14 +92,14 @@ router.patch('/bulk', (req: Request, res: Response) => {
   }
 });
 
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const row = db.prepare(`
+    const { rows: [row] } = await pool.query(`
       SELECT fe.*, fc.name as category_name, fc.color as category_color
       FROM financial_expenses fe
       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
-      WHERE fe.id = ?
-    `).get(req.params.id);
+      WHERE fe.id = $1
+    `, [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Despesa não encontrada' });
     res.json(row);
   } catch (err) {
@@ -96,23 +107,25 @@ router.get('/:id', (req: Request, res: Response) => {
   }
 });
 
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { description, category_id, supplier, client_name, amount, date, due_date, status, is_fixed, is_client_cost, notes } = req.body;
     if (!description || !amount || !date) {
       return res.status(400).json({ error: 'Campos obrigatórios: description, amount, date' });
     }
-    const result = db.prepare(`
-      INSERT INTO financial_expenses (description, category_id, supplier, client_name, amount, date, due_date, status, is_fixed, is_client_cost, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? 1 : 0, is_client_cost ? 1 : 0, notes || null);
 
-    const newRow = db.prepare(`
+    const { rows: [inserted] } = await pool.query(`
+      INSERT INTO financial_expenses (description, category_id, supplier, client_name, amount, date, due_date, status, is_fixed, is_client_cost, notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id
+    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? true : false, is_client_cost ? true : false, notes || null]);
+
+    const { rows: [newRow] } = await pool.query(`
       SELECT fe.*, fc.name as category_name, fc.color as category_color
       FROM financial_expenses fe
       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
-      WHERE fe.id = ?
-    `).get(result.lastInsertRowid);
+      WHERE fe.id = $1
+    `, [inserted.id]);
     res.status(201).json(newRow);
   } catch (err) {
     console.error(err);
@@ -120,26 +133,26 @@ router.post('/', (req: Request, res: Response) => {
   }
 });
 
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { description, category_id, supplier, client_name, amount, date, due_date, status, is_fixed, is_client_cost, notes } = req.body;
-    const existing = db.prepare('SELECT id FROM financial_expenses WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM financial_expenses WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Despesa não encontrada' });
 
-    db.prepare(`
+    await pool.query(`
       UPDATE financial_expenses SET
-        description = ?, category_id = ?, supplier = ?, client_name = ?, amount = ?, date = ?,
-        due_date = ?, status = ?, is_fixed = ?, is_client_cost = ?, notes = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? 1 : 0, is_client_cost ? 1 : 0, notes || null, req.params.id);
+        description = $1, category_id = $2, supplier = $3, client_name = $4, amount = $5, date = $6,
+        due_date = $7, status = $8, is_fixed = $9, is_client_cost = $10, notes = $11,
+        updated_at = NOW()
+      WHERE id = $12
+    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? true : false, is_client_cost ? true : false, notes || null, req.params.id]);
 
-    const updated = db.prepare(`
+    const { rows: [updated] } = await pool.query(`
       SELECT fe.*, fc.name as category_name, fc.color as category_color
       FROM financial_expenses fe
       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
-      WHERE fe.id = ?
-    `).get(req.params.id);
+      WHERE fe.id = $1
+    `, [req.params.id]);
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -147,28 +160,28 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:id/status', (req: Request, res: Response) => {
+router.patch('/:id/status', async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
     const validStatuses = ['pendente', 'pago', 'atrasado', 'cancelado'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Status inválido' });
     }
-    const existing = db.prepare('SELECT id FROM financial_expenses WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM financial_expenses WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Despesa não encontrada' });
 
-    db.prepare(`UPDATE financial_expenses SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, req.params.id);
+    await pool.query('UPDATE financial_expenses SET status = $1, updated_at = NOW() WHERE id = $2', [status, req.params.id]);
     res.json({ success: true, status });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar status' });
   }
 });
 
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id FROM financial_expenses WHERE id = ?').get(req.params.id);
+    const { rows: [existing] } = await pool.query('SELECT id FROM financial_expenses WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Despesa não encontrada' });
-    db.prepare('DELETE FROM financial_expenses WHERE id = ?').run(req.params.id);
+    await pool.query('DELETE FROM financial_expenses WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar despesa' });
