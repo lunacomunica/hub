@@ -39,6 +39,7 @@ export default function Expenses() {
   const [form, setForm] = useState<Partial<Expense>>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; description: string } | null>(null);
 
   const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
@@ -133,10 +134,14 @@ export default function Expenses() {
     catch { alert('Erro ao atualizar status'); }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Deletar esta despesa?')) return;
-    setDeleting(id);
-    try { await deleteExpense(id); load(); }
+  const handleDelete = (id: number, description: string) => {
+    setDeleteConfirm({ id, description });
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(deleteConfirm.id);
+    try { await deleteExpense(deleteConfirm.id); setDeleteConfirm(null); load(); }
     catch { alert('Erro ao deletar'); }
     finally { setDeleting(null); }
   };
@@ -231,6 +236,9 @@ export default function Expenses() {
     } catch { alert('Erro ao atualizar despesas'); }
     finally { setBulkRemovingFixed(false); }
   };
+
+  // Sum of selected items
+  const selectedSum = filtered.filter(r => selected.has(r.id)).reduce((s, r) => s + Number(r.amount), 0);
 
   // Selection helpers
   const allVisibleIds = filtered.map(r => r.id);
@@ -527,6 +535,7 @@ export default function Expenses() {
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' }}>
           <span className="text-slate-300 font-medium">{selected.size} {selected.size === 1 ? 'despesa selecionada' : 'despesas selecionadas'}</span>
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full" style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc' }}>{brl(selectedSum)}</span>
           <div className="flex items-center gap-2 ml-2">
             <button onClick={() => { setBulkDescription(''); setBulkModal('rename'); }} className="btn-ghost text-xs px-3 py-1">Renomear</button>
             <button onClick={() => { setBulkCategoryId(''); setBulkModal('categorize'); }} className="btn-ghost text-xs px-3 py-1">Categorizar</button>
@@ -668,7 +677,7 @@ export default function Expenses() {
                   <td className="td px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
                       <button onClick={() => openEdit(r)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><Pencil size={14} /></button>
-                      <button onClick={() => handleDelete(r.id)} disabled={deleting === r.id} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={14} /></button>
+                      <button onClick={() => handleDelete(r.id, r.description)} disabled={deleting === r.id} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1175,6 +1184,34 @@ export default function Expenses() {
 
             <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
               <p className="text-xs text-slate-600">💡 O sistema também aprende automaticamente quando você confirma importações ou edita lançamentos.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single delete confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white flex items-center gap-2"><Trash2 size={16} className="text-red-400" /> Excluir despesa</h2>
+              <button onClick={() => setDeleteConfirm(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-300">Tem certeza que deseja excluir a despesa:</p>
+              <p className="text-sm font-semibold text-white mt-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)' }}>{deleteConfirm.description}</p>
+              <p className="text-xs text-slate-500 mt-3">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={confirmSingleDelete}
+                disabled={!!deleting}
+                className="text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                style={{ background: '#ef4444', color: '#fff' }}
+              >
+                {deleting ? 'Excluindo...' : 'Sim, excluir'}
+              </button>
             </div>
           </div>
         </div>
