@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, RefreshCw, Trash2, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost } from '../api';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight } from 'lucide-react';
+import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry } from '../api';
 import type { AgencyClient, ClientCost } from '../types';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -50,6 +50,16 @@ export default function ClientHealth() {
   const [addingCost, setAddingCost] = useState(false);
   const [showCostForm, setShowCostForm] = useState(false);
 
+  // Plan change
+  const [planModal, setPlanModal] = useState<{ client: AgencyClient } | null>(null);
+  const [planFee, setPlanFee] = useState('');
+  const [planType, setPlanType] = useState<'upgrade' | 'downgrade' | 'ajuste'>('upgrade');
+  const [planNotes, setPlanNotes] = useState('');
+  const [planDate, setPlanDate] = useState(new Date().toISOString().slice(0, 10));
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
+  const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
+
   const load = async () => {
     setLoading(true); setError('');
     try { setClients(await getClients()); }
@@ -85,9 +95,43 @@ export default function ClientHealth() {
     setExpandedId(id);
     setShowCostForm(false);
     setCostsLoading(true);
-    try { setClientCosts(await getClientCosts(id)); }
-    catch { setClientCosts([]); }
-    finally { setCostsLoading(false); }
+    setPlanHistoryLoading(true);
+    try {
+      const [costs, history] = await Promise.all([getClientCosts(id), getClientPlanHistory(id)]);
+      setClientCosts(costs);
+      setPlanHistory(history);
+    } catch { setClientCosts([]); setPlanHistory([]); }
+    finally { setCostsLoading(false); setPlanHistoryLoading(false); }
+  };
+
+  const openPlanModal = (client: AgencyClient) => {
+    setPlanModal({ client });
+    setPlanFee(String(client.monthly_fee));
+    setPlanType('upgrade');
+    setPlanNotes('');
+    setPlanDate(new Date().toISOString().slice(0, 10));
+  };
+
+  const savePlanChange = async () => {
+    if (!planModal || !planFee) return;
+    setPlanSaving(true);
+    try {
+      await addClientPlanChange(planModal.client.id, {
+        new_fee: parseFloat(planFee),
+        change_type: planType,
+        notes: planNotes.trim() || undefined,
+        changed_at: planDate,
+      });
+      setPlanModal(null);
+      load();
+      if (expandedId === planModal.client.id) {
+        setPlanHistory(await getClientPlanHistory(planModal.client.id));
+      }
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Erro ao salvar');
+    } finally {
+      setPlanSaving(false);
+    }
   };
 
   const handleAddCost = async () => {
@@ -186,6 +230,7 @@ export default function ClientHealth() {
                       <span className={`flex items-center gap-1.5 ${h.badge}`}>
                         {h.icon}{h.label}
                       </span>
+                      <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
                       <button onClick={() => openEdit(c)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><X size={13} className="rotate-45" /></button>
                       <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={13} /></button>
                       <button onClick={() => toggleExpand(c.id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded">
@@ -209,9 +254,38 @@ export default function ClientHealth() {
                   </div>
                 </div>
 
-                {/* Expanded: cost breakdown */}
+                {/* Expanded: plan history + cost breakdown */}
                 {isExpanded && (
                   <div className="p-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+                    {/* Plan history */}
+                    {(planHistoryLoading || planHistory.length > 0) && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-semibold text-slate-300 mb-2">Histórico de plano</h4>
+                        {planHistoryLoading ? (
+                          <div className="text-xs text-slate-500 py-2">Carregando...</div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {planHistory.map(h => {
+                              const isUp = h.new_fee > h.old_fee;
+                              const typeLabel: Record<string, string> = { upgrade: 'Upgrade', downgrade: 'Downgrade', ajuste: 'Ajuste' };
+                              return (
+                                <div key={h.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${isUp ? 'text-emerald-400 bg-emerald-400/10' : h.new_fee < h.old_fee ? 'text-red-400 bg-red-400/10' : 'text-slate-400 bg-slate-400/10'}`}>
+                                    {typeLabel[h.change_type] || h.change_type}
+                                  </span>
+                                  <span className="text-slate-400">{brl(h.old_fee)}</span>
+                                  <ArrowRight size={11} className="text-slate-600" />
+                                  <span className={`font-semibold ${isUp ? 'text-emerald-400' : h.new_fee < h.old_fee ? 'text-red-400' : 'text-slate-300'}`}>{brl(h.new_fee)}</span>
+                                  <span className="text-slate-600 ml-auto">{h.changed_at?.slice(0, 10).split('-').reverse().join('/')}</span>
+                                  {h.notes && <span className="text-slate-500 italic truncate max-w-[160px]">{h.notes}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-semibold text-slate-300">Custos do cliente</h4>
                       <button onClick={() => setShowCostForm(v => !v)} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
@@ -288,6 +362,89 @@ export default function ClientHealth() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Plan Change Modal */}
+      {planModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <div>
+                <h2 className="font-semibold text-white">Mudança de plano</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{planModal.client.name}</p>
+              </div>
+              <button onClick={() => setPlanModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <div className="text-center flex-1">
+                  <div className="text-xs text-slate-500 mb-1">Mensalidade atual</div>
+                  <div className="font-semibold text-slate-200">{brl(planModal.client.monthly_fee)}</div>
+                </div>
+                <ArrowRight size={16} className="text-slate-600" />
+                <div className="text-center flex-1">
+                  <div className="text-xs text-slate-500 mb-1">Nova mensalidade</div>
+                  <div className={`font-semibold ${planFee && parseFloat(planFee) > planModal.client.monthly_fee ? 'text-emerald-400' : planFee && parseFloat(planFee) < planModal.client.monthly_fee ? 'text-red-400' : 'text-slate-400'}`}>
+                    {planFee ? brl(planFee) : '—'}
+                  </div>
+                </div>
+              </div>
+              <Field label="Novo valor (R$) *">
+                <input
+                  autoFocus
+                  type="number"
+                  step="0.01"
+                  value={planFee}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value);
+                    setPlanFee(e.target.value);
+                    if (!isNaN(v)) {
+                      if (v > planModal.client.monthly_fee) setPlanType('upgrade');
+                      else if (v < planModal.client.monthly_fee) setPlanType('downgrade');
+                      else setPlanType('ajuste');
+                    }
+                  }}
+                  className="input-dark w-full"
+                  placeholder="0,00"
+                />
+              </Field>
+              <Field label="Tipo de mudança">
+                <div className="flex gap-2">
+                  {(['upgrade', 'downgrade', 'ajuste'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setPlanType(t)}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${planType === t
+                        ? t === 'upgrade' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                          : t === 'downgrade' ? 'bg-red-500/20 border-red-500/50 text-red-400'
+                          : 'bg-slate-500/20 border-slate-500/50 text-slate-300'
+                        : 'border-white/10 text-slate-500 hover:border-white/20'}`}
+                    >
+                      {t === 'upgrade' ? '↑ Upgrade' : t === 'downgrade' ? '↓ Downgrade' : '↔ Ajuste'}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Data da mudança">
+                <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} className="input-dark w-full" />
+              </Field>
+              <Field label="Observações (opcional)">
+                <input value={planNotes} onChange={e => setPlanNotes(e.target.value)} className="input-dark w-full" placeholder="Ex: Adicionou gestão de redes sociais" />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setPlanModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={savePlanChange}
+                disabled={planSaving || !planFee || parseFloat(planFee) === planModal.client.monthly_fee}
+                className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
+              >
+                <TrendingUp size={14} />
+                {planSaving ? 'Salvando...' : 'Registrar mudança'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -161,4 +161,72 @@ router.delete('/:id/costs/:costId', async (req: Request, res: Response) => {
   }
 });
 
+// Plan history
+router.get('/:id/plan-history', async (req: Request, res: Response) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS client_plan_history (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES agency_clients(id) ON DELETE CASCADE,
+        old_fee NUMERIC(10,2) NOT NULL,
+        new_fee NUMERIC(10,2) NOT NULL,
+        change_type VARCHAR(20) DEFAULT 'ajuste',
+        notes TEXT,
+        changed_at DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    const { rows } = await pool.query(
+      'SELECT * FROM client_plan_history WHERE client_id = $1 ORDER BY changed_at DESC, created_at DESC',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar histórico de plano' });
+  }
+});
+
+router.post('/:id/plan-change', async (req: Request, res: Response) => {
+  const { new_fee, change_type, notes, changed_at } = req.body;
+  if (!new_fee || isNaN(Number(new_fee))) {
+    return res.status(400).json({ error: 'new_fee obrigatório' });
+  }
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    // Ensure table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS client_plan_history (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES agency_clients(id) ON DELETE CASCADE,
+        old_fee NUMERIC(10,2) NOT NULL,
+        new_fee NUMERIC(10,2) NOT NULL,
+        change_type VARCHAR(20) DEFAULT 'ajuste',
+        notes TEXT,
+        changed_at DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    const { rows: [client] } = await db.query('SELECT monthly_fee FROM agency_clients WHERE id = $1', [req.params.id]);
+    if (!client) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Cliente não encontrado' }); }
+
+    const old_fee = Number(client.monthly_fee);
+    await db.query(
+      `INSERT INTO client_plan_history (client_id, old_fee, new_fee, change_type, notes, changed_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [req.params.id, old_fee, Number(new_fee), change_type || 'ajuste', notes || null, changed_at || new Date().toISOString().slice(0, 10)]
+    );
+    await db.query('UPDATE agency_clients SET monthly_fee = $1, updated_at = NOW() WHERE id = $2', [Number(new_fee), req.params.id]);
+    await db.query('COMMIT');
+    res.status(201).json({ success: true, old_fee, new_fee: Number(new_fee) });
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao registrar mudança de plano' });
+  } finally {
+    db.release();
+  }
+});
+
 export default router;

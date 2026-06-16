@@ -121,6 +121,15 @@ export const addClientCost = (id: number, data: Partial<ClientCost>): Promise<Cl
 export const deleteClientCost = (clientId: number, costId: number): Promise<{ success: boolean }> =>
   req(`/clients/${clientId}/costs/${costId}`, { method: 'DELETE' });
 
+export interface PlanHistoryEntry {
+  id: number; client_id: number; old_fee: number; new_fee: number;
+  change_type: string; notes: string | null; changed_at: string; created_at: string;
+}
+export const getClientPlanHistory = (id: number): Promise<PlanHistoryEntry[]> =>
+  req(`/clients/${id}/plan-history`);
+export const addClientPlanChange = (id: number, data: { new_fee: number; change_type?: string; notes?: string; changed_at?: string }): Promise<{ success: boolean; old_fee: number; new_fee: number }> =>
+  req(`/clients/${id}/plan-change`, { method: 'POST', body: JSON.stringify(data) });
+
 // Sales Goals
 export const getSalesGoals = (filters?: { month?: number; year?: number }): Promise<SalesGoal[]> => {
   const params = new URLSearchParams();
