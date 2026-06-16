@@ -472,10 +472,13 @@ export default function Expenses() {
             </div>
             <div className="p-5">
               <Field label="Categoria">
-                <select value={bulkCategoryId} onChange={e => setBulkCategoryId(e.target.value ? Number(e.target.value) : '')} className="input-dark w-full">
-                  <option value="">Selecionar categoria...</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <CategorySelect
+                  value={bulkCategoryId || undefined}
+                  onChange={id => setBulkCategoryId(id ?? '')}
+                  categories={categories}
+                  onCategoryCreated={cat => setCategories(prev => [...prev, cat])}
+                  type="expense"
+                />
               </Field>
             </div>
             <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
