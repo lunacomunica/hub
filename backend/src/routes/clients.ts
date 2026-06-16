@@ -76,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
     const { name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
-    const isActive = active !== undefined ? active : true;
+    const isActive = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [created] } = await pool.query(
       `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -101,7 +101,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       `UPDATE agency_clients SET name = $1, monthly_fee = $2, margin_target = $3, active = $4,
         start_date = $5, notes = $6, service_type = $7, updated_at = NOW()
        WHERE id = $8`,
-      [name, monthly_fee || 0, margin_target || 30, active !== undefined ? active : true, start_date || null, notes || null, service_type || null, req.params.id]
+      [name, monthly_fee || 0, margin_target || 30, active !== undefined ? (active ? 1 : 0) : 1, start_date || null, notes || null, service_type || null, req.params.id]
     );
 
     const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
