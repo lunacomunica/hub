@@ -9,29 +9,32 @@ router.get('/', async (req: Request, res: Response) => {
     const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
     const year  = parseInt(req.query.year  as string) || now.getFullYear();
 
-    const monthStr = String(month).padStart(2, '0');
+    const monthStr  = String(month).padStart(2, '0');
     const startDate = `${year}-${monthStr}-01`;
     const endDate   = `${year}-${monthStr}-31`;
 
-    // 6-month window for trend
-    const trendStart = new Date(year, month - 7, 1);
-    const trendStartStr = `${trendStart.getFullYear()}-${String(trendStart.getMonth() + 1).padStart(2, '0')}-01`;
+    // 6-month window for trend (YYYY-MM string comparison works on TEXT dates)
+    const trendMonths: { key: string; label: string }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(year, month - 1 - i, 1);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const y = d.getFullYear();
+      trendMonths.push({
+        key: `${y}-${m}`,   // YYYY-MM prefix for TEXT comparison
+        label: d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }),
+      });
+    }
+    const trendStart = trendMonths[0].key + '-01';
+    const trendEnd   = trendMonths[trendMonths.length - 1].key + '-31';
 
-    // Run all queries in parallel
+    // Run all queries in parallel; allSettled so one failure doesn't kill everything
     const [
-      revenueResult,
-      expenseResult,
-      trendRevResult,
-      trendExpResult,
-      revByCatResult,
-      expByCatResult,
-      topClientsResult,
-      oppResult,
-      goalResult,
-      overdueRevResult,
-      overdueExpResult,
-    ] = await Promise.all([
-      // Current month totals
+      revenueR, expenseR,
+      trendRevR, trendExpR,
+      revByCatR, expByCatR,
+      topClientsR, oppR, goalR,
+      overdueRevR, overdueExpR,
+    ] = await Promise.allSettled([
       query<{ total: string }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues
          WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
@@ -42,28 +45,21 @@ router.get('/', async (req: Request, res: Response) => {
          WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
         [startDate, endDate]
       ),
-
-      // Monthly trend — single query each (last 6 months)
-      query<{ month: string; total: string }>(
-        `SELECT TO_CHAR(DATE_TRUNC('month', date::date), 'MM/YYYY') as month,
-                COALESCE(SUM(amount), 0) as total
+      // Trend: group by YYYY-MM prefix (TEXT column, no casting needed)
+      query<{ month_key: string; total: string }>(
+        `SELECT SUBSTRING(date, 1, 7) as month_key, COALESCE(SUM(amount), 0) as total
          FROM financial_revenues
          WHERE date >= $1 AND date <= $2 AND status != 'cancelado'
-         GROUP BY DATE_TRUNC('month', date::date)
-         ORDER BY DATE_TRUNC('month', date::date)`,
-        [trendStartStr, endDate]
+         GROUP BY SUBSTRING(date, 1, 7) ORDER BY month_key`,
+        [trendStart, trendEnd]
       ),
-      query<{ month: string; total: string }>(
-        `SELECT TO_CHAR(DATE_TRUNC('month', date::date), 'MM/YYYY') as month,
-                COALESCE(SUM(amount), 0) as total
+      query<{ month_key: string; total: string }>(
+        `SELECT SUBSTRING(date, 1, 7) as month_key, COALESCE(SUM(amount), 0) as total
          FROM financial_expenses
          WHERE date >= $1 AND date <= $2 AND status != 'cancelado'
-         GROUP BY DATE_TRUNC('month', date::date)
-         ORDER BY DATE_TRUNC('month', date::date)`,
-        [trendStartStr, endDate]
+         GROUP BY SUBSTRING(date, 1, 7) ORDER BY month_key`,
+        [trendStart, trendEnd]
       ),
-
-      // By category
       query(
         `SELECT fc.name, fc.color, COALESCE(SUM(fr.amount), 0) as total
          FROM financial_revenues fr
@@ -80,8 +76,6 @@ router.get('/', async (req: Request, res: Response) => {
          GROUP BY fc.id, fc.name, fc.color ORDER BY total DESC`,
         [startDate, endDate]
       ),
-
-      // Top clients
       query(
         `SELECT client_name, COALESCE(SUM(amount), 0) as total
          FROM financial_revenues
@@ -89,78 +83,71 @@ router.get('/', async (req: Request, res: Response) => {
          GROUP BY client_name ORDER BY total DESC LIMIT 5`,
         [startDate, endDate]
       ),
-
-      // Opportunities
       query(
         `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value,
                 COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
          FROM opportunities WHERE stage NOT IN ('fechado', 'perdido') GROUP BY stage`
       ),
-
-      // Goal
-      query<{ target_revenue: string; target_new_clients: string; target_recurring: string }>(
+      query<{ target_revenue: string }>(
         'SELECT * FROM sales_goals WHERE month = $1 AND year = $2',
         [month, year]
       ),
-
-      // Overdue
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM financial_revenues
-         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE)`
+         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != '')`
       ),
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM financial_expenses
-         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE)`
+         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != '')`
       ),
     ]);
 
-    const totalRevenue  = Number(revenueResult.rows[0].total);
-    const totalExpenses = Number(expenseResult.rows[0].total);
+    // Helper to safely extract rows
+    const rows = <T>(r: PromiseSettledResult<{ rows: T[] }>, fallback: T[] = []): T[] =>
+      r.status === 'fulfilled' ? r.value.rows : (console.error('Dashboard query failed:', r.reason), fallback);
+    const row0 = <T>(r: PromiseSettledResult<{ rows: T[] }>, fallback: T): T =>
+      r.status === 'fulfilled' && r.value.rows[0] ? r.value.rows[0] : fallback;
+
+    const totalRevenue  = Number(row0(revenueR, { total: '0' }).total);
+    const totalExpenses = Number(row0(expenseR, { total: '0' }).total);
     const netProfit     = totalRevenue - totalExpenses;
     const profitMargin  = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-    // Build 6-month trend array filling in missing months with 0
-    const revByMonth: Record<string, number> = {};
-    const expByMonth: Record<string, number> = {};
-    trendRevResult.rows.forEach(r => { revByMonth[r.month] = Number(r.total); });
-    trendExpResult.rows.forEach(r => { expByMonth[r.month] = Number(r.total); });
+    // Build trend from grouped results
+    const revByKey: Record<string, number> = {};
+    const expByKey: Record<string, number> = {};
+    rows(trendRevR).forEach((r: { month_key: string; total: string }) => { revByKey[r.month_key] = Number(r.total); });
+    rows(trendExpR).forEach((r: { month_key: string; total: string }) => { expByKey[r.month_key] = Number(r.total); });
 
-    const monthlyTrend = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(year, month - 1 - i, 1);
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const y = d.getFullYear();
-      const key = `${m}/${y}`;
-      const rev = revByMonth[key] || 0;
-      const exp = expByMonth[key] || 0;
-      monthlyTrend.push({
-        month: key,
-        label: d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }),
-        revenue: rev,
-        expenses: exp,
-        profit: rev - exp,
-      });
-    }
+    const monthlyTrend = trendMonths.map(({ key, label }) => {
+      const rev = revByKey[key] || 0;
+      const exp = expByKey[key] || 0;
+      const [y, m] = key.split('-');
+      return { month: `${m}/${y}`, label, revenue: rev, expenses: exp, profit: rev - exp };
+    });
 
-    const goal = goalResult.rows[0] || null;
-    const goalProgress = goal ? {
-      target_revenue: Number(goal.target_revenue),
+    const goalRow = row0(goalR, null as { target_revenue: string } | null);
+    const goalProgress = goalRow ? {
+      target_revenue: Number(goalRow.target_revenue),
       actual_revenue: totalRevenue,
-      progress_percent: Number(goal.target_revenue) > 0 ? (totalRevenue / Number(goal.target_revenue)) * 100 : 0,
+      progress_percent: Number(goalRow.target_revenue) > 0 ? (totalRevenue / Number(goalRow.target_revenue)) * 100 : 0,
     } : null;
 
     res.json({
       summary: { total_revenue: totalRevenue, total_expenses: totalExpenses, net_profit: netProfit, profit_margin: profitMargin },
       monthly_trend: monthlyTrend,
-      revenue_by_category: revByCatResult.rows,
-      expense_by_category: expByCatResult.rows,
-      top_clients: topClientsResult.rows,
-      opportunities_summary: oppResult.rows,
+      revenue_by_category: rows(revByCatR),
+      expense_by_category: rows(expByCatR),
+      top_clients: rows(topClientsR),
+      opportunities_summary: rows(oppR),
       goal_progress: goalProgress,
-      overdue: { revenues: Number(overdueRevResult.rows[0].count), expenses: Number(overdueExpResult.rows[0].count) },
+      overdue: {
+        revenues: Number(row0(overdueRevR, { count: '0' }).count),
+        expenses: Number(row0(overdueExpR, { count: '0' }).count),
+      },
     });
   } catch (err) {
-    console.error(err);
+    console.error('[dashboard]', err);
     res.status(500).json({ error: 'Erro ao carregar dashboard' });
   }
 });
