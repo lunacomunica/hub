@@ -83,6 +83,7 @@ export default function Churn() {
     churn_reason: '',
     churn_notes: '',
     reactivation_potential: 'nao',
+    start_date: '',
   });
 
   const load = async () => {
@@ -110,6 +111,7 @@ export default function Churn() {
       churn_reason: c.churn_reason || '',
       churn_notes: c.churn_notes || '',
       reactivation_potential: c.reactivation_potential || 'nao',
+      start_date: c.start_date || '',
     });
     setShowModal(true);
   };
@@ -303,10 +305,17 @@ export default function Churn() {
               <h3 className="font-semibold text-white">Dados de cancelamento — {selectedClient.name}</h3>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div>
-                <label className="label-dark mb-1 block">Data de cancelamento</label>
-                <input type="date" value={form.churn_date} onChange={e => setForm(f => ({ ...f, churn_date: e.target.value }))}
-                  className="input-dark w-full" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-dark mb-1 block">Data de início (contrato)</label>
+                  <input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+                    className="input-dark w-full" />
+                </div>
+                <div>
+                  <label className="label-dark mb-1 block">Data de cancelamento</label>
+                  <input type="date" value={form.churn_date} onChange={e => setForm(f => ({ ...f, churn_date: e.target.value }))}
+                    className="input-dark w-full" />
+                </div>
               </div>
               <div>
                 <label className="label-dark mb-1 block">Motivo do cancelamento</label>

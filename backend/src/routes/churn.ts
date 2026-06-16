@@ -112,16 +112,16 @@ router.get('/clients', async (_req: Request, res: Response) => {
 
 router.patch('/:id/churn', async (req: Request, res: Response) => {
   try {
-    const { churn_date, churn_reason, churn_notes, reactivation_potential } = req.body;
+    const { churn_date, churn_reason, churn_notes, reactivation_potential, start_date } = req.body;
     const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
 
     await pool.query(
       `UPDATE agency_clients
        SET active = 0, churn_date = $1, churn_reason = $2, churn_notes = $3,
-           reactivation_potential = $4, updated_at = NOW()
-       WHERE id = $5`,
-      [churn_date || new Date().toISOString().split('T')[0], churn_reason || null, churn_notes || null, reactivation_potential || 'nao', req.params.id]
+           reactivation_potential = $4, start_date = COALESCE($5, start_date), updated_at = NOW()
+       WHERE id = $6`,
+      [churn_date || new Date().toISOString().split('T')[0], churn_reason || null, churn_notes || null, reactivation_potential || 'nao', start_date || null, req.params.id]
     );
 
     const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);
