@@ -242,14 +242,14 @@ export default function ClientHealth() {
       </div>
 
       {/* Client cards */}
-      {clients.length === 0 ? (
+      {activeClients.length === 0 ? (
         <div className="card py-12 text-center text-slate-500 text-sm">
-          Nenhum cliente cadastrado.{' '}
+          Nenhum cliente ativo.{' '}
           <button onClick={openCreate} className="text-blue-400 underline">Adicionar primeiro cliente</button>
         </div>
       ) : (
         <div className="space-y-3">
-          {clients.map(c => {
+          {activeClients.map(c => {
             const h = HEALTH_CONFIG[c.health || 'critico'];
             const marginPct = Math.min((c.margin_percent || 0), 100);
             const isExpanded = expandedId === c.id;
