@@ -435,50 +435,54 @@ export default function Revenues() {
               {/* Projections */}
               {projections.filter(p => {
                 const q = search.toLowerCase();
-                return !q || (p.description || '').toLowerCase().includes(q) || (p.client_display_name || p.client_name || '').toLowerCase().includes(q);
-              }).map(p => (
-                <tr key={p.id} className="tr opacity-60" style={{ borderLeft: '3px solid #f59e0b' }}>
-                  <td className="td px-4 py-3 w-8">
-                    <input type="checkbox" disabled className="rounded cursor-not-allowed opacity-40" />
-                  </td>
-                  <td className="td px-4 py-3 text-slate-400 text-xs italic">—</td>
-                  <td className="td px-4 py-3">
-                    <div className="flex items-center gap-2">
+                return !q || (p.description || '').toLowerCase().includes(q) || ((p as RevenueRow & { client_display_name?: string }).client_display_name || p.client_name || '').toLowerCase().includes(q);
+              }).map(p => {
+                const isMrr = !!(p as RevenueRow & { is_mrr?: boolean }).is_mrr;
+                return (
+                  <tr key={p.id} className="tr opacity-70" style={{ borderLeft: `3px solid ${isMrr ? '#10b981' : '#f59e0b'}` }}>
+                    <td className="td px-4 py-3 w-8">
+                      <input type="checkbox" disabled className="rounded cursor-not-allowed opacity-40" />
+                    </td>
+                    <td className="td px-4 py-3 text-slate-400 text-xs italic">—</td>
+                    <td className="td px-4 py-3">
                       <span className="text-slate-300 text-xs">{p.description}</span>
-                    </div>
-                  </td>
-                  <td className="td px-4 py-3 text-xs text-slate-400">{p.client_display_name || p.client_name || '—'}</td>
-                  <td className="td px-4 py-3">
-                    {p.category_name ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (p.category_color || '#6366f1') + '22', color: p.category_color || '#6366f1' }}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.category_color || '#6366f1' }} />
-                        {p.category_name}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td className="td px-4 py-3 text-right font-semibold text-slate-300">{brl(p.amount)}</td>
-                  <td className="td px-4 py-3 text-center">
-                    <span className="badge badge-amber text-xs">PROVISÃO</span>
-                  </td>
-                  <td className="td px-4 py-3 text-center">
-                    <span className="badge badge-purple text-xs">{REC_LABELS[p.recurrence_type || 'monthly']}</span>
-                  </td>
-                  <td className="td px-4 py-3">
-                    <button
-                      onClick={() => {
-                        const today = new Date();
-                        const day = String(today.getDate()).padStart(2, '0');
-                        const m = String(filterMonth).padStart(2, '0');
-                        setForm({ ...p, id: undefined, date: `${filterYear}-${m}-${day}`, status: 'pendente' });
-                        setModal(true);
-                      }}
-                      className="text-xs text-amber-400 hover:text-amber-300 underline whitespace-nowrap"
-                    >
-                      + Confirmar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="td px-4 py-3 text-xs text-slate-400">{(p as RevenueRow & { client_display_name?: string }).client_display_name || p.client_name || '—'}</td>
+                    <td className="td px-4 py-3">
+                      {p.category_name ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (p.category_color || '#6366f1') + '22', color: p.category_color || '#6366f1' }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.category_color || '#6366f1' }} />
+                          {p.category_name}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td className="td px-4 py-3 text-right font-semibold text-slate-300">{brl(p.amount)}</td>
+                    <td className="td px-4 py-3 text-center">
+                      <span className="badge badge-amber text-xs">PROVISÃO</span>
+                    </td>
+                    <td className="td px-4 py-3 text-center">
+                      {isMrr
+                        ? <span className="badge badge-green text-xs">MRR</span>
+                        : <span className="badge badge-purple text-xs">{REC_LABELS[p.recurrence_type || 'monthly']}</span>
+                      }
+                    </td>
+                    <td className="td px-4 py-3">
+                      <button
+                        onClick={() => {
+                          const today = new Date();
+                          const day = String(today.getDate()).padStart(2, '0');
+                          const mm = String(filterMonth).padStart(2, '0');
+                          setForm({ ...p, id: undefined, date: `${filterYear}-${mm}-${day}`, status: 'pendente' });
+                          setModal(true);
+                        }}
+                        className="text-xs text-amber-400 hover:text-amber-300 underline whitespace-nowrap"
+                      >
+                        + Confirmar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

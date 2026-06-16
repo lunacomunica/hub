@@ -101,7 +101,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/revenues/projections?month=8&year=2026
-// Returns recurring revenue templates that have no real entry in the requested month
+// Returns recurring revenue templates + active client MRR that have no real entry in the requested month
 router.get('/projections', async (req: Request, res: Response) => {
   try {
     const { month, year } = req.query;
@@ -111,7 +111,7 @@ router.get('/projections', async (req: Request, res: Response) => {
     const monthStart = `${year}-${m}-01`;
     const monthEnd = `${year}-${m}-31`;
 
-    // Get the latest recurring entry per client (or per description if no client)
+    // ── 1. is_recurring templates ────────────────────────────────────────────
     const { rows: templates } = await pool.query(`
       SELECT DISTINCT ON (COALESCE(fr.client_id::text, fr.client_name, fr.description))
         fr.*, fc.name as category_name, fc.color as category_color,
@@ -124,28 +124,25 @@ router.get('/projections', async (req: Request, res: Response) => {
       ORDER BY COALESCE(fr.client_id::text, fr.client_name, fr.description), fr.date DESC
     `, [monthStart]);
 
-    // For each template, check if there's already an entry in the requested month
+    // Track which client_ids are already covered by is_recurring templates
+    const coveredClientIds = new Set(templates.filter(t => t.client_id).map((t: { client_id: number }) => t.client_id));
+
     const projections = [];
+
     for (const t of templates) {
-      // Skip quarterly if this month is not a multiple of 3 from origin
       if (t.recurrence_type === 'quarterly') {
-        const originDate = new Date(t.date);
-        const targetDate = new Date(monthStart);
         const diffMonths =
-          (targetDate.getFullYear() - originDate.getFullYear()) * 12 +
-          (targetDate.getMonth() - originDate.getMonth());
+          (new Date(monthStart).getFullYear() - new Date(t.date).getFullYear()) * 12 +
+          (new Date(monthStart).getMonth() - new Date(t.date).getMonth());
         if (diffMonths % 3 !== 0) continue;
       }
       if (t.recurrence_type === 'yearly') {
-        const originDate = new Date(t.date);
-        const targetDate = new Date(monthStart);
         const diffMonths =
-          (targetDate.getFullYear() - originDate.getFullYear()) * 12 +
-          (targetDate.getMonth() - originDate.getMonth());
+          (new Date(monthStart).getFullYear() - new Date(t.date).getFullYear()) * 12 +
+          (new Date(monthStart).getMonth() - new Date(t.date).getMonth());
         if (diffMonths % 12 !== 0) continue;
       }
 
-      // Check if an entry already exists for this client in this month
       const check = await pool.query(`
         SELECT 1 FROM financial_revenues
         WHERE date >= $1 AND date <= $2
@@ -159,6 +156,54 @@ router.get('/projections', async (req: Request, res: Response) => {
 
       if (check.rows.length === 0) {
         projections.push({ ...t, is_projection: true, id: `proj_${t.id}`, status: 'provisao' });
+      }
+    }
+
+    // ── 2. Active clients MRR ────────────────────────────────────────────────
+    // Find the "Mensalidade" revenue category for auto-assignment
+    const { rows: catRows } = await pool.query(
+      `SELECT id, name, color FROM financial_categories WHERE name = 'Mensalidade' AND type = 'revenue' LIMIT 1`
+    );
+    const mrrCat = catRows[0] || null;
+
+    const { rows: mrrClients } = await pool.query(`
+      SELECT id, name, monthly_fee
+      FROM agency_clients
+      WHERE active = 1 AND monthly_fee > 0
+      ORDER BY name ASC
+    `);
+
+    for (const c of mrrClients) {
+      // Skip if already covered by an is_recurring revenue template
+      if (coveredClientIds.has(c.id)) continue;
+
+      // Check if any revenue entry already exists for this client in this month
+      const check = await pool.query(`
+        SELECT 1 FROM financial_revenues
+        WHERE date >= $1 AND date <= $2 AND client_id = $3
+        LIMIT 1
+      `, [monthStart, monthEnd, c.id]);
+
+      if (check.rows.length === 0) {
+        projections.push({
+          id: `mrr_${c.id}`,
+          description: 'Mensalidade',
+          client_id: c.id,
+          client_name: c.name,
+          client_display_name: c.name,
+          amount: c.monthly_fee,
+          date: monthStart,
+          due_date: null,
+          status: 'provisao',
+          category_id: mrrCat?.id || null,
+          category_name: mrrCat?.name || null,
+          category_color: mrrCat?.color || null,
+          is_recurring: 1,
+          recurrence_type: 'monthly',
+          is_projection: true,
+          is_mrr: true,
+          notes: null,
+        });
       }
     }
 
