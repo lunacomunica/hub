@@ -100,15 +100,13 @@ export default function Sidebar() {
           />
         )}
 
-        {/* Ícone colapsado — recorta só o símbolo circular */}
+        {/* Ícone colapsado — logo luna.ia */}
         {collapsed && (
-          <div style={{ width: 34, height: 34, overflow: 'hidden', borderRadius: '50%', flexShrink: 0 }}>
-            <img
-              src="/logo-dark.png"
-              alt="Luna"
-              style={{ height: '34px', width: 'auto', objectFit: 'cover', objectPosition: 'left center' }}
-            />
-          </div>
+          <img
+            src="/luna-icon.png"
+            alt="Luna"
+            style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }}
+          />
         )}
 
         {!collapsed && (
