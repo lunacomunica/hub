@@ -418,6 +418,7 @@ export default function Expenses() {
   const paid = items.filter(r => r.status === 'pago').reduce((s, r) => s + Number(r.amount), 0);
   const pending = items.filter(r => r.status === 'pendente').reduce((s, r) => s + Number(r.amount), 0);
   const fixed = items.filter(r => r.is_fixed).reduce((s, r) => s + Number(r.amount), 0);
+  const total = items.filter(r => r.status !== 'cancelado').reduce((s, r) => s + Number(r.amount), 0);
 
   const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -477,7 +478,11 @@ export default function Expenses() {
         <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400"><RefreshCw size={15} /></button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="card p-4">
+          <div className="label-dark mb-1">Total do mês</div>
+          <div className="metric-md text-white">{brl(total)}</div>
+        </div>
         <div className="card p-4">
           <div className="label-dark mb-1">Pago</div>
           <div className="metric-md text-red-400">{brl(paid)}</div>
