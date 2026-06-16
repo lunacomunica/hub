@@ -14,6 +14,7 @@ interface ImportRow extends ParsedRow {
   selected: boolean;
   category_id?: number;
   supplier?: string;
+  duplicate?: boolean;
 }
 
 interface Props {
@@ -40,7 +41,13 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
     setError('');
     try {
       const { rows: parsed, total } = await previewImport(file, type);
-      setRows(parsed.map(r => ({ ...r, selected: true, category_id: r.category_id, supplier: r.supplier })));
+      setRows(parsed.map(r => ({
+        ...r,
+        selected: !r.duplicate, // auto-deselect duplicates
+        category_id: r.category_id,
+        supplier: r.supplier,
+        duplicate: r.duplicate,
+      })));
       setStep('preview');
       // If file was mixed and we filtered, show a notice (stored in error as info)
       if (total < parsed.length) setError('');
@@ -77,6 +84,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
   };
 
   const hasSuggestions = rows.some(r => r.category_id || r.supplier);
+  const duplicateCount = rows.filter(r => r.duplicate).length;
 
   const handleConfirm = async () => {
     const selected = rows.filter(r => r.selected);
@@ -165,6 +173,11 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                   <input type="checkbox" checked={rows.every(r => r.selected)} onChange={e => toggleAll(e.target.checked)} />
                   Selecionar todos ({selectedCount}/{rows.length})
                 </label>
+                {duplicateCount > 0 && (
+                  <span style={{ fontSize: '0.75rem', color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', padding: '2px 8px' }}>
+                    ⚠️ {duplicateCount} {duplicateCount === 1 ? 'transação já existe' : 'transações já existem'} no banco — desmarcadas automaticamente
+                  </span>
+                )}
                 {hasSuggestions && (
                   <span style={{ fontSize: '0.75rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '6px', padding: '2px 8px' }}>
                     ✦ Categorias e fornecedores preenchidos automaticamente pelo histórico
@@ -200,7 +213,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                   </thead>
                   <tbody>
                     {rows.map((row, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--border-card)', opacity: row.selected ? 1 : 0.4 }}>
+                      <tr key={i} style={{ borderTop: '1px solid var(--border-card)', opacity: row.selected ? 1 : 0.4, background: row.duplicate ? 'rgba(245,158,11,0.05)' : undefined }}>
                         <td style={{ padding: '7px 12px' }}>
                           <input type="checkbox" checked={row.selected} onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, selected: e.target.checked } : r))} />
                         </td>
@@ -209,6 +222,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                         </td>
                         <td style={{ padding: '7px 12px', color: 'var(--text-primary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row.description}
+                          {row.duplicate && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: '#f59e0b', background: 'rgba(245,158,11,0.15)', borderRadius: 4, padding: '1px 5px' }}>duplicada</span>}
                         </td>
                         <td style={{ padding: '7px 12px', color: type === 'revenue' ? '#10b981' : '#ef4444', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>
                           {fmt(row.amount)}

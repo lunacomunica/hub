@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { suggestForDescription } from '../utils/categorization';
+import { query as dbQuery } from '../db';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -110,12 +111,20 @@ router.post('/preview', requireAuth, upload.single('file'), async (req: AuthRequ
     return res.status(422).json({ error: 'Nenhuma transação encontrada. Se o arquivo mistura entradas e saídas, o sistema filtrou apenas as relevantes para esta página.' });
   }
 
-  // Enrich with auto-category/supplier suggestions (non-blocking — failures are silently skipped)
   const transType = (filter === 'revenue' ? 'revenue' : 'expense') as 'revenue' | 'expense';
+  const table = transType === 'revenue' ? 'financial_revenues' : 'financial_expenses';
+
+  // Enrich: auto-category suggestions + duplicate detection (both in parallel per row)
   const enriched = await Promise.all(
     rows.map(async ({ credit: _c, ...r }) => {
-      const suggestion = await suggestForDescription(r.description, transType).catch(() => ({}));
-      return { ...r, ...suggestion };
+      const [suggestion, dupResult] = await Promise.all([
+        suggestForDescription(r.description, transType).catch(() => ({})),
+        dbQuery(
+          `SELECT id FROM ${table} WHERE date = $1 AND amount = $2 AND LOWER(description) = LOWER($3) LIMIT 1`,
+          [r.date, r.amount, r.description]
+        ).catch(() => ({ rows: [] })),
+      ]);
+      return { ...r, ...suggestion, duplicate: dupResult.rows.length > 0 };
     })
   );
 

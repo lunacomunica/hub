@@ -226,7 +226,7 @@ export const updateProfile = (data: { name?: string; current_password?: string; 
   req('/auth/profile', { method: 'PUT', body: JSON.stringify(data) });
 
 // Import
-export async function previewImport(file: File, filter?: 'revenue' | 'expense'): Promise<{ rows: { date: string; description: string; amount: number; category_id?: number; supplier?: string }[]; total: number }> {
+export async function previewImport(file: File, filter?: 'revenue' | 'expense'): Promise<{ rows: { date: string; description: string; amount: number; category_id?: number; supplier?: string; duplicate?: boolean }[]; total: number }> {
   const token = localStorage.getItem('auth-token');
   const formData = new FormData();
   formData.append('file', file);
