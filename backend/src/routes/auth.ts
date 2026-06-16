@@ -150,7 +150,7 @@ router.put('/users/:id', requireAuth, async (req: AuthRequest, res: Response) =>
   const { id } = req.params;
   const { name, role, active, password } = req.body;
 
-  const { rows: [user] } = await pool.query<{ id: number; email: string }>(
+  const { rows: [user] } = await dbQuery<{ id: number; email: string }>(
     'SELECT id, email FROM users WHERE id = $1',
     [id]
   );
@@ -170,14 +170,14 @@ router.put('/users/:id', requireAuth, async (req: AuthRequest, res: Response) =>
       });
     }
     const hash = bcrypt.hashSync(password, 10);
-    await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, id]);
+    await dbQuery('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, id]);
   }
 
-  if (name !== undefined) await pool.query('UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2', [name, id]);
-  if (role !== undefined) await pool.query('UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2', [role, id]);
-  if (active !== undefined) await pool.query('UPDATE users SET active = $1, updated_at = NOW() WHERE id = $2', [active ? true : false, id]);
+  if (name !== undefined) await dbQuery('UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2', [name, id]);
+  if (role !== undefined) await dbQuery('UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2', [role, id]);
+  if (active !== undefined) await dbQuery('UPDATE users SET active = $1, updated_at = NOW() WHERE id = $2', [active ? true : false, id]);
 
-  const { rows: [updated] } = await pool.query(
+  const { rows: [updated] } = await dbQuery(
     'SELECT id, name, email, role, active, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
@@ -197,13 +197,13 @@ router.delete('/users/:id', requireAuth, async (req: AuthRequest, res: Response)
     return res.status(400).json({ error: 'Não é possível desativar o próprio usuário' });
   }
 
-  const { rows: [user] } = await pool.query<{ id: number; email: string }>(
+  const { rows: [user] } = await dbQuery<{ id: number; email: string }>(
     'SELECT id, email FROM users WHERE id = $1',
     [id]
   );
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-  await pool.query('UPDATE users SET active = 0, updated_at = NOW() WHERE id = $1', [id]);
+  await dbQuery('UPDATE users SET active = 0, updated_at = NOW() WHERE id = $1', [id]);
 
   const ip = getClientIp(req);
   await writeAudit(req.user!.id, req.user!.email, 'deactivate_user', `user:${user.email}`, ip);
