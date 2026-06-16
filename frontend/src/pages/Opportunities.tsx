@@ -423,9 +423,10 @@ export default function Opportunities() {
   const load = async () => {
     setLoading(true);
     try {
-      const [opps, prods, stgs, usrs, settings] = await Promise.all([
-        getOpportunities(), getProducts(true), getPipelineStages(), getUsers(), getCompanySettings(),
+      const [opps, allProds, stgs, usrs, settings] = await Promise.all([
+        getOpportunities(), getProducts(), getPipelineStages(), getUsers(), getCompanySettings(),
       ]);
+      const prods = allProds.filter(p => p.active);
       setData(opps); setProducts(prods); setStages(stgs); setUsers(usrs);
       if (settings.lead_sources?.length) setSources(settings.lead_sources);
     } catch (e) { console.error(e); }
