@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload, Users, Repeat2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload, Users, Repeat2, CircleDot } from 'lucide-react';
 import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues, getRevenueProjections } from '../api';
 import type { Revenue, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
@@ -56,9 +56,10 @@ export default function Revenues() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'client' | 'recurring' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'client' | 'recurring' | 'status' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
+  const [bulkStatus, setBulkStatus] = useState<string>('pago');
   const [bulkClientId, setBulkClientId] = useState<number | null>(null);
   const [bulkClientName, setBulkClientName] = useState('');
   const [bulkClientSearch, setBulkClientSearch] = useState('');
@@ -316,6 +317,12 @@ export default function Revenues() {
             className="btn-ghost flex items-center gap-1.5 text-sm"
           >
             <Repeat2 size={13} /> Recorrente
+          </button>
+          <button
+            onClick={() => { setBulkStatus('pago'); setBulkModal('status'); }}
+            className="btn-ghost flex items-center gap-1.5 text-sm"
+          >
+            <CircleDot size={13} /> Status
           </button>
           <button onClick={clearSelection} className="btn-ghost flex items-center gap-1.5 text-sm ml-auto">
             <X size={13} /> Desmarcar
@@ -636,6 +643,32 @@ export default function Revenues() {
                 className="btn-primary text-sm disabled:opacity-50"
               >
                 {bulkSaving ? 'Salvando...' : 'Aplicar a todos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Status Modal */}
+      {bulkModal === 'status' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white">Status — {selectedIds.length} receita{selectedIds.length !== 1 ? 's' : ''}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-2">
+              {[['pago', 'Pago', 'badge-green'], ['pendente', 'Pendente', 'badge-amber'], ['atrasado', 'Atrasado', 'badge-red'], ['cancelado', 'Cancelado', 'badge-slate']].map(([v, l, badge]) => (
+                <label key={v} className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg transition-colors ${bulkStatus === v ? 'bg-white/5' : 'hover:bg-white/3'}`}>
+                  <input type="radio" checked={bulkStatus === v} onChange={() => setBulkStatus(v)} className="w-4 h-4" />
+                  <span className={`badge ${badge}`}>{l}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={() => saveBulk({ status: bulkStatus })} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
             </div>
           </div>
