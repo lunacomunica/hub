@@ -173,6 +173,22 @@ import pool from './db';
   try {
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS billing_type VARCHAR(10) DEFAULT 'mrr'`);
   } catch (e) { console.error('[migration] products billing_type error:', e); }
+
+  // Seed default pipeline stages if none exist
+  try {
+    const { rows: [cnt] } = await pool.query<{ c: string }>(`SELECT COUNT(*) as c FROM pipeline_stages`);
+    if (Number(cnt.c) === 0) {
+      await pool.query(`
+        INSERT INTO pipeline_stages (key, label, color, bg_color, position, is_terminal) VALUES
+          ('prospeccao', 'Prospecção',  '#94a3b8', 'rgba(148,163,184,0.12)', 1, 0),
+          ('contato',    'Contato',     '#3b82f6', 'rgba(59,130,246,0.12)',  2, 0),
+          ('proposta',   'Proposta',    '#8b5cf6', 'rgba(139,92,246,0.12)', 3, 0),
+          ('negociacao', 'Negociação',  '#f59e0b', 'rgba(245,158,11,0.12)', 4, 0),
+          ('fechado',    'Fechado',     '#10b981', 'rgba(16,185,129,0.12)', 5, 1),
+          ('perdido',    'Perdido',     '#ef4444', 'rgba(239,68,68,0.12)',  6, 1)
+      `);
+    }
+  } catch (e) { console.error('[migration] default pipeline stages error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────

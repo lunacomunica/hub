@@ -436,7 +436,8 @@ export default function Opportunities() {
   useEffect(() => { if (addingStage) newStageRef.current?.focus(); }, [addingStage]);
 
   const openCreate = (stage?: string) => {
-    const s = stage || 'prospeccao';
+    const firstPipelineStage = stages.filter(s => !s.is_terminal)[0]?.key ?? 'prospeccao';
+    const s = stage || firstPipelineStage;
     setForm({ ...EMPTY, stage: s, probability: PROB_DEFAULT[s] ?? 20 });
     setModalTab('dados');
     setModal(true);
