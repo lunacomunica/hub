@@ -53,6 +53,21 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+router.delete('/bulk', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids obrigatório' });
+    }
+    const placeholders = ids.map((_: unknown, i: number) => `$${i + 1}`).join(', ');
+    await pool.query(`DELETE FROM financial_expenses WHERE id IN (${placeholders})`, ids);
+    res.json({ success: true, deleted: ids.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao deletar despesas em lote' });
+  }
+});
+
 router.patch('/bulk', async (req: Request, res: Response) => {
   try {
     const { ids, updates } = req.body;

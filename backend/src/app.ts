@@ -18,6 +18,7 @@ import productsRouter from './routes/products';
 import cardsRouter from './routes/cards';
 import employeesRouter from './routes/employees';
 import importRouter from './routes/import';
+import supplierRulesRouter from './routes/supplier-rules';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -81,7 +82,8 @@ app.use('/api/churn',         requireAuth, churnRouter);
 app.use('/api/products',      requireAuth, productsRouter);
 app.use('/api/cards',         requireAuth, cardsRouter);
 app.use('/api/employees',     requireAuth, employeesRouter);
-app.use('/api/import',        requireAuth, importRouter);
+app.use('/api/import',          requireAuth, importRouter);
+app.use('/api/supplier-rules',  requireAuth, supplierRulesRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

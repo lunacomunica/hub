@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, getCards, CompanyCard, bulkImportExpenses } from '../api';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
+import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, SupplierRule } from '../api';
 import type { Expense, Category } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -44,13 +44,25 @@ export default function Expenses() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | 'status' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | 'status' | 'delete' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
   const [bulkSupplier, setBulkSupplier] = useState('');
   const [bulkStatus, setBulkStatus] = useState<string>('pago');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+
+  // Supplier rules
+  const [showRules, setShowRules] = useState(false);
+  const [rules, setRules] = useState<SupplierRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [newRuleKeyword, setNewRuleKeyword] = useState('');
+  const [newRuleSupplier, setNewRuleSupplier] = useState('');
+  const [newRuleCategoryId, setNewRuleCategoryId] = useState<number | ''>('');
+  const [ruleSaving, setRuleSaving] = useState(false);
+  const [editingRule, setEditingRule] = useState<number | null>(null);
+  const [editRuleSupplier, setEditRuleSupplier] = useState('');
+  const [editRuleCategoryId, setEditRuleCategoryId] = useState<number | ''>('');
 
   const load = async () => {
     setLoading(true); setError('');
@@ -130,6 +142,68 @@ export default function Expenses() {
   };
   const clearSelection = () => setSelected(new Set());
 
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selected);
+    setBulkSaving(true);
+    try {
+      await bulkDeleteExpenses(ids);
+      setBulkModal(null);
+      clearSelection();
+      load();
+    } catch {
+      alert('Erro ao deletar despesas');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const loadRules = async () => {
+    setRulesLoading(true);
+    try {
+      const data = await getSupplierRules('expense');
+      setRules(data);
+    } catch { /* ignore */ }
+    finally { setRulesLoading(false); }
+  };
+
+  const handleAddRule = async () => {
+    if (!newRuleKeyword.trim() || (!newRuleSupplier.trim() && newRuleCategoryId === '')) return;
+    setRuleSaving(true);
+    try {
+      await createSupplierRule({
+        keyword: newRuleKeyword.trim(),
+        trans_type: 'expense',
+        category_id: newRuleCategoryId !== '' ? newRuleCategoryId : null,
+        supplier: newRuleSupplier.trim() || null,
+      });
+      setNewRuleKeyword(''); setNewRuleSupplier(''); setNewRuleCategoryId('');
+      loadRules();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Erro ao criar regra');
+    } finally { setRuleSaving(false); }
+  };
+
+  const handleSaveRuleEdit = async (id: number) => {
+    setRuleSaving(true);
+    try {
+      await updateSupplierRule(id, {
+        category_id: editRuleCategoryId !== '' ? editRuleCategoryId : null,
+        supplier: editRuleSupplier.trim() || null,
+      });
+      setEditingRule(null);
+      loadRules();
+    } catch { alert('Erro ao salvar'); }
+    finally { setRuleSaving(false); }
+  };
+
+  const handleDeleteRule = async (id: number) => {
+    if (!confirm('Remover esta regra?')) return;
+    try {
+      await deleteSupplierRule(id);
+      loadRules();
+    } catch { alert('Erro ao remover regra'); }
+  };
+
   const handleBulkSave = async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
@@ -203,6 +277,9 @@ export default function Expenses() {
           <button onClick={exportCSV} className="btn-ghost flex items-center gap-2 text-sm">
             <Download size={15} /> CSV
           </button>
+          <button onClick={() => { setShowRules(true); loadRules(); }} className="btn-ghost flex items-center gap-1.5 text-sm" title="Regras de fornecedores">
+            <BookOpen size={15} /> Regras
+          </button>
           <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-1.5 text-sm">
             <Upload size={15} /> Importar
           </button>
@@ -271,6 +348,9 @@ export default function Expenses() {
             <button onClick={() => { setBulkCategoryId(''); setBulkModal('categorize'); }} className="btn-ghost text-xs px-3 py-1">Categorizar</button>
             <button onClick={() => { setBulkSupplier(''); setBulkModal('supplier'); }} className="btn-ghost text-xs px-3 py-1">Fornecedor</button>
             <button onClick={() => { setBulkStatus('pago'); setBulkModal('status'); }} className="btn-ghost text-xs px-3 py-1">Status</button>
+            <button onClick={() => setBulkModal('delete')} className="text-xs px-3 py-1 rounded-md transition-colors" style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+              <span className="flex items-center gap-1"><Trash2 size={12} /> Excluir</span>
+            </button>
           </div>
           <button onClick={clearSelection} className="ml-auto text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
@@ -555,6 +635,161 @@ export default function Expenses() {
               <button onClick={handleBulkSave} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
                 {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation */}
+      {bulkModal === 'delete' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white flex items-center gap-2"><Trash2 size={16} className="text-red-400" /> Confirmar exclusão</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-300">
+                Tem certeza que deseja excluir <strong className="text-white">{selected.size} {selected.size === 1 ? 'despesa' : 'despesas'}</strong>?
+              </p>
+              <p className="text-xs text-slate-500 mt-2">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkSaving}
+                className="text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                style={{ background: '#ef4444', color: '#fff' }}
+              >
+                {bulkSaving ? 'Excluindo...' : `Excluir ${selected.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier rules modal */}
+      {showRules && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full" style={{ maxWidth: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <div>
+                <h2 className="font-semibold text-white">Regras de Fornecedores</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Palavras-chave que mapeiam automaticamente fornecedor e categoria durante a importação.</p>
+              </div>
+              <button onClick={() => setShowRules(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-5 space-y-4">
+              {/* Add new rule */}
+              <div className="p-4 rounded-xl" style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Nova regra</p>
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[160px]">
+                    <label className="label-dark mb-1 block text-xs">Palavra-chave</label>
+                    <input
+                      value={newRuleKeyword}
+                      onChange={e => setNewRuleKeyword(e.target.value)}
+                      placeholder="ex: cleci, google ads, nubank..."
+                      className="input-dark w-full text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="label-dark mb-1 block text-xs">Fornecedor</label>
+                    <input
+                      value={newRuleSupplier}
+                      onChange={e => setNewRuleSupplier(e.target.value)}
+                      placeholder="Nome do fornecedor"
+                      className="input-dark w-full text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="label-dark mb-1 block text-xs">Categoria (opcional)</label>
+                    <select value={newRuleCategoryId} onChange={e => setNewRuleCategoryId(e.target.value ? Number(e.target.value) : '')} className="input-dark w-full text-sm">
+                      <option value="">— sem categoria —</option>
+                      {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleAddRule}
+                    disabled={ruleSaving || !newRuleKeyword.trim() || (!newRuleSupplier.trim() && newRuleCategoryId === '')}
+                    className="btn-primary text-sm disabled:opacity-40 whitespace-nowrap"
+                    style={{ height: 38 }}
+                  >
+                    {ruleSaving ? '...' : '+ Adicionar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Rules table */}
+              {rulesLoading ? (
+                <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" /></div>
+              ) : rules.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  <BookOpen size={28} className="mx-auto mb-2 opacity-40" />
+                  Nenhuma regra cadastrada. Adicione uma acima ou importe lançamentos — o sistema aprende automaticamente.
+                </div>
+              ) : (
+                <div style={{ border: '1px solid var(--border-card)', borderRadius: 10, overflow: 'hidden' }}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-card)' }}>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Palavra-chave</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Fornecedor</th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Categoria</th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Usos</th>
+                        <th className="px-4 py-2.5"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rules.map(rule => (
+                        <tr key={rule.id} style={{ borderTop: '1px solid var(--border-card)' }}>
+                          <td className="px-4 py-2.5 font-mono text-xs text-slate-300">{rule.keyword}</td>
+                          <td className="px-4 py-2.5">
+                            {editingRule === rule.id ? (
+                              <input value={editRuleSupplier} onChange={e => setEditRuleSupplier(e.target.value)} className="input-dark text-xs py-1 w-full" />
+                            ) : (
+                              <span className="text-slate-200">{rule.supplier || <span className="text-slate-600">—</span>}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {editingRule === rule.id ? (
+                              <select value={editRuleCategoryId} onChange={e => setEditRuleCategoryId(e.target.value ? Number(e.target.value) : '')} className="input-dark text-xs py-1 w-full">
+                                <option value="">—</option>
+                                {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            ) : rule.category_name ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (rule.category_color || '#6366f1') + '22', color: rule.category_color || '#6366f1' }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: rule.category_color || '#6366f1' }} />
+                                {rule.category_name}
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-center text-xs text-slate-500">{rule.usage_count}</td>
+                          <td className="px-4 py-2.5">
+                            {editingRule === rule.id ? (
+                              <div className="flex items-center gap-1.5 justify-end">
+                                <button onClick={() => handleSaveRuleEdit(rule.id)} disabled={ruleSaving} className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">Salvar</button>
+                                <button onClick={() => setEditingRule(null)} className="text-xs px-2 py-1 rounded text-slate-400 hover:text-slate-200">✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 justify-end">
+                                <button onClick={() => { setEditingRule(rule.id); setEditRuleSupplier(rule.supplier || ''); setEditRuleCategoryId(rule.category_id ?? ''); }} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><Pencil size={13} /></button>
+                                <button onClick={() => handleDeleteRule(rule.id)} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={13} /></button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <p className="text-xs text-slate-600">💡 O sistema também aprende automaticamente quando você confirma importações ou edita lançamentos.</p>
             </div>
           </div>
         </div>

@@ -88,6 +88,8 @@ export const deleteExpense = (id: number): Promise<{ success: boolean }> =>
   req(`/expenses/${id}`, { method: 'DELETE' });
 export const bulkUpdateExpenses = (ids: number[], updates: Record<string, unknown>): Promise<{ success: boolean; updated: number }> =>
   req('/expenses/bulk', { method: 'PATCH', body: JSON.stringify({ ids, updates }) });
+export const bulkDeleteExpenses = (ids: number[]): Promise<{ success: boolean; deleted: number }> =>
+  req('/expenses/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) });
 
 // Categories
 export const getCategories = (type?: 'revenue' | 'expense'): Promise<Category[]> => {
@@ -255,3 +257,18 @@ export const bulkImportRevenues = (items: { description: string; date: string; a
 
 export const bulkImportExpenses = (items: { description: string; date: string; amount: number; category_id?: number; supplier?: string }[]): Promise<{ imported: number }> =>
   req('/expenses/bulk-import', { method: 'POST', body: JSON.stringify({ items }) });
+
+// Supplier / categorization rules
+export interface SupplierRule {
+  id: number; keyword: string; trans_type: 'revenue' | 'expense';
+  category_id: number | null; supplier: string | null; usage_count: number;
+  updated_at: string; category_name?: string; category_color?: string;
+}
+export const getSupplierRules = (type: 'expense' | 'revenue' = 'expense'): Promise<SupplierRule[]> =>
+  req(`/supplier-rules?type=${type}`);
+export const createSupplierRule = (data: { keyword: string; trans_type: 'expense' | 'revenue'; category_id?: number | null; supplier?: string | null }): Promise<SupplierRule> =>
+  req('/supplier-rules', { method: 'POST', body: JSON.stringify(data) });
+export const updateSupplierRule = (id: number, data: { category_id?: number | null; supplier?: string | null }): Promise<SupplierRule> =>
+  req(`/supplier-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteSupplierRule = (id: number): Promise<{ success: boolean }> =>
+  req(`/supplier-rules/${id}`, { method: 'DELETE' });
