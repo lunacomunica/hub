@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight } from 'lucide-react';
-import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry } from '../api';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw } from 'lucide-react';
+import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient } from '../api';
 import type { AgencyClient, ClientCost } from '../types';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -49,6 +49,15 @@ export default function ClientHealth() {
   const [costForm, setCostForm] = useState<{ description: string; amount: number; type: 'fixo' | 'variavel'; month: number; year: number }>(EMPTY_COST);
   const [addingCost, setAddingCost] = useState(false);
   const [showCostForm, setShowCostForm] = useState(false);
+
+  // Churn
+  const [churnModal, setChurnModal] = useState<{ client: AgencyClient } | null>(null);
+  const [churnDate, setChurnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [churnReason, setChurnReason] = useState('');
+  const [churnNotes, setChurnNotes] = useState('');
+  const [churnReactivation, setChurnReactivation] = useState('nao');
+  const [churnSaving, setChurnSaving] = useState(false);
+  const [reactivating, setReactivating] = useState<number | null>(null);
 
   // Plan change
   const [planModal, setPlanModal] = useState<{ client: AgencyClient } | null>(null);
@@ -102,6 +111,41 @@ export default function ClientHealth() {
       setPlanHistory(history);
     } catch { setClientCosts([]); setPlanHistory([]); }
     finally { setCostsLoading(false); setPlanHistoryLoading(false); }
+  };
+
+  const openChurnModal = (client: AgencyClient) => {
+    setChurnModal({ client });
+    setChurnDate(new Date().toISOString().slice(0, 10));
+    setChurnReason('');
+    setChurnNotes('');
+    setChurnReactivation('nao');
+  };
+
+  const saveChurn = async () => {
+    if (!churnModal) return;
+    setChurnSaving(true);
+    try {
+      await registerChurn(churnModal.client.id, {
+        churn_date: churnDate,
+        churn_reason: churnReason || undefined,
+        churn_notes: churnNotes || undefined,
+        reactivation_potential: churnReactivation,
+      });
+      setChurnModal(null);
+      load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Erro ao registrar churn');
+    } finally {
+      setChurnSaving(false);
+    }
+  };
+
+  const handleReactivate = async (id: number) => {
+    if (!confirm('Reativar este cliente? Ele voltará para Saúde de Clientes.')) return;
+    setReactivating(id);
+    try { await reactivateClient(id); load(); }
+    catch { alert('Erro ao reativar'); }
+    finally { setReactivating(null); }
   };
 
   const openPlanModal = (client: AgencyClient) => {
@@ -230,7 +274,14 @@ export default function ClientHealth() {
                       <span className={`flex items-center gap-1.5 ${h.badge}`}>
                         {h.icon}{h.label}
                       </span>
-                      <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
+                      {c.active ? (
+                        <>
+                          <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
+                          <button onClick={() => openChurnModal(c)} title="Registrar cancelamento" className="p-1.5 text-slate-500 hover:text-orange-400 rounded"><UserX size={14} /></button>
+                        </>
+                      ) : (
+                        <button onClick={() => handleReactivate(c.id)} disabled={reactivating === c.id} title="Reativar cliente" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded disabled:opacity-40"><RefreshCw size={14} /></button>
+                      )}
                       <button onClick={() => openEdit(c)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><X size={13} className="rotate-45" /></button>
                       <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={13} /></button>
                       <button onClick={() => toggleExpand(c.id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded">
@@ -362,6 +413,67 @@ export default function ClientHealth() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Churn Modal */}
+      {churnModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <div>
+                <h2 className="font-semibold text-white flex items-center gap-2"><UserX size={16} className="text-orange-400" /> Registrar cancelamento</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{churnModal.client.name}</p>
+              </div>
+              <button onClick={() => setChurnModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <Field label="Data do cancelamento">
+                <input type="date" value={churnDate} onChange={e => setChurnDate(e.target.value)} className="input-dark w-full" />
+              </Field>
+              <Field label="Motivo do cancelamento">
+                <select value={churnReason} onChange={e => setChurnReason(e.target.value)} className="input-dark w-full">
+                  <option value="">Não informado</option>
+                  <option value="preco">Preço</option>
+                  <option value="resultado">Resultado insatisfatório</option>
+                  <option value="concorrente">Foi para concorrente</option>
+                  <option value="encerrou">Encerrou a empresa</option>
+                  <option value="pausou">Pausou investimentos</option>
+                  <option value="servico_interno">Levou serviço para interno</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </Field>
+              <Field label="Observações (opcional)">
+                <textarea value={churnNotes} onChange={e => setChurnNotes(e.target.value)} className="input-dark w-full resize-none" rows={2} placeholder="Detalhes sobre o cancelamento..." />
+              </Field>
+              <Field label="Potencial de reativação">
+                <div className="flex gap-2">
+                  {[['nao', 'Não'], ['baixo', 'Baixo'], ['medio', 'Médio'], ['alto', 'Alto']] .map(([v, l]) => (
+                    <button
+                      key={v}
+                      onClick={() => setChurnReactivation(v)}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${churnReactivation === v
+                        ? v === 'alto' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                          : v === 'medio' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                          : v === 'baixo' ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                          : 'bg-slate-500/20 border-slate-500/50 text-slate-400'
+                        : 'border-white/10 text-slate-500 hover:border-white/20'}`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setChurnModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={saveChurn}
+                disabled={churnSaving}
+                className="text-sm px-4 py-2 rounded-lg font-medium bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+              >
+                {churnSaving ? 'Registrando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

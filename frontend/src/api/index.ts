@@ -121,6 +121,12 @@ export const addClientCost = (id: number, data: Partial<ClientCost>): Promise<Cl
 export const deleteClientCost = (clientId: number, costId: number): Promise<{ success: boolean }> =>
   req(`/clients/${clientId}/costs/${costId}`, { method: 'DELETE' });
 
+// Churn
+export const registerChurn = (id: number, data: { churn_date?: string; churn_reason?: string; churn_notes?: string; reactivation_potential?: string }): Promise<AgencyClient> =>
+  req(`/churn/${id}/churn`, { method: 'PATCH', body: JSON.stringify(data) });
+export const reactivateClient = (id: number): Promise<AgencyClient> =>
+  req(`/churn/${id}/reactivate`, { method: 'PATCH', body: JSON.stringify({}) });
+
 export interface PlanHistoryEntry {
   id: number; client_id: number; old_fee: number; new_fee: number;
   change_type: string; notes: string | null; changed_at: string; created_at: string;
