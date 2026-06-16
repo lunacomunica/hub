@@ -135,19 +135,31 @@ router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Nenhum item para importar' });
   }
-  const imported: unknown[] = [];
   try {
-    for (const item of items) {
-      const { rows: [row] } = await pool.query(
-        `INSERT INTO financial_revenues (description, amount, date, category_id, client_name, notes, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pendente') RETURNING *`,
-        [item.description, item.amount, item.date, item.category_id || null, item.client_name || null, item.notes || null]
-      );
-      imported.push(row);
-      // Learn from confirmed imports (non-blocking)
-      saveRule(item.description, 'revenue', item.category_id, item.client_name).catch(() => {});
-    }
-    return res.status(201).json({ imported: imported.length, items: imported });
+    // Single bulk INSERT using unnest — avoids N round-trips and Vercel 10s timeout
+    const descriptions = items.map(i => i.description);
+    const amounts      = items.map(i => i.amount);
+    const dates        = items.map(i => i.date);
+    const categoryIds  = items.map(i => i.category_id || null);
+    const clientNames  = items.map(i => i.client_name || null);
+    const notes        = items.map(i => i.notes || null);
+
+    const { rows } = await pool.query(
+      `INSERT INTO financial_revenues (description, amount, date, category_id, client_name, notes, status)
+       SELECT * FROM unnest(
+         $1::text[], $2::numeric[], $3::text[], $4::int[], $5::text[], $6::text[],
+         array_fill('pendente'::text, ARRAY[$7::int])
+       )
+       RETURNING id`,
+      [descriptions, amounts, dates, categoryIds, clientNames, notes, items.length]
+    );
+
+    // Learn from confirmed imports (fire-and-forget, non-blocking)
+    items.forEach(item =>
+      saveRule(item.description, 'revenue', item.category_id, item.client_name).catch(() => {})
+    );
+
+    return res.status(201).json({ imported: rows.length });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Erro ao importar receitas' });
