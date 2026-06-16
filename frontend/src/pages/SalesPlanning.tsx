@@ -50,7 +50,7 @@ export default function SalesPlanning() {
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<GoalItem[]>([]);
   const [notes, setNotes] = useState('');
-  const [targetNewClients, setTargetNewClients] = useState(0);
+  const [targetNewClients] = useState(0);
   const [closingOpps, setClosingOpps] = useState<ClosingOpp[]>([]);
   const [history, setHistory] = useState<{ month: string; revenue: number; goal: number }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -149,7 +149,7 @@ export default function SalesPlanning() {
         <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 rounded-full border-b-2 border-blue-500" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="card p-4">
               <div className="label-dark mb-1">Meta total</div>
               <div className="metric-md">{brl(totalTarget)}</div>
@@ -161,10 +161,6 @@ export default function SalesPlanning() {
             <div className="card p-4">
               <div className="label-dark mb-1">Receita registrada</div>
               <div className="metric-md text-blue-400">{brl(goalData?.actual_revenue || 0)}</div>
-            </div>
-            <div className="card p-4">
-              <div className="label-dark mb-1">Novos clientes</div>
-              <div className="metric-md">{goalData?.actual_new_clients || 0} <span className="text-sm font-normal text-slate-500">/ {targetNewClients}</span></div>
             </div>
             <div className={`rounded-xl p-4 ${overallPct >= 100 ? 'border border-emerald-500/30' : overallPct >= 70 ? 'border border-blue-500/30' : 'border border-amber-500/30'}`}
               style={{ background: overallPct >= 100 ? 'rgba(16,185,129,0.08)' : overallPct >= 70 ? 'rgba(59,130,246,0.08)' : 'rgba(245,158,11,0.08)' }}>
@@ -301,19 +297,10 @@ export default function SalesPlanning() {
             )}
 
             <div className="px-5 py-4 flex items-end gap-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
-              <div className="flex-1 space-y-2">
-                <div className="flex gap-4">
-                  <div>
-                    <label className="label-dark mb-1 block">Meta de novos clientes</label>
-                    <input type="number" value={targetNewClients} onChange={e => setTargetNewClients(parseInt(e.target.value) || 0)}
-                      className="input-dark w-32 text-sm py-1.5" />
-                  </div>
-                  <div className="flex-1">
-                    <label className="label-dark mb-1 block">Observações</label>
-                    <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto do mês, estratégias..."
-                      className="input-dark w-full text-sm py-1.5" />
-                  </div>
-                </div>
+              <div className="flex-1">
+                <label className="label-dark mb-1 block">Observações</label>
+                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Contexto do mês, estratégias..."
+                  className="input-dark w-full text-sm py-1.5" />
               </div>
               <button onClick={saveGoal} disabled={saving} className="btn-primary text-sm disabled:opacity-50 shrink-0">
                 {saving ? 'Salvando...' : 'Salvar meta'}
