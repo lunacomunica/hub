@@ -44,11 +44,13 @@ export default function Expenses() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | 'status' | 'delete' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | 'status' | 'tipo' | 'delete' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
   const [bulkSupplier, setBulkSupplier] = useState('');
   const [bulkStatus, setBulkStatus] = useState<string>('pago');
+  const [bulkIsFixed, setBulkIsFixed] = useState(false);
+  const [bulkIsClientCost, setBulkIsClientCost] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
@@ -218,7 +220,7 @@ export default function Expenses() {
   const handleBulkSave = async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
-    const updates: Record<string, string | number> = {};
+    const updates: Record<string, string | number | boolean> = {};
     if (bulkModal === 'rename') {
       if (!bulkDescription.trim()) return;
       updates.description = bulkDescription.trim();
@@ -230,6 +232,9 @@ export default function Expenses() {
     } else if (bulkModal === 'status') {
       if (!bulkStatus) return;
       updates.status = bulkStatus;
+    } else if (bulkModal === 'tipo') {
+      updates.is_fixed = bulkIsFixed;
+      updates.is_client_cost = bulkIsClientCost;
     }
     setBulkSaving(true);
     try {
@@ -359,6 +364,7 @@ export default function Expenses() {
             <button onClick={() => { setBulkCategoryId(''); setBulkModal('categorize'); }} className="btn-ghost text-xs px-3 py-1">Categorizar</button>
             <button onClick={() => { setBulkSupplier(''); setBulkModal('supplier'); }} className="btn-ghost text-xs px-3 py-1">Fornecedor</button>
             <button onClick={() => { setBulkStatus('pago'); setBulkModal('status'); }} className="btn-ghost text-xs px-3 py-1">Status</button>
+            <button onClick={() => { setBulkIsFixed(false); setBulkIsClientCost(false); setBulkModal('tipo'); }} className="btn-ghost text-xs px-3 py-1">Tipo</button>
             <button onClick={() => setBulkModal('delete')} className="text-xs px-3 py-1 rounded-md transition-colors" style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
               <span className="flex items-center gap-1"><Trash2 size={12} /> Excluir</span>
             </button>
@@ -640,6 +646,41 @@ export default function Expenses() {
                 />
               </Field>
               <p className="text-xs text-slate-500 mt-2">Deixe em branco para remover o fornecedor das selecionadas.</p>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={handleBulkSave} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk tipo modal */}
+      {bulkModal === 'tipo' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white">Tipo — {selected.size} {selected.size === 1 ? 'despesa' : 'despesas'}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white/5 transition-colors">
+                <input type="checkbox" checked={bulkIsFixed} onChange={e => setBulkIsFixed(e.target.checked)} className="w-4 h-4" />
+                <div>
+                  <span className="text-sm font-medium text-slate-200">Custo fixo</span>
+                  <p className="text-xs text-slate-500 mt-0.5">Despesa recorrente mensal (aluguel, salários, assinaturas...)</p>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white/5 transition-colors">
+                <input type="checkbox" checked={bulkIsClientCost} onChange={e => setBulkIsClientCost(e.target.checked)} className="w-4 h-4" />
+                <div>
+                  <span className="text-sm font-medium text-slate-200">Custo de cliente</span>
+                  <p className="text-xs text-slate-500 mt-0.5">Despesa vinculada a um cliente específico</p>
+                </div>
+              </label>
+              <p className="text-xs text-slate-600 pt-1">Desmarcados = remove a classificação das selecionadas.</p>
             </div>
             <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
               <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>

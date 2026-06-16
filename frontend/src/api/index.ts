@@ -88,6 +88,7 @@ export const deleteExpense = (id: number): Promise<{ success: boolean }> =>
   req(`/expenses/${id}`, { method: 'DELETE' });
 export const bulkUpdateExpenses = (ids: number[], updates: Record<string, unknown>): Promise<{ success: boolean; updated: number }> =>
   req('/expenses/bulk', { method: 'PATCH', body: JSON.stringify({ ids, updates }) });
+
 export const bulkDeleteExpenses = (ids: number[]): Promise<{ success: boolean; deleted: number }> =>
   req('/expenses/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) });
 
