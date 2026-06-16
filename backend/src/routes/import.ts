@@ -88,7 +88,7 @@ function parseCSV(content: string): ParsedRow[] {
 // Query param: ?filter=revenue  → only positive (credits)
 //              ?filter=expense  → only negative (debits)
 //              (omitted)        → all transactions
-router.post('/preview', requireAuth, upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/preview', requireAuth, upload.single('file'), async (req: AuthRequest, res: Response) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
   const content = req.file.buffer.toString('utf-8');
