@@ -30,7 +30,7 @@ router.post('/stages', async (req: Request, res: Response) => {
     );
 
     const { rows: [created] } = await pool.query(
-      'INSERT INTO pipeline_stages (key, label, color, bg_color, position, is_terminal) VALUES ($1,$2,$3,$4,$5,false) RETURNING *',
+      'INSERT INTO pipeline_stages (key, label, color, bg_color, position, is_terminal) VALUES ($1,$2,$3,$4,$5,0) RETURNING *',
       [key, label, color, bg_color, pos]
     );
 
@@ -180,7 +180,7 @@ router.get('/', async (req: Request, res: Response) => {
       `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage='fechado'`
     );
     const { rows: [lost] } = await pool.query<{ count: string; total: string }>(
-      `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=true AND key!='fechado')`
+      `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')`
     );
     const totalClosed = Number(won.count) + Number(lost.count);
     const win_rate = totalClosed > 0 ? (Number(won.count) / totalClosed) * 100 : 0;
@@ -190,7 +190,7 @@ router.get('/', async (req: Request, res: Response) => {
               COUNT(*) as count,
               COALESCE(SUM(value), 0) as total_value
        FROM opportunities
-       WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=true AND key!='fechado')
+       WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')
        GROUP BY lost_reason ORDER BY count DESC`
     );
 
