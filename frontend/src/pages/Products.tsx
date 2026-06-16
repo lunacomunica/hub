@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Tag } from 'lucide-react';
+import { getCategories } from '../api';
+import type { Category } from '../types';
 
 const BASE = '/api/products';
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -29,15 +31,21 @@ const empty = { name: '', price: 0, category: '', description: '', active: true 
 
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(empty);
+  const [filterCat, setFilterCat] = useState('');
 
   const load = async () => {
     setLoading(true);
-    const data = await authFetch(BASE).then(r => r.json());
+    const [data, cats] = await Promise.all([
+      authFetch(BASE).then(r => r.json()),
+      getCategories('revenue').catch(() => []),
+    ]);
     setProducts(Array.isArray(data) ? data : []);
+    setCategories(cats);
     setLoading(false);
   };
 
@@ -65,8 +73,20 @@ export default function Products() {
     load();
   };
 
-  const active = products.filter(p => p.active);
-  const inactive = products.filter(p => !p.active);
+  const active = products.filter(p => p.active && (!filterCat || p.category === filterCat));
+  const inactive = products.filter(p => !p.active && (!filterCat || p.category === filterCat));
+
+  // Category breakdown (active only)
+  const catBreakdown = categories
+    .map(c => ({
+      ...c,
+      count: products.filter(p => p.active && p.category === c.name).length,
+      mrr: products.filter(p => p.active && p.category === c.name).reduce((s, p) => s + p.price, 0),
+    }))
+    .filter(c => c.count > 0)
+    .sort((a, b) => b.mrr - a.mrr);
+
+  const allActiveMrr = products.filter(p => p.active).reduce((s, p) => s + p.price, 0);
 
   return (
     <div className="space-y-6">
@@ -79,6 +99,32 @@ export default function Products() {
           <Plus size={15} /> Novo Produto
         </button>
       </div>
+
+      {/* Filters */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setFilterCat('')}
+            className="text-sm px-3 py-1.5 rounded-lg transition-colors"
+            style={filterCat === '' ? { background: 'var(--primary,#6366f1)', color: '#fff' } : { background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-card)' }}
+          >
+            Todas
+          </button>
+          {categories.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setFilterCat(prev => prev === c.name ? '' : c.name)}
+              className="text-sm px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+              style={filterCat === c.name
+                ? { background: (c.color || '#6366f1') + '33', color: c.color || '#6366f1', border: `1px solid ${c.color || '#6366f1'}66` }
+                : { background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-card)' }}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ background: c.color || '#6366f1' }} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
@@ -97,6 +143,39 @@ export default function Products() {
           <div className="metric text-emerald-400">{fmt(active.reduce((s, p) => s + p.price, 0))}</div>
         </div>
       </div>
+
+      {/* Category breakdown */}
+      {catBreakdown.length > 0 && !filterCat && (
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Tag size={15} className="text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-300">Receita potencial por categoria</h2>
+          </div>
+          <div className="space-y-3">
+            {catBreakdown.map(c => {
+              const pct = allActiveMrr > 0 ? (c.mrr / allActiveMrr) * 100 : 0;
+              return (
+                <div key={c.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color || '#6366f1' }} />
+                      <span className="text-slate-300 font-medium">{c.name}</span>
+                      <span className="text-slate-500 text-xs">{c.count} produto{c.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-semibold text-emerald-400">{fmt(c.mrr)}</span>
+                      <span className="text-xs text-slate-500 ml-2">{pct.toFixed(0)}%</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: c.color || '#6366f1' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-20 text-slate-500">Carregando...</div>
@@ -126,7 +205,17 @@ export default function Products() {
                 {active.map(p => (
                   <tr key={p.id} className="tr">
                     <td className="td px-4 py-3 font-medium text-slate-200">{p.name}</td>
-                    <td className="td px-4 py-3">{p.category || '—'}</td>
+                    <td className="td px-4 py-3">
+                      {p.category ? (() => {
+                        const cat = categories.find(c => c.name === p.category);
+                        return cat ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (cat.color || '#6366f1') + '22', color: cat.color || '#6366f1' }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: cat.color || '#6366f1' }} />
+                            {p.category}
+                          </span>
+                        ) : <span className="text-slate-400 text-xs">{p.category}</span>;
+                      })() : '—'}
+                    </td>
                     <td className="td px-4 py-3 max-w-[260px] truncate">{p.description || '—'}</td>
                     <td className="td px-4 py-3 text-right font-semibold text-emerald-400">{fmt(p.price)}</td>
                     <td className="td px-4 py-3">
@@ -182,7 +271,16 @@ export default function Products() {
                 <input type="number" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
               </Field>
               <Field label="Categoria">
-                <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Ex: Gestão de Redes, Tráfego Pago..." className="input-dark w-full" />
+                <select
+                  value={form.category}
+                  onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                  className="input-dark w-full"
+                >
+                  <option value="">Sem categoria</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
               </Field>
               <Field label="Descrição">
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className="input-dark w-full resize-none" placeholder="O que está incluso neste serviço..." />
