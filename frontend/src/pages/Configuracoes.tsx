@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile, getCategories, createCategory, updateCategory, deleteCategory, getCompanySettings, updateCompanySettings } from '../api';
 import type { Category } from '../types';
-import { User, Lock, Save, Tag, Pencil, Trash2, Plus, Check, X, Clock } from 'lucide-react';
+import { User, Lock, Save, Tag, Pencil, Trash2, Plus, Check, X, Clock, MapPin } from 'lucide-react';
 
 export default function Configuracoes() {
   const { user, login, token } = useAuth();
@@ -41,12 +41,49 @@ export default function Configuracoes() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState('');
 
+  // Lead sources
+  const [leadSources, setLeadSources] = useState<string[]>([]);
+  const [newSource, setNewSource] = useState('');
+  const [editingSource, setEditingSource] = useState<number | null>(null);
+  const [editSourceVal, setEditSourceVal] = useState('');
+  const [sourcesSaving, setSourcesSaving] = useState(false);
+
+  const saveLeadSources = async (sources: string[]) => {
+    setSourcesSaving(true);
+    try {
+      await updateCompanySettings({ lead_sources: JSON.stringify(sources) });
+      setLeadSources(sources);
+    } catch { alert('Erro ao salvar origens'); }
+    finally { setSourcesSaving(false); }
+  };
+
+  const addSource = async () => {
+    const v = newSource.trim();
+    if (!v || leadSources.includes(v)) return;
+    setNewSource('');
+    await saveLeadSources([...leadSources, v]);
+  };
+
+  const renameSource = async (idx: number) => {
+    const v = editSourceVal.trim();
+    if (!v) return;
+    const updated = leadSources.map((s, i) => i === idx ? v : s);
+    setEditingSource(null);
+    setEditSourceVal('');
+    await saveLeadSources(updated);
+  };
+
+  const removeSource = async (idx: number) => {
+    await saveLeadSources(leadSources.filter((_, i) => i !== idx));
+  };
+
   const loadSettings = async () => {
     try {
       const s = await getCompanySettings();
       setBillableHours(s.monthly_billable_hours);
       setHourCost(s.hour_cost);
       setAvgFixedCosts(s.avg_fixed_costs);
+      if (s.lead_sources?.length) setLeadSources(s.lead_sources);
     } catch { /* ignore */ }
   };
 
@@ -304,6 +341,60 @@ export default function Configuracoes() {
             {settingsSuccess && (
               <span style={{ fontSize: '0.8125rem', color: '#10b981' }}>✓ {settingsSuccess}</span>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Origens do Lead */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem' }}>
+          <MapPin size={16} color="var(--text-label)" />
+          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>Origens do Lead</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {leadSources.map((src, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(59,130,246,0.1)' }}>
+              {editingSource === idx ? (
+                <>
+                  <input
+                    value={editSourceVal}
+                    onChange={e => setEditSourceVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameSource(idx); if (e.key === 'Escape') { setEditingSource(null); } }}
+                    className="input-dark flex-1 text-sm"
+                    style={{ padding: '4px 8px' }}
+                    autoFocus
+                  />
+                  <button onClick={() => renameSource(idx)} disabled={sourcesSaving} className="text-emerald-400 hover:text-emerald-300 p-1"><Check size={14} /></button>
+                  <button onClick={() => setEditingSource(null)} className="text-slate-500 hover:text-slate-300 p-1"><X size={14} /></button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{src}</span>
+                  <button onClick={() => { setEditingSource(idx); setEditSourceVal(src); }} className="text-slate-500 hover:text-blue-400 p-1"><Pencil size={13} /></button>
+                  <button onClick={() => removeSource(idx)} disabled={sourcesSaving} className="text-slate-500 hover:text-red-400 p-1"><Trash2 size={13} /></button>
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* Add new */}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <input
+              value={newSource}
+              onChange={e => setNewSource(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addSource(); }}
+              placeholder="Nova origem (ex: TikTok, Podcast...)"
+              className="input-dark flex-1 text-sm"
+            />
+            <button
+              onClick={addSource}
+              disabled={!newSource.trim() || sourcesSaving}
+              className="btn-primary text-sm disabled:opacity-40"
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
+            >
+              <Plus size={13} /> Adicionar
+            </button>
           </div>
         </div>
       </div>

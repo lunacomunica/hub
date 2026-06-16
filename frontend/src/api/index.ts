@@ -328,10 +328,11 @@ export interface CompanySettings {
   monthly_billable_hours: number;
   avg_fixed_costs: number;
   hour_cost: number;
+  lead_sources: string[];
 }
 export const getCompanySettings = (): Promise<CompanySettings> =>
   req('/settings');
-export const updateCompanySettings = (data: Partial<Record<string, number>>): Promise<{ success: boolean }> =>
+export const updateCompanySettings = (data: Partial<Record<string, number | string>>): Promise<{ success: boolean }> =>
   req('/settings', { method: 'PUT', body: JSON.stringify(data) });
 
 // TCV Projects

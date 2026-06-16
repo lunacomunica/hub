@@ -11,6 +11,13 @@ router.get('/', async (_req: Request, res: Response) => {
 
     const monthly_billable_hours = Number(raw.monthly_billable_hours || 160);
 
+    // Lead sources
+    const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','WhatsApp','Outro'];
+    let lead_sources: string[] = DEFAULT_SOURCES;
+    try {
+      if (raw.lead_sources) lead_sources = JSON.parse(raw.lead_sources);
+    } catch { /* keep defaults */ }
+
     // Average fixed costs from last 3 complete months
     const { rows: [fixedRow] } = await pool.query<{ avg_fixed: string }>(`
       SELECT COALESCE(AVG(monthly_total), 0) as avg_fixed
@@ -27,7 +34,7 @@ router.get('/', async (_req: Request, res: Response) => {
     const avg_fixed_costs = Number(fixedRow.avg_fixed);
     const hour_cost = monthly_billable_hours > 0 ? avg_fixed_costs / monthly_billable_hours : 0;
 
-    res.json({ monthly_billable_hours, avg_fixed_costs, hour_cost });
+    res.json({ monthly_billable_hours, avg_fixed_costs, hour_cost, lead_sources });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar configurações' });

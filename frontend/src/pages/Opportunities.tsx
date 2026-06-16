@@ -9,7 +9,7 @@ import {
   convertOpportunityToClient,
   getProducts, getPipelineStages, createPipelineStage, updatePipelineStage, deletePipelineStage,
   getOppActivities, addOppActivity, deleteOppActivity,
-  getUsers, type OppSummary,
+  getUsers, getCompanySettings, type OppSummary,
 } from '../api';
 import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -44,7 +44,7 @@ const ACTIVITY_CONFIG = {
   proposta: { label: 'Proposta', icon: FileText,       color: '#fbbf24' },
 } as const;
 
-const SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','WhatsApp','Outro'];
+const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','WhatsApp','Outro'];
 
 const LOST_REASONS = [
   'Preço muito alto',
@@ -386,6 +386,7 @@ export default function Opportunities() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  const [sources, setSources] = useState<string[]>(DEFAULT_SOURCES);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
@@ -422,10 +423,11 @@ export default function Opportunities() {
   const load = async () => {
     setLoading(true);
     try {
-      const [opps, prods, stgs, usrs] = await Promise.all([
-        getOpportunities(), getProducts(true), getPipelineStages(), getUsers(),
+      const [opps, prods, stgs, usrs, settings] = await Promise.all([
+        getOpportunities(), getProducts(true), getPipelineStages(), getUsers(), getCompanySettings(),
       ]);
       setData(opps); setProducts(prods); setStages(stgs); setUsers(usrs);
+      if (settings.lead_sources?.length) setSources(settings.lead_sources);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -1088,7 +1090,7 @@ export default function Opportunities() {
                       <select value={form.source || ''} onChange={e => setForm(f => ({...f, source: e.target.value || null}))}
                         className="input-dark w-full">
                         <option value="">Não informado</option>
-                        {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {sources.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </Field>
 
