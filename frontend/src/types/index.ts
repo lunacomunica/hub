@@ -65,11 +65,15 @@ export interface AgencyClient {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // risk alert (manual override)
+  risk_alert?: number;
+  risk_reason?: string | null;
+  risk_since?: string | null;
   // computed
   monthly_cost?: number;
   margin?: number;
   margin_percent?: number;
-  health?: 'saudavel' | 'atencao' | 'critico';
+  health?: 'saudavel' | 'atencao' | 'critico' | 'em_risco';
   costs?: ClientCost[];
 }
 

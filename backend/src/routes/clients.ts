@@ -3,7 +3,8 @@ import pool from '../db';
 
 const router = Router();
 
-function computeHealth(marginPercent: number, target: number): string {
+function computeHealth(marginPercent: number, target: number, riskAlert?: number): string {
+  if (riskAlert) return 'em_risco';
   if (marginPercent >= target) return 'saudavel';
   if (marginPercent >= target - 10) return 'atencao';
   return 'critico';
@@ -33,7 +34,7 @@ router.get('/', async (_req: Request, res: Response) => {
       const monthly_fee = Number(c.monthly_fee);
       const margin = monthly_fee - monthly_cost;
       const margin_percent = monthly_fee > 0 ? (margin / monthly_fee) * 100 : 0;
-      const health = computeHealth(margin_percent, Number(c.margin_target));
+      const health = computeHealth(margin_percent, Number(c.margin_target), Number((c as { risk_alert?: number }).risk_alert));
 
       return { ...c, monthly_cost, margin, margin_percent, health };
     }));
@@ -119,6 +120,23 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar cliente' });
+  }
+});
+
+// PATCH /:id/risk — set or clear risk alert
+router.patch('/:id/risk', async (req: Request, res: Response) => {
+  try {
+    const { risk_alert, risk_reason } = req.body;
+    const alert = risk_alert ? 1 : 0;
+    const since = risk_alert ? new Date().toISOString().slice(0, 10) : null;
+    await pool.query(
+      `UPDATE agency_clients SET risk_alert = $1, risk_reason = $2, risk_since = $3, updated_at = NOW() WHERE id = $4`,
+      [alert, risk_alert ? (risk_reason || null) : null, since, req.params.id]
+    );
+    res.json({ success: true, risk_alert: alert });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao atualizar alerta de risco' });
   }
 });
 

@@ -85,6 +85,13 @@ import pool from './db';
         AND NOT EXISTS (SELECT 1 FROM financial_expenses WHERE category_id = financial_categories.id)
     `);
   } catch (e) { console.error('[migration] category merge error:', e); }
+
+  // Add risk_alert columns to agency_clients (idempotent)
+  try {
+    await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_alert INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_reason TEXT`);
+    await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_since TEXT`);
+  } catch (e) { console.error('[migration] risk_alert columns error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────

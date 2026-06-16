@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw } from 'lucide-react';
-import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient } from '../api';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert } from 'lucide-react';
+import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient, setClientRisk } from '../api';
 import type { AgencyClient, ClientCost } from '../types';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -31,6 +31,14 @@ const HEALTH_CONFIG = {
     icon: <AlertCircle size={14} className="text-red-400" />,
     bar: 'bg-red-500',
   },
+  em_risco: {
+    label: 'Em risco',
+    cardBorder: 'rgba(249,115,22,0.35)',
+    cardBg: 'rgba(249,115,22,0.08)',
+    badge: 'badge',
+    icon: <ShieldAlert size={14} className="text-orange-400" />,
+    bar: 'bg-orange-500',
+  },
 };
 
 const EMPTY_CLIENT = { name: '', monthly_fee: 0, margin_target: 30, active: 1, start_date: '', notes: '' };
@@ -58,6 +66,11 @@ export default function ClientHealth() {
   const [churnReactivation, setChurnReactivation] = useState('nao');
   const [churnSaving, setChurnSaving] = useState(false);
   const [reactivating, setReactivating] = useState<number | null>(null);
+
+  // Risk alert
+  const [riskModal, setRiskModal] = useState<{ client: AgencyClient } | null>(null);
+  const [riskReason, setRiskReason] = useState('');
+  const [riskSaving, setRiskSaving] = useState(false);
 
   // Plan change
   const [planModal, setPlanModal] = useState<{ client: AgencyClient } | null>(null);
@@ -148,6 +161,29 @@ export default function ClientHealth() {
     finally { setReactivating(null); }
   };
 
+  const openRiskModal = (client: AgencyClient) => {
+    setRiskModal({ client });
+    setRiskReason(client.risk_reason || '');
+  };
+
+  const saveRisk = async () => {
+    if (!riskModal) return;
+    setRiskSaving(true);
+    try {
+      await setClientRisk(riskModal.client.id, { risk_alert: true, risk_reason: riskReason });
+      setRiskModal(null);
+      load();
+    } catch { alert('Erro ao marcar cliente em risco'); }
+    finally { setRiskSaving(false); }
+  };
+
+  const clearRisk = async (client: AgencyClient) => {
+    try {
+      await setClientRisk(client.id, { risk_alert: false });
+      load();
+    } catch { alert('Erro ao remover alerta'); }
+  };
+
   const openPlanModal = (client: AgencyClient) => {
     setPlanModal({ client });
     setPlanFee(String(client.monthly_fee));
@@ -201,6 +237,14 @@ export default function ClientHealth() {
   };
 
   const activeClients = clients.filter(c => c.active);
+  // at-risk clients first, then alphabetical
+  const sortedActiveClients = [...activeClients].sort((a, b) => {
+    const aRisk = a.risk_alert ? 1 : 0;
+    const bRisk = b.risk_alert ? 1 : 0;
+    if (bRisk !== aRisk) return bRisk - aRisk;
+    return a.name.localeCompare(b.name);
+  });
+  const atRiskCount = activeClients.filter(c => c.risk_alert).length;
   const totalMRR = activeClients.reduce((s, c) => s + Number(c.monthly_fee), 0);
   const avgMargin = activeClients.length > 0
     ? activeClients.reduce((s, c) => s + (c.margin_percent || 0), 0) / activeClients.length
@@ -224,7 +268,7 @@ export default function ClientHealth() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="card p-4">
           <div className="label-dark mb-1">Clientes Ativos</div>
           <div className="metric">{activeClients.length}</div>
@@ -239,6 +283,10 @@ export default function ClientHealth() {
             {pct(avgMargin)}
           </div>
         </div>
+        <div className="rounded-xl p-4" style={{ border: atRiskCount > 0 ? '1px solid rgba(249,115,22,0.4)' : '1px solid var(--border-card)', background: atRiskCount > 0 ? 'rgba(249,115,22,0.08)' : 'var(--bg-card)' }}>
+          <div className="label-dark mb-1">Em risco</div>
+          <div className={`metric ${atRiskCount > 0 ? 'text-orange-400' : 'text-slate-500'}`}>{atRiskCount}</div>
+        </div>
       </div>
 
       {/* Client cards */}
@@ -249,7 +297,7 @@ export default function ClientHealth() {
         </div>
       ) : (
         <div className="space-y-3">
-          {activeClients.map(c => {
+          {sortedActiveClients.map(c => {
             const h = HEALTH_CONFIG[c.health || 'critico'];
             const marginPct = Math.min((c.margin_percent || 0), 100);
             const isExpanded = expandedId === c.id;
@@ -263,6 +311,14 @@ export default function ClientHealth() {
                           <h3 className="font-semibold text-slate-100 truncate">{c.name}</h3>
                           {!c.active && <span className="badge badge-slate">Inativo</span>}
                         </div>
+                        {c.risk_alert ? (
+                          <div className="flex items-center gap-1.5 text-xs text-orange-400 mb-1">
+                            <ShieldAlert size={11} />
+                            <span className="font-medium">Em risco operacional</span>
+                            {c.risk_reason && <span className="text-orange-300/70">— {c.risk_reason}</span>}
+                            <button onClick={() => clearRisk(c)} className="ml-1 text-slate-500 hover:text-slate-300 underline">remover alerta</button>
+                          </div>
+                        ) : null}
                         <div className="flex items-center gap-4 text-sm text-slate-400">
                           <span>Mensalidade: <strong className="text-slate-200">{brl(c.monthly_fee)}</strong></span>
                           <span>Custos: <strong className="text-red-400">{brl(c.monthly_cost || 0)}</strong></span>
@@ -277,6 +333,11 @@ export default function ClientHealth() {
                       {c.active ? (
                         <>
                           <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
+                          <button
+                            onClick={() => c.risk_alert ? clearRisk(c) : openRiskModal(c)}
+                            title={c.risk_alert ? 'Remover alerta de risco' : 'Marcar como em risco operacional'}
+                            className={`p-1.5 rounded ${c.risk_alert ? 'text-orange-400 hover:text-orange-300' : 'text-slate-500 hover:text-orange-400'}`}
+                          ><ShieldAlert size={14} /></button>
                           <button onClick={() => openChurnModal(c)} title="Registrar cancelamento" className="p-1.5 text-slate-500 hover:text-orange-400 rounded"><UserX size={14} /></button>
                         </>
                       ) : (
@@ -413,6 +474,49 @@ export default function ClientHealth() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Risk Modal */}
+      {riskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <div>
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-orange-400" /> Marcar como em risco
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">{riskModal.client.name}</p>
+              </div>
+              <button onClick={() => setRiskModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-lg px-4 py-3 text-sm text-orange-300" style={{ background: 'rgba(249,115,22,0.10)', border: '1px solid rgba(249,115,22,0.25)' }}>
+                O cliente será destacado como <strong>em risco de cancelamento</strong> por falha operacional interna da agência.
+              </div>
+              <Field label="Motivo / O que aconteceu?">
+                <textarea
+                  autoFocus
+                  value={riskReason}
+                  onChange={e => setRiskReason(e.target.value)}
+                  className="input-dark w-full resize-none"
+                  rows={3}
+                  placeholder="Ex: Entregamos o relatório com 2 semanas de atraso e demos 1 mês sem cobrar como retratação..."
+                />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setRiskModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={saveRisk}
+                disabled={riskSaving}
+                className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-colors"
+                style={{ background: 'rgba(249,115,22,0.2)', border: '1px solid rgba(249,115,22,0.4)', color: '#fb923c' }}
+              >
+                {riskSaving ? 'Salvando...' : 'Confirmar alerta'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

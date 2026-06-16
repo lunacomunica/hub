@@ -132,6 +132,8 @@ export const registerChurn = (id: number, data: { churn_date?: string; churn_rea
   req(`/churn/${id}/churn`, { method: 'PATCH', body: JSON.stringify(data) });
 export const reactivateClient = (id: number): Promise<AgencyClient> =>
   req(`/churn/${id}/reactivate`, { method: 'PATCH', body: JSON.stringify({}) });
+export const setClientRisk = (id: number, data: { risk_alert: boolean; risk_reason?: string }): Promise<{ success: boolean }> =>
+  req(`/clients/${id}/risk`, { method: 'PATCH', body: JSON.stringify(data) });
 
 export interface PlanHistoryEntry {
   id: number; client_id: number; old_fee: number; new_fee: number;
