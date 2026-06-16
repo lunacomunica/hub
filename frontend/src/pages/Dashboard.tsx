@@ -35,9 +35,7 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      const d = viewMode === 'annual'
-        ? await getDashboard(undefined, year)
-        : await getDashboard(month, year);
+      const d = await getDashboard(viewMode === 'annual' ? 0 : month, year);
       setData(d);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar dashboard');
@@ -82,14 +80,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-white">Dashboard Financeiro</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-end gap-2">
           {/* Toggle Mensal / Anual */}
           <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-input)' }}>
             <button
               onClick={() => setViewMode('monthly')}
-              className="text-sm px-3 py-1.5 transition-colors"
+              className="text-sm px-4 py-1.5 transition-colors whitespace-nowrap"
               style={{
                 background: viewMode === 'monthly' ? 'var(--primary, #6366f1)' : 'transparent',
                 color: viewMode === 'monthly' ? '#fff' : 'var(--text-secondary)',
@@ -97,33 +95,35 @@ export default function Dashboard() {
             >Mensal</button>
             <button
               onClick={() => setViewMode('annual')}
-              className="text-sm px-3 py-1.5 transition-colors"
+              className="text-sm px-4 py-1.5 transition-colors whitespace-nowrap"
               style={{
                 background: viewMode === 'annual' ? 'var(--primary, #6366f1)' : 'transparent',
                 color: viewMode === 'annual' ? '#fff' : 'var(--text-secondary)',
               }}
             >Anual</button>
           </div>
-
-          {viewMode === 'monthly' && (
+          {/* Selectors */}
+          <div className="flex items-center gap-2">
+            {viewMode === 'monthly' && (
+              <select
+                value={month}
+                onChange={e => setMonth(Number(e.target.value))}
+                className="input-dark text-sm py-1.5"
+              >
+                {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+            )}
             <select
-              value={month}
-              onChange={e => setMonth(Number(e.target.value))}
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
               className="input-dark text-sm py-1.5"
             >
-              {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-          )}
-          <select
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-            className="input-dark text-sm py-1.5"
-          >
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors">
-            <RefreshCw size={16} />
-          </button>
+            <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors">
+              <RefreshCw size={16} />
+            </button>
+          </div>
         </div>
       </div>
 

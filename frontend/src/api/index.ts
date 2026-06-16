@@ -41,7 +41,7 @@ async function req<T>(url: string, options?: RequestInit): Promise<T> {
 // Dashboard
 export const getDashboard = (month?: number, year?: number): Promise<DashboardData> => {
   const params = new URLSearchParams();
-  if (month) params.set('month', String(month));
+  if (month !== undefined) params.set('month', String(month)); // 0 = annual view
   if (year) params.set('year', String(year));
   return req(`/dashboard?${params}`);
 };
