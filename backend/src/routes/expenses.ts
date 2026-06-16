@@ -114,6 +114,32 @@ router.patch('/bulk', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/expenses/suppliers?q=kem — autocomplete supplier names
+router.get('/suppliers', async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string || '').trim();
+    const { rows } = await pool.query(
+      `SELECT DISTINCT supplier FROM financial_expenses
+       WHERE supplier IS NOT NULL AND supplier != ''
+         AND supplier ILIKE $1
+       ORDER BY supplier ASC LIMIT 10`,
+      [`%${q}%`]
+    );
+    // Also include matching employee names
+    const { rows: emps } = await pool.query(
+      `SELECT name as supplier FROM employees
+       WHERE status != 'inativo' AND name ILIKE $1
+       ORDER BY name ASC LIMIT 5`,
+      [`%${q}%`]
+    );
+    const all = [...new Set([...rows.map((r: { supplier: string }) => r.supplier), ...emps.map((e: { supplier: string }) => e.supplier)])]
+      .filter(Boolean).slice(0, 10);
+    res.json(all);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar fornecedores' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { rows: [row] } = await pool.query(`

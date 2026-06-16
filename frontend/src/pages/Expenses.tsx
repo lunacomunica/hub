@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, SupplierRule } from '../api';
+import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule } from '../api';
 import type { Expense, Category } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -204,6 +204,21 @@ export default function Expenses() {
       await deleteSupplierRule(id);
       loadRules();
     } catch { alert('Erro ao remover regra'); }
+  };
+
+  const [supplierSuggestions, setSupplierSuggestions] = useState<string[]>([]);
+  const supplierSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSupplierInputChange = (val: string) => {
+    setBulkSupplier(val);
+    if (supplierSearchTimeout.current) clearTimeout(supplierSearchTimeout.current);
+    if (val.length < 1) { setSupplierSuggestions([]); return; }
+    supplierSearchTimeout.current = setTimeout(async () => {
+      try {
+        const results = await searchSuppliers(val);
+        setSupplierSuggestions(results);
+      } catch { setSupplierSuggestions([]); }
+    }, 200);
   };
 
   const [syncing, setSyncing] = useState(false);
@@ -632,23 +647,48 @@ export default function Expenses() {
           <div className="modal-card w-full max-w-sm">
             <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
               <h2 className="font-semibold text-white">Fornecedor — {selected.size} {selected.size === 1 ? 'despesa' : 'despesas'}</h2>
-              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+              <button onClick={() => { setBulkModal(null); setSupplierSuggestions([]); }} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
             </div>
             <div className="p-5">
               <Field label="Fornecedor">
-                <input
-                  value={bulkSupplier}
-                  onChange={e => setBulkSupplier(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleBulkSave()}
-                  placeholder="Nome do fornecedor..."
-                  className="input-dark w-full"
-                  autoFocus
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={bulkSupplier}
+                    onChange={e => handleSupplierInputChange(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && supplierSuggestions.length === 0 && handleBulkSave()}
+                    placeholder="Digite para buscar ou adicionar..."
+                    className="input-dark w-full"
+                    autoFocus
+                  />
+                  {supplierSuggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                      background: 'var(--bg-card)', border: '1px solid var(--border-card)',
+                      borderRadius: '8px', marginTop: 4, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                    }}>
+                      {supplierSuggestions.map(s => (
+                        <button
+                          key={s}
+                          onClick={() => { setBulkSupplier(s); setSupplierSuggestions([]); }}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '8px 14px', fontSize: '0.875rem',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'var(--text-primary)', borderBottom: '1px solid var(--border-card)',
+                          }}
+                          className="hover:bg-white/5 transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </Field>
               <p className="text-xs text-slate-500 mt-2">Deixe em branco para remover o fornecedor das selecionadas.</p>
             </div>
             <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
-              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={() => { setBulkModal(null); setSupplierSuggestions([]); }} className="btn-ghost text-sm">Cancelar</button>
               <button onClick={handleBulkSave} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
                 {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
