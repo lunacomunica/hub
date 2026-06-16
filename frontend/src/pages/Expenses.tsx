@@ -51,14 +51,15 @@ export default function Expenses() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [exps, cats, cds] = await Promise.all([
+      const [expsResult, catsResult, cdsResult] = await Promise.allSettled([
         getExpenses({ month: filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('expense'),
         getCards(true),
       ]);
-      setItems(exps);
-      setCategories(cats);
-      setCards(cds);
+      if (expsResult.status === 'fulfilled') setItems(expsResult.value);
+      else setError('Erro ao buscar despesas');
+      if (catsResult.status === 'fulfilled') setCategories(catsResult.value);
+      if (cdsResult.status === 'fulfilled') setCards(cdsResult.value);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {

@@ -63,14 +63,15 @@ export default function Revenues() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [revs, cats, cls] = await Promise.all([
+      const [revsResult, catsResult, clsResult] = await Promise.allSettled([
         getRevenues({ month: filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('revenue'),
         getClients(),
       ]);
-      setItems(revs as RevenueRow[]);
-      setCategories(cats);
-      setClients(cls);
+      if (revsResult.status === 'fulfilled') setItems(revsResult.value as RevenueRow[]);
+      else setError('Erro ao buscar receitas');
+      if (catsResult.status === 'fulfilled') setCategories(catsResult.value);
+      if (clsResult.status === 'fulfilled') setClients(clsResult.value);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
