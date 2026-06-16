@@ -6,23 +6,36 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
+    const monthParam = parseInt(req.query.month as string) || 0; // 0 = annual view
     const year  = parseInt(req.query.year  as string) || now.getFullYear();
+    const isAnnual = !monthParam;
+    const month = monthParam || (now.getMonth() + 1);
 
-    const monthStr  = String(month).padStart(2, '0');
-    const startDate = `${year}-${monthStr}-01`;
-    const endDate   = `${year}-${monthStr}-31`;
+    // Date range: full year or single month
+    const startDate = isAnnual ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate   = isAnnual ? `${year}-12-31` : `${year}-${String(month).padStart(2, '0')}-31`;
 
-    // 6-month window for trend (YYYY-MM string comparison works on TEXT dates)
+    // Trend window: annual = all 12 months of the year; monthly = last 6 months
     const trendMonths: { key: string; label: string }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(year, month - 1 - i, 1);
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const y = d.getFullYear();
-      trendMonths.push({
-        key: `${y}-${m}`,   // YYYY-MM prefix for TEXT comparison
-        label: d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }),
-      });
+    if (isAnnual) {
+      for (let m = 1; m <= 12; m++) {
+        const mm = String(m).padStart(2, '0');
+        const d = new Date(year, m - 1, 1);
+        trendMonths.push({
+          key: `${year}-${mm}`,
+          label: d.toLocaleString('pt-BR', { month: 'short' }),
+        });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(year, month - 1 - i, 1);
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const y = d.getFullYear();
+        trendMonths.push({
+          key: `${y}-${m}`,
+          label: d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' }),
+        });
+      }
     }
     const trendStart = trendMonths[0].key + '-01';
     const trendEnd   = trendMonths[trendMonths.length - 1].key + '-31';

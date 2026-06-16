@@ -20,6 +20,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 export default function Dashboard() {
   const now = new Date();
+  const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<DashboardData | null>(null);
@@ -34,7 +35,9 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      const d = await getDashboard(month, year);
+      const d = viewMode === 'annual'
+        ? await getDashboard(undefined, year)
+        : await getDashboard(month, year);
       setData(d);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar dashboard');
@@ -43,7 +46,7 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { load(); }, [month, year]);
+  useEffect(() => { load(); }, [month, year, viewMode]);
 
   const months = [
     'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -79,16 +82,38 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-white">Dashboard Financeiro</h1>
         <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={e => setMonth(Number(e.target.value))}
-            className="input-dark text-sm py-1.5"
-          >
-            {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
+          {/* Toggle Mensal / Anual */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-input)' }}>
+            <button
+              onClick={() => setViewMode('monthly')}
+              className="text-sm px-3 py-1.5 transition-colors"
+              style={{
+                background: viewMode === 'monthly' ? 'var(--primary, #6366f1)' : 'transparent',
+                color: viewMode === 'monthly' ? '#fff' : 'var(--text-secondary)',
+              }}
+            >Mensal</button>
+            <button
+              onClick={() => setViewMode('annual')}
+              className="text-sm px-3 py-1.5 transition-colors"
+              style={{
+                background: viewMode === 'annual' ? 'var(--primary, #6366f1)' : 'transparent',
+                color: viewMode === 'annual' ? '#fff' : 'var(--text-secondary)',
+              }}
+            >Anual</button>
+          </div>
+
+          {viewMode === 'monthly' && (
+            <select
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              className="input-dark text-sm py-1.5"
+            >
+              {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+          )}
           <select
             value={year}
             onChange={e => setYear(Number(e.target.value))}
@@ -198,7 +223,9 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-4">
         {/* Line chart */}
         <div className="col-span-2 card p-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3">Receita vs Despesas — últimos 6 meses</h2>
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">
+            {viewMode === 'annual' ? `Receita vs Despesas — ${year}` : 'Receita vs Despesas — últimos 6 meses'}
+          </h2>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={monthly_trend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1a1a3e" />
