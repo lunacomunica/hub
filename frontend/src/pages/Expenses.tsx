@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
-import { getExpenses, getExpenseProjections, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule, getClients } from '../api';
+import { getExpenses, getExpenseProjections, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, unfixExpensesByDescription, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule, getClients } from '../api';
 import type { Expense, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -172,24 +172,10 @@ export default function Expenses() {
   };
 
   const removeFixed = async (p: Expense & { is_projection: true }) => {
-    if (!confirm(`Remover "${p.description}" dos custos fixos? A projeção vai sumir.`)) return;
-    const originalId = Number(String(p.id).replace('proj_', ''));
+    if (!confirm(`Remover "${p.description}" dos custos fixos? A projeção vai sumir em todos os meses.`)) return;
     setRemovingFixed(String(p.id));
     try {
-      await updateExpense(originalId, {
-        description: p.description,
-        category_id: p.category_id,
-        supplier: p.supplier,
-        client_name: p.client_name,
-        amount: p.amount,
-        date: p.date,
-        due_date: p.due_date,
-        status: 'pendente',
-        is_fixed: 0,
-        is_client_cost: p.is_client_cost,
-        notes: p.notes,
-        card_id: p.card_id,
-      });
+      await unfixExpensesByDescription(p.description);
       load();
     } catch { alert('Erro ao atualizar despesa'); }
     finally { setRemovingFixed(null); }
@@ -236,18 +222,10 @@ export default function Expenses() {
   const bulkRemoveFixed = async () => {
     const toRemove = filteredProjections.filter(p => selectedProj.has(String(p.id)));
     if (toRemove.length === 0) return;
-    if (!confirm(`Remover ${toRemove.length} despesa${toRemove.length !== 1 ? 's' : ''} dos custos fixos? As projeções vão sumir.`)) return;
+    if (!confirm(`Remover ${toRemove.length} despesa${toRemove.length !== 1 ? 's' : ''} dos custos fixos? As projeções vão sumir em todos os meses.`)) return;
     setBulkRemovingFixed(true);
     try {
-      await Promise.all(toRemove.map(p => {
-        const originalId = Number(String(p.id).replace('proj_', ''));
-        return updateExpense(originalId, {
-          description: p.description, category_id: p.category_id, supplier: p.supplier,
-          client_name: p.client_name, amount: p.amount, date: p.date, due_date: p.due_date,
-          status: 'pendente', is_fixed: 0, is_client_cost: p.is_client_cost,
-          notes: p.notes, card_id: p.card_id,
-        });
-      }));
+      await Promise.all(toRemove.map(p => unfixExpensesByDescription(p.description)));
       setSelectedProj(new Set());
       load();
     } catch { alert('Erro ao atualizar despesas'); }

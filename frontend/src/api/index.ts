@@ -95,6 +95,8 @@ export const bulkUpdateExpenses = (ids: number[], updates: Record<string, unknow
 
 export const bulkDeleteExpenses = (ids: number[]): Promise<{ success: boolean; deleted: number }> =>
   req('/expenses/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) });
+export const unfixExpensesByDescription = (description: string): Promise<{ success: boolean; updated: number }> =>
+  req('/expenses/unfix-description', { method: 'PATCH', body: JSON.stringify({ description }) });
 export const searchSuppliers = (q: string): Promise<string[]> =>
   req(`/expenses/suppliers?q=${encodeURIComponent(q)}`);
 

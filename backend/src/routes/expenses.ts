@@ -53,6 +53,22 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /expenses/unfix-description — remove is_fixed de TODOS os lançamentos com aquela descrição
+router.patch('/unfix-description', async (req: Request, res: Response) => {
+  try {
+    const { description } = req.body;
+    if (!description) return res.status(400).json({ error: 'description obrigatório' });
+    const { rowCount } = await pool.query(
+      `UPDATE financial_expenses SET is_fixed = 0, updated_at = NOW() WHERE description = $1`,
+      [description]
+    );
+    res.json({ success: true, updated: rowCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao desmarcar fixo' });
+  }
+});
+
 router.delete('/bulk', async (req: Request, res: Response) => {
   try {
     const { ids } = req.body;
