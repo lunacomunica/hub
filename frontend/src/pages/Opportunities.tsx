@@ -3,6 +3,7 @@ import {
   Plus, X, Trash2, RefreshCw, Pencil, Check, GripVertical,
   Phone, Mail, Users, MessageSquare, FileText, StickyNote,
   Calendar, AlertCircle, Clock, UserPlus, ExternalLink,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   getOpportunities, createOpportunity, updateOpportunity, deleteOpportunity,
@@ -197,9 +198,10 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
 
 // ─── Stage column header ──────────────────────────────────────────────────────
 
-function StageHeader({ stage, count, isOver, onRename, onDelete, canDelete }: {
+function StageHeader({ stage, count, isOver, onRename, onDelete, canDelete, onMoveLeft, onMoveRight }: {
   stage: PipelineStage; count: number; isOver: boolean;
   onRename: (id: number, l: string) => void; onDelete: (id: number) => void; canDelete: boolean;
+  onMoveLeft?: () => void; onMoveRight?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(stage.label);
@@ -242,11 +244,24 @@ function StageHeader({ stage, count, isOver, onRename, onDelete, canDelete }: {
           <Pencil size={9} className="opacity-0 group-hover/lbl:opacity-50 transition-opacity" />
         </button>
       )}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs font-medium" style={{ color: stage.color }}>{count}</span>
-        {canDelete && !stage.is_terminal && (
+      <div className="flex items-center gap-1 opacity-0 group-hover/hdr:opacity-100 transition-opacity">
+        {onMoveLeft && (
+          <button onClick={onMoveLeft} title="Mover para esquerda"
+            className="text-slate-600 hover:text-slate-300 p-0.5 rounded">
+            <ChevronLeft size={12} />
+          </button>
+        )}
+        {onMoveRight && (
+          <button onClick={onMoveRight} title="Mover para direita"
+            className="text-slate-600 hover:text-slate-300 p-0.5 rounded">
+            <ChevronRight size={12} />
+          </button>
+        )}
+        <span className="text-xs font-medium mx-1" style={{ color: stage.color }}>{count}</span>
+        {!stage.is_terminal && (
           <button onClick={() => onDelete(stage.id)}
-            className="text-slate-700 hover:text-red-400 opacity-0 group-hover/hdr:opacity-100 transition-opacity">
+            title={canDelete ? 'Excluir estágio' : 'Mova os cards antes de excluir'}
+            className={`p-0.5 rounded transition-colors ${canDelete ? 'text-slate-600 hover:text-red-400' : 'text-slate-800 cursor-not-allowed'}`}>
             <X size={11} />
           </button>
         )}
@@ -567,6 +582,30 @@ export default function Opportunities() {
     catch (e: any) { alert(e.message); }
   };
 
+  const handleMoveStage = async (id: number, direction: 'left' | 'right') => {
+    const pipeline = stages.filter(s => !s.is_terminal).sort((a, b) => a.position - b.position);
+    const idx = pipeline.findIndex(s => s.id === id);
+    const swapIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= pipeline.length) return;
+    const a = pipeline[idx];
+    const b = pipeline[swapIdx];
+    // Optimistic update
+    setStages(prev => prev.map(s => {
+      if (s.id === a.id) return { ...s, position: b.position };
+      if (s.id === b.id) return { ...s, position: a.position };
+      return s;
+    }));
+    try {
+      await Promise.all([
+        updatePipelineStage(a.id, { position: b.position }),
+        updatePipelineStage(b.id, { position: a.position }),
+      ]);
+    } catch (e: any) {
+      alert(e.message);
+      load(); // revert
+    }
+  };
+
   const handleDeleteStage = async (id: number) => {
     const stage = stages.find(s => s.id === id);
     if (!stage) return;
@@ -691,7 +730,7 @@ export default function Opportunities() {
         </div>
       ) : view === 'kanban' ? (
         <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '60vh', alignItems: 'flex-start' }}>
-          {pipelineStages.map(stage => {
+          {pipelineStages.map((stage, idx) => {
             const stageItems = displayItems.filter(i => i.stage === stage.key);
             const isOver = dropStage === stage.key && dragId !== null;
             return (
@@ -702,7 +741,9 @@ export default function Opportunities() {
               >
                 <StageHeader stage={stage} count={stageItems.length} isOver={isOver}
                   onRename={handleRenameStage} onDelete={handleDeleteStage}
-                  canDelete={stageItems.length === 0} />
+                  canDelete={stageItems.length === 0}
+                  onMoveLeft={idx > 0 ? () => handleMoveStage(stage.id, 'left') : undefined}
+                  onMoveRight={idx < pipelineStages.length - 1 ? () => handleMoveStage(stage.id, 'right') : undefined} />
 
                 <div className="space-y-2 rounded-xl p-1 transition-all min-h-[80px]"
                   style={{
