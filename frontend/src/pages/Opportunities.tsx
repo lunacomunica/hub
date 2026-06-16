@@ -423,14 +423,18 @@ export default function Opportunities() {
   const load = async () => {
     setLoading(true);
     try {
-      const [opps, allProds, stgs, usrs, settings] = await Promise.all([
-        getOpportunities(), getProducts(), getPipelineStages(), getUsers(), getCompanySettings(),
+      const [opps, allProds, stgs, usrs] = await Promise.all([
+        getOpportunities(), getProducts(), getPipelineStages(), getUsers(),
       ]);
       const prods = allProds.filter(p => p.active);
       setData(opps); setProducts(prods); setStages(stgs); setUsers(usrs);
-      if (settings.lead_sources?.length) setSources(settings.lead_sources);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
+    // Load settings separately so a failure here doesn't break the main data load
+    try {
+      const settings = await getCompanySettings();
+      if (settings.lead_sources?.length) setSources(settings.lead_sources);
+    } catch { /* use default sources */ }
   };
 
   useEffect(() => { load(); }, []);
