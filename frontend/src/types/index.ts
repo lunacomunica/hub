@@ -158,6 +158,11 @@ export interface Opportunity {
   lost_reason: string | null;
   notes: string | null;
   client_id: number | null;
+  // Negotiation
+  original_price: number | null;
+  payment_method: string | null;
+  installments: number | null;
+  payment_notes: string | null;
   created_at: string;
   updated_at: string;
 }

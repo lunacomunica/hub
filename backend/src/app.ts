@@ -174,6 +174,14 @@ import pool from './db';
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS billing_type VARCHAR(10) DEFAULT 'mrr'`);
   } catch (e) { console.error('[migration] products billing_type error:', e); }
 
+  // Add negotiation fields to opportunities
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2)`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30)`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS installments INTEGER DEFAULT 1`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS payment_notes TEXT`);
+  } catch (e) { console.error('[migration] opportunities negotiation fields error:', e); }
+
   // Seed default pipeline stages if none exist
   try {
     const { rows: [cnt] } = await pool.query<{ c: string }>(`SELECT COUNT(*) as c FROM pipeline_stages`);

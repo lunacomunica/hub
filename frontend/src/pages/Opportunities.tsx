@@ -58,10 +58,21 @@ const LOST_REASONS = [
   'Outro',
 ];
 
+const PAYMENT_METHODS = [
+  { value: 'pix',            label: 'Pix' },
+  { value: 'boleto',         label: 'Boleto' },
+  { value: 'cartao_credito', label: 'Cartão de Crédito' },
+  { value: 'cartao_debito',  label: 'Cartão de Débito' },
+  { value: 'transferencia',  label: 'Transferência' },
+  { value: 'permuta',        label: 'Permuta' },
+  { value: 'outro',          label: 'Outro' },
+];
+
 const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   title: '', client_name: '', value: 0, stage: 'prospeccao', probability: 10,
   temperature: 'morno', next_followup: '', owner_id: null, source: '',
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
+  original_price: null, payment_method: null, installments: 1, payment_notes: null,
 };
 
 const STAGE_COLORS = [
@@ -1052,7 +1063,7 @@ export default function Opportunities() {
         </div>
       )}
 
-      {/* ── Modal: Dados + Atividades ── */}
+      {/* ── Modal: Dados + Negociação + Atividades ── */}
       {modal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="modal-card w-full flex flex-col" style={{ maxWidth: 860, height: '88vh' }}>
@@ -1063,16 +1074,22 @@ export default function Opportunities() {
                 <h2 className="font-semibold text-white">
                   {form.id ? 'Editar Oportunidade' : 'Nova Oportunidade'}
                 </h2>
-                {form.id && (
-                  <div className="flex gap-1">
-                    {(['dados','atividades'] as const).map(t => (
-                      <button key={t} onClick={() => setModalTab(t)}
-                        className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${modalTab===t ? 'btn-primary' : 'btn-ghost'}`}>
-                        {t === 'dados' ? 'Dados' : `Atividades${form.id && (items.find(i=>i.id===form.id)?.activity_count ?? 0) > 0 ? ` (${items.find(i=>i.id===form.id)?.activity_count})` : ''}`}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="flex gap-1">
+                  <button onClick={() => setModalTab('dados')}
+                    className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${modalTab==='dados' ? 'btn-primary' : 'btn-ghost'}`}>
+                    Dados
+                  </button>
+                  <button onClick={() => setModalTab('negociacao' as any)}
+                    className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${modalTab===('negociacao' as any) ? 'btn-primary' : 'btn-ghost'}`}>
+                    Negociação
+                  </button>
+                  {form.id && (
+                    <button onClick={() => setModalTab('atividades')}
+                      className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${modalTab==='atividades' ? 'btn-primary' : 'btn-ghost'}`}>
+                      {`Atividades${(items.find(i=>i.id===form.id)?.activity_count ?? 0) > 0 ? ` (${items.find(i=>i.id===form.id)?.activity_count})` : ''}`}
+                    </button>
+                  )}
+                </div>
               </div>
               <button onClick={closeModal} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
             </div>
@@ -1099,7 +1116,12 @@ export default function Opportunities() {
                       <select value={form.product_id ?? ''} onChange={e => {
                         const pid = e.target.value ? Number(e.target.value) : undefined;
                         const prod = products.find(p => p.id === pid);
-                        setForm(f => ({...f, product_id: pid, value: prod ? prod.price : f.value}));
+                        setForm(f => ({
+                          ...f,
+                          product_id: pid,
+                          value: prod ? prod.price : f.value,
+                          original_price: prod ? prod.price : f.original_price,
+                        }));
                       }} className="input-dark w-full">
                         <option value="">Nenhum</option>
                         {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.category ? ` — ${p.category}` : ''}</option>)}
@@ -1201,6 +1223,95 @@ export default function Opportunities() {
                     </div>
                   </div>
                 </div>
+              ) : modalTab === ('negociacao' as any) ? (
+                <div className="h-full overflow-y-auto">
+                  <div className="p-6 space-y-5">
+                    {/* Pricing summary */}
+                    <div className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(59,130,246,0.12)' }}>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Preço & Desconto</p>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="label-dark mb-1 block">Preço original (R$)</label>
+                          <input type="number" step="0.01" value={form.original_price ?? ''}
+                            onChange={e => setForm(f => ({ ...f, original_price: parseFloat(e.target.value) || null }))}
+                            placeholder="0,00"
+                            className="input-dark w-full" />
+                        </div>
+                        <div>
+                          <label className="label-dark mb-1 block">Valor negociado (R$)</label>
+                          <input type="number" step="0.01" value={form.value || ''}
+                            onChange={e => setForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))}
+                            className="input-dark w-full" />
+                        </div>
+                        <div>
+                          <label className="label-dark mb-1 block">Desconto</label>
+                          {form.original_price && form.original_price > 0 ? (() => {
+                            const disc = form.original_price - (form.value || 0);
+                            const pct = (disc / form.original_price) * 100;
+                            return (
+                              <div className="input-dark flex items-center gap-2">
+                                <span className={`font-semibold ${disc > 0 ? 'text-amber-400' : disc < 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                  {disc > 0 ? '-' : disc < 0 ? '+' : ''}{brl(Math.abs(disc))}
+                                </span>
+                                <span className="text-xs text-slate-500">({Math.abs(pct).toFixed(1)}%)</span>
+                              </div>
+                            );
+                          })() : (
+                            <div className="input-dark text-slate-600 text-sm">Informe o preço original</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment method */}
+                    <div className="rounded-xl p-4 space-y-4" style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(59,130,246,0.12)' }}>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Forma de Pagamento</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {PAYMENT_METHODS.map(m => (
+                          <button key={m.value} type="button"
+                            onClick={() => setForm(f => ({ ...f, payment_method: f.payment_method === m.value ? null : m.value }))}
+                            className="py-2.5 px-3 rounded-xl text-xs font-medium transition-all text-center"
+                            style={{
+                              background: form.payment_method === m.value ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                              border: `1px solid ${form.payment_method === m.value ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
+                              color: form.payment_method === m.value ? '#93c5fd' : '#64748b',
+                            }}>
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                      {form.payment_method === 'cartao_credito' && (
+                        <div className="flex items-center gap-3">
+                          <label className="label-dark shrink-0">Parcelas</label>
+                          <div className="flex gap-2 flex-wrap">
+                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                              <button key={n} type="button"
+                                onClick={() => setForm(f => ({ ...f, installments: n }))}
+                                className="w-9 h-9 rounded-lg text-xs font-semibold transition-all"
+                                style={{
+                                  background: (form.installments ?? 1) === n ? 'rgba(59,130,246,0.25)' : 'rgba(15,23,42,0.5)',
+                                  border: `1px solid ${(form.installments ?? 1) === n ? 'rgba(59,130,246,0.6)' : 'rgba(59,130,246,0.1)'}`,
+                                  color: (form.installments ?? 1) === n ? '#93c5fd' : '#64748b',
+                                }}>
+                                {n === 1 ? 'à\nvista' : `${n}x`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Notes */}
+                    <div className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(59,130,246,0.12)' }}>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Observações da negociação</p>
+                      <textarea value={form.payment_notes || ''}
+                        onChange={e => setForm(f => ({ ...f, payment_notes: e.target.value || null }))}
+                        placeholder="Ex: Cliente pediu desconto por volume, parcelamento em 3x no cartão, entrega em 45 dias..."
+                        rows={4}
+                        className="input-dark w-full resize-none text-sm" />
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="h-full overflow-hidden p-6">
                   <ActivityPanel oppId={form.id!} authorDefault={user?.name || ''} />
@@ -1209,7 +1320,7 @@ export default function Opportunities() {
             </div>
 
             {/* Modal footer */}
-            {modalTab === 'dados' && (
+            {modalTab !== 'atividades' && (
               <div className="flex justify-end gap-3 px-6 py-4 shrink-0"
                 style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
                 <button onClick={closeModal} className="btn-ghost text-sm">Cancelar</button>

@@ -247,7 +247,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { title, client_name, value, stage, probability, expected_close_date,
-            service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason } = req.body;
+            service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
+            original_price, payment_method, installments, payment_notes } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
     const closedAt = stage === 'fechado' ? new Date().toISOString().split('T')[0] : null;
@@ -257,14 +258,17 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO opportunities
          (title, client_name, value, stage, probability, expected_close_date,
           service_type, product_id, notes, closed_at, temperature,
-          next_followup, owner_id, source, lost_reason, stage_entered_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+          next_followup, owner_id, source, lost_reason,
+          original_price, payment_method, installments, payment_notes,
+          stage_entered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
+        original_price || null, payment_method || null, installments || 1, payment_notes || null,
       ]
     );
 
@@ -278,7 +282,8 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { title, client_name, value, stage, probability, expected_close_date,
-            service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason } = req.body;
+            service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
+            original_price, payment_method, installments, payment_notes } = req.body;
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
       'SELECT id, stage, closed_at FROM opportunities WHERE id = $1',
@@ -304,13 +309,15 @@ router.put('/:id', async (req: Request, res: Response) => {
          expected_close_date = $6, service_type = $7, product_id = $8, notes = $9,
          closed_at = $10, temperature = $11, next_followup = $12, owner_id = $13,
          source = $14, lost_reason = $15,
+         original_price = $16, payment_method = $17, installments = $18, payment_notes = $19,
          updated_at = NOW()${stageEnteredClause}
-       WHERE id = $16`,
+       WHERE id = $20`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
+        original_price || null, payment_method || null, installments || 1, payment_notes || null,
         req.params.id,
       ]
     );
