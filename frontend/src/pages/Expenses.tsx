@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule } from '../api';
-import type { Expense, Category } from '../types';
+import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule, getClients } from '../api';
+import type { Expense, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
 
@@ -29,6 +29,9 @@ export default function Expenses() {
   const [items, setItems] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cards, setCards] = useState<CompanyCard[]>([]);
+  const [clients, setClients] = useState<AgencyClient[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientPicker, setShowClientPicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(false);
@@ -69,15 +72,17 @@ export default function Expenses() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [expsResult, catsResult, cdsResult] = await Promise.allSettled([
+      const [expsResult, catsResult, cdsResult, clsResult] = await Promise.allSettled([
         getExpenses({ month: viewMode === 'annual' ? undefined : filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('expense'),
         getCards(true),
+        getClients(),
       ]);
       if (expsResult.status === 'fulfilled') setItems(expsResult.value);
       else setError('Erro ao buscar despesas');
       if (catsResult.status === 'fulfilled') setCategories(catsResult.value);
       if (cdsResult.status === 'fulfilled') setCards(cdsResult.value);
+      if (clsResult.status === 'fulfilled') setClients(clsResult.value);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -489,6 +494,48 @@ export default function Expenses() {
         )}
       </div>
 
+      {/* Client picker modal */}
+      {showClientPicker && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="modal-card w-full max-w-sm max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white text-sm">Selecionar cliente</h2>
+              <button onClick={() => setShowClientPicker(false)} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+            </div>
+            <div className="px-3 pt-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  autoFocus
+                  value={clientSearch}
+                  onChange={e => setClientSearch(e.target.value)}
+                  placeholder="Buscar cliente..."
+                  className="input-dark w-full text-sm pl-8 py-1.5"
+                />
+              </div>
+            </div>
+            <ul className="overflow-y-auto flex-1 px-2 py-2 space-y-0.5">
+              {clients
+                .filter(c => c.active && (clientSearch === '' || c.name.toLowerCase().includes(clientSearch.toLowerCase())))
+                .map(c => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setForm(f => ({ ...f, client_name: c.name, is_client_cost: 1 })); setShowClientPicker(false); }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-white/5 transition-colors"
+                    >
+                      {c.name}
+                    </button>
+                  </li>
+                ))}
+              {clients.filter(c => c.active && (clientSearch === '' || c.name.toLowerCase().includes(clientSearch.toLowerCase()))).length === 0 && (
+                <li className="text-center text-slate-500 text-sm py-6">Nenhum cliente encontrado</li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* CRUD Modal */}
       {modal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -556,7 +603,24 @@ export default function Expenses() {
                 </Field>
               </div>
               <Field label="Cliente (se custo de cliente)">
-                <input value={form.client_name || ''} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} className="input-dark w-full" />
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => { setClientSearch(''); setShowClientPicker(true); }}
+                    className="input-dark w-full text-left flex items-center justify-between"
+                  >
+                    <span className={form.client_name ? 'text-slate-200' : 'text-slate-500'}>
+                      {form.client_name || 'Selecionar cliente...'}
+                    </span>
+                    {form.client_name && (
+                      <span
+                        role="button"
+                        onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, client_name: '' })); }}
+                        className="ml-2 text-slate-500 hover:text-slate-300"
+                      >×</span>
+                    )}
+                  </button>
+                </div>
               </Field>
               {cards.length > 0 && (
                 <Field label="Cartão utilizado">
