@@ -19,6 +19,7 @@ import cardsRouter from './routes/cards';
 import employeesRouter from './routes/employees';
 import importRouter from './routes/import';
 import supplierRulesRouter from './routes/supplier-rules';
+import settingsRouter from './routes/settings';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -105,6 +106,22 @@ import pool from './db';
         CHECK(status IN ('pendente', 'pago', 'atrasado', 'cancelado', 'perdido'))
     `);
   } catch (e) { console.error('[migration] revenues perdido status error:', e); }
+
+  // Create company_settings table (idempotent)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS company_settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    // Seed default
+    await pool.query(`
+      INSERT INTO company_settings (key, value) VALUES ('monthly_billable_hours', '160')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  } catch (e) { console.error('[migration] company_settings error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
@@ -125,6 +142,7 @@ app.use('/api/cards',         requireAuth, cardsRouter);
 app.use('/api/employees',     requireAuth, employeesRouter);
 app.use('/api/import',          requireAuth, importRouter);
 app.use('/api/supplier-rules',  requireAuth, supplierRulesRouter);
+app.use('/api/settings',        requireAuth, settingsRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { updateProfile, getCategories, createCategory, updateCategory, deleteCategory } from '../api';
+import { updateProfile, getCategories, createCategory, updateCategory, deleteCategory, getCompanySettings, updateCompanySettings } from '../api';
 import type { Category } from '../types';
-import { User, Lock, Save, Tag, Pencil, Trash2, Plus, Check, X } from 'lucide-react';
+import { User, Lock, Save, Tag, Pencil, Trash2, Plus, Check, X, Clock } from 'lucide-react';
 
 export default function Configuracoes() {
   const { user, login, token } = useAuth();
@@ -34,6 +34,34 @@ export default function Configuracoes() {
   const [adding, setAdding] = useState(false);
   const [catError, setCatError] = useState('');
 
+  // Company settings
+  const [billableHours, setBillableHours] = useState(160);
+  const [hourCost, setHourCost] = useState(0);
+  const [avgFixedCosts, setAvgFixedCosts] = useState(0);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState('');
+
+  const loadSettings = async () => {
+    try {
+      const s = await getCompanySettings();
+      setBillableHours(s.monthly_billable_hours);
+      setHourCost(s.hour_cost);
+      setAvgFixedCosts(s.avg_fixed_costs);
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsSuccess('');
+    try {
+      await updateCompanySettings({ monthly_billable_hours: billableHours });
+      await loadSettings();
+      setSettingsSuccess('Salvo!');
+      setTimeout(() => setSettingsSuccess(''), 3000);
+    } catch { alert('Erro ao salvar'); }
+    finally { setSettingsSaving(false); }
+  };
+
   const loadCategories = async () => {
     setCatLoading(true);
     try {
@@ -44,7 +72,7 @@ export default function Configuracoes() {
     }
   };
 
-  useEffect(() => { loadCategories(); }, []);
+  useEffect(() => { loadCategories(); loadSettings(); }, []);
 
   const filtered = categories.filter(c => c.type === catTab);
 
@@ -217,6 +245,67 @@ export default function Configuracoes() {
             <Save size={14} />{passLoading ? 'Salvando...' : 'Trocar senha'}
           </button>
         </form>
+      </div>
+
+      {/* Parâmetros da Empresa */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem' }}>
+          <Clock size={16} color="var(--text-label)" />
+          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>Parâmetros da Empresa</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={labelStyle}>Horas faturáveis por mês</label>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Total de horas que a equipe trabalha em projetos por mês. Usado para calcular o custo real por hora da agência.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="number"
+                min={1}
+                max={800}
+                value={billableHours}
+                onChange={e => setBillableHours(Number(e.target.value))}
+                className="input-dark"
+                style={{ width: '120px' }}
+              />
+              <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>horas/mês</span>
+            </div>
+          </div>
+
+          {/* Calculated result */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-label)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custos fixos (média 3 meses)</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f87171' }}>
+                {avgFixedCosts.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </div>
+            </div>
+            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-label)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custo real / hora</div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#a5b4fc' }}>
+                {(avgFixedCosts / (billableHours || 1)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                calculado em tempo real
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleSaveSettings}
+              disabled={settingsSaving}
+              className="btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Save size={14} />{settingsSaving ? 'Salvando...' : 'Salvar'}
+            </button>
+            {settingsSuccess && (
+              <span style={{ fontSize: '0.8125rem', color: '#10b981' }}>✓ {settingsSuccess}</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Categorias */}

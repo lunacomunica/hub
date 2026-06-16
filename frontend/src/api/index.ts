@@ -312,3 +312,14 @@ export const deleteSupplierRule = (id: number): Promise<{ success: boolean }> =>
   req(`/supplier-rules/${id}`, { method: 'DELETE' });
 export const syncEmployeesAsSuppliers = (): Promise<{ synced: number; employees: number }> =>
   req('/supplier-rules/sync-employees', { method: 'POST' });
+
+// Company Settings
+export interface CompanySettings {
+  monthly_billable_hours: number;
+  avg_fixed_costs: number;
+  hour_cost: number;
+}
+export const getCompanySettings = (): Promise<CompanySettings> =>
+  req('/settings');
+export const updateCompanySettings = (data: Partial<Record<string, number>>): Promise<{ success: boolean }> =>
+  req('/settings', { method: 'PUT', body: JSON.stringify(data) });
