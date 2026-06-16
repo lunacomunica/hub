@@ -337,4 +337,52 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ─── Convert won opportunity → client ────────────────────────────────────────
+router.post('/:id/convert-to-client', async (req: Request, res: Response) => {
+  const { client_type, monthly_fee, margin_target, project_title, contract_value, service_type, start_date } = req.body;
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+
+    const { rows: [opp] } = await db.query('SELECT * FROM opportunities WHERE id = $1', [req.params.id]);
+    if (!opp) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Oportunidade não encontrada' }); }
+    if (opp.client_id) { await db.query('ROLLBACK'); return res.status(400).json({ error: 'Oportunidade já vinculada a um cliente' }); }
+
+    const type = client_type || 'mrr';
+    const isMrr = type === 'mrr' || type === 'ambos';
+    const isTcv = type === 'tcv' || type === 'ambos';
+    const fee = isMrr ? Number(monthly_fee || 0) : 0;
+    const startDate = start_date || new Date().toISOString().split('T')[0];
+    const clientName = opp.client_name || opp.title;
+
+    const { rows: [client] } = await db.query(
+      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, client_type, service_type)
+       VALUES ($1, $2, $3, 1, $4, $5, $6) RETURNING *`,
+      [clientName, fee, margin_target || 30, startDate, type, service_type || opp.service_type || null]
+    );
+
+    if (isTcv) {
+      await db.query(
+        `INSERT INTO tcv_projects (client_id, title, contract_value, start_date, status)
+         VALUES ($1, $2, $3, $4, 'em_andamento')`,
+        [client.id, project_title || opp.title, Number(contract_value || opp.value || 0), startDate]
+      );
+    }
+
+    await db.query(
+      'UPDATE opportunities SET client_id = $1, updated_at = NOW() WHERE id = $2',
+      [client.id, req.params.id]
+    );
+
+    await db.query('COMMIT');
+    res.status(201).json({ success: true, client });
+  } catch (err) {
+    await db.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao converter oportunidade em cliente' });
+  } finally {
+    db.release();
+  }
+});
+
 export default router;

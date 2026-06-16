@@ -163,6 +163,11 @@ import pool from './db';
       )
     `);
   } catch (e) { console.error('[migration] tcv_payments error:', e); }
+
+  // Link opportunities → clients
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
+  } catch (e) { console.error('[migration] opportunities client_id error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────

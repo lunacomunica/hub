@@ -156,6 +156,7 @@ export interface Opportunity {
   service_type: string | null;
   lost_reason: string | null;
   notes: string | null;
+  client_id: number | null;
   created_at: string;
   updated_at: string;
 }

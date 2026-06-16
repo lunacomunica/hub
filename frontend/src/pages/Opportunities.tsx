@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Plus, X, Trash2, RefreshCw, Pencil, Check, GripVertical,
   Phone, Mail, Users, MessageSquare, FileText, StickyNote,
-  Calendar, AlertCircle, Clock,
+  Calendar, AlertCircle, Clock, UserPlus, ExternalLink,
 } from 'lucide-react';
 import {
   getOpportunities, createOpportunity, updateOpportunity, deleteOpportunity,
+  convertOpportunityToClient,
   getProducts, getPipelineStages, createPipelineStage, updatePipelineStage, deletePipelineStage,
   getOppActivities, addOppActivity, deleteOppActivity,
   getUsers, type OppSummary,
@@ -399,6 +400,19 @@ export default function Opportunities() {
   // Lost reason modal
   const [lostModal, setLostModal] = useState<{ opp: Opportunity; targetStage: string; reason: string } | null>(null);
 
+  // Convert to client modal
+  const [convertModal, setConvertModal] = useState<{ opp: Opportunity; pendingStage?: string } | null>(null);
+  const [convertForm, setConvertForm] = useState<{
+    client_type: 'mrr' | 'tcv' | 'ambos';
+    monthly_fee: number;
+    margin_target: number;
+    project_title: string;
+    contract_value: number;
+    service_type: string;
+    start_date: string;
+  }>({ client_type: 'mrr', monthly_fee: 0, margin_target: 30, project_title: '', contract_value: 0, service_type: '', start_date: '' });
+  const [converting, setConverting] = useState(false);
+
   // Add stage
   const [addingStage, setAddingStage] = useState(false);
   const [newStageName, setNewStageName] = useState('');
@@ -443,6 +457,60 @@ export default function Opportunities() {
     finally { setSaving(false); }
   };
 
+  const openConvertModal = (opp: Opportunity, pendingStage?: string) => {
+    const isOnlyTcv = !opp.value || opp.value < 500; // heuristic — low value = likely project
+    setConvertForm({
+      client_type: 'mrr',
+      monthly_fee: Number(opp.value || 0),
+      margin_target: 30,
+      project_title: opp.title,
+      contract_value: Number(opp.value || 0),
+      service_type: opp.service_type || '',
+      start_date: new Date().toISOString().split('T')[0],
+    });
+    setConvertModal({ opp, pendingStage });
+  };
+
+  const confirmConvert = async () => {
+    if (!convertModal) return;
+    setConverting(true);
+    try {
+      // First move to won stage if this came from a drag-drop
+      if (convertModal.pendingStage) {
+        await updateOpportunity(convertModal.opp.id, {
+          ...convertModal.opp,
+          stage: convertModal.pendingStage,
+          probability: 100,
+        });
+      }
+      await convertOpportunityToClient(convertModal.opp.id, {
+        client_type: convertForm.client_type,
+        monthly_fee: convertForm.monthly_fee,
+        margin_target: convertForm.margin_target,
+        project_title: convertForm.project_title,
+        contract_value: convertForm.contract_value,
+        service_type: convertForm.service_type || undefined,
+        start_date: convertForm.start_date,
+      });
+      setConvertModal(null);
+      load();
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Erro ao converter'); }
+    finally { setConverting(false); }
+  };
+
+  const skipConvert = async () => {
+    if (!convertModal?.pendingStage) { setConvertModal(null); return; }
+    try {
+      await updateOpportunity(convertModal.opp.id, {
+        ...convertModal.opp,
+        stage: convertModal.pendingStage,
+        probability: 100,
+      });
+      setConvertModal(null);
+      load();
+    } catch { alert('Erro ao mover oportunidade'); }
+  };
+
   const handleDrop = async (targetStage: string) => {
     setDropStage(null);
     if (dragId === null) return;
@@ -455,6 +523,13 @@ export default function Opportunities() {
     const isLostStage = targetStageObj?.is_terminal === 1 && targetStage !== (wonStage?.key ?? 'fechado');
     if (isLostStage) {
       setLostModal({ opp, targetStage, reason: '' });
+      return;
+    }
+
+    // If dropping onto won stage and not yet a client, offer conversion
+    const isWonStage = targetStage === (wonStage?.key ?? 'fechado');
+    if (isWonStage && !opp.client_id) {
+      openConvertModal(opp, targetStage);
       return;
     }
 
@@ -753,7 +828,24 @@ export default function Opportunities() {
                     <td className="td px-4 py-3 text-center text-slate-400">{o.owner_name || '—'}</td>
                     <td className="td px-4 py-3 text-center text-slate-400">{fmtDate(o.expected_close_date || '')}</td>
                     <td className="td px-4 py-3">
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-end items-center">
+                        {view === 'won' && (
+                          o.client_id ? (
+                            <a href="/clientes" title="Ver cliente criado"
+                              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium mr-1"
+                              style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)' }}>
+                              <ExternalLink size={10} /> Cliente
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => openConvertModal(o)}
+                              title="Converter em cliente"
+                              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium mr-1 transition-colors"
+                              style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.25)' }}>
+                              <UserPlus size={10} /> Criar cliente
+                            </button>
+                          )
+                        )}
                         <button onClick={() => openEdit(o)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><Pencil size={13} /></button>
                         <button onClick={() => handleDelete(o.id)} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={13} /></button>
                       </div>
@@ -764,6 +856,104 @@ export default function Opportunities() {
             </table>
           )}
         </div>
+        </div>
+      )}
+
+      {/* ── Convert to client modal ── */}
+      {convertModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4" style={{ zIndex: 60 }}>
+          <div className="modal-card w-full max-w-lg">
+            <div className="flex items-start justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <div>
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  <UserPlus size={16} className="text-indigo-400" /> Criar cliente a partir da oportunidade
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  <span className="text-slate-400">{convertModal.opp.title}</span>
+                  {convertModal.opp.client_name && ` · ${convertModal.opp.client_name}`}
+                </p>
+              </div>
+              <button onClick={() => setConvertModal(null)} className="text-slate-500 hover:text-slate-300 shrink-0 ml-4"><X size={16} /></button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Client type */}
+              <div>
+                <label className="label-dark mb-2 block">Tipo de cliente</label>
+                <div className="flex gap-2">
+                  {([['mrr', 'MRR (Recorrente)'], ['tcv', 'TCV (Projeto)'], ['ambos', 'MRR + TCV']] as const).map(([v, l]) => (
+                    <button key={v} onClick={() => setConvertForm(f => ({ ...f, client_type: v }))}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                        convertForm.client_type === v
+                          ? v === 'mrr' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                            : v === 'tcv' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                            : 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400'
+                          : 'border-white/10 text-slate-500 hover:border-white/20'
+                      }`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* MRR fields */}
+              {(convertForm.client_type === 'mrr' || convertForm.client_type === 'ambos') && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label-dark mb-1 block">Mensalidade (R$)</label>
+                    <input type="number" step="0.01" value={convertForm.monthly_fee || ''}
+                      onChange={e => setConvertForm(f => ({ ...f, monthly_fee: parseFloat(e.target.value) || 0 }))}
+                      className="input-dark w-full" />
+                  </div>
+                  <div>
+                    <label className="label-dark mb-1 block">Meta de margem (%)</label>
+                    <input type="number" value={convertForm.margin_target || 30}
+                      onChange={e => setConvertForm(f => ({ ...f, margin_target: parseFloat(e.target.value) || 30 }))}
+                      className="input-dark w-full" />
+                  </div>
+                </div>
+              )}
+
+              {/* TCV fields */}
+              {(convertForm.client_type === 'tcv' || convertForm.client_type === 'ambos') && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="label-dark mb-1 block">Título do projeto</label>
+                    <input value={convertForm.project_title}
+                      onChange={e => setConvertForm(f => ({ ...f, project_title: e.target.value }))}
+                      className="input-dark w-full" />
+                  </div>
+                  <div>
+                    <label className="label-dark mb-1 block">Valor do contrato (R$)</label>
+                    <input type="number" step="0.01" value={convertForm.contract_value || ''}
+                      onChange={e => setConvertForm(f => ({ ...f, contract_value: parseFloat(e.target.value) || 0 }))}
+                      className="input-dark w-full" />
+                  </div>
+                  <div>
+                    <label className="label-dark mb-1 block">Início</label>
+                    <input type="date" value={convertForm.start_date}
+                      onChange={e => setConvertForm(f => ({ ...f, start_date: e.target.value }))}
+                      className="input-dark w-full" />
+                  </div>
+                </div>
+              )}
+
+              {/* Service type */}
+              <div>
+                <label className="label-dark mb-1 block">Tipo de serviço</label>
+                <input value={convertForm.service_type}
+                  onChange={e => setConvertForm(f => ({ ...f, service_type: e.target.value }))}
+                  className="input-dark w-full" placeholder="Ex: Gestão de redes, Branding..." />
+              </div>
+            </div>
+
+            <div className="flex justify-between gap-3 px-6 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={skipConvert} className="btn-ghost text-sm text-slate-500">
+                {convertModal.pendingStage ? 'Só fechar, sem criar cliente' : 'Cancelar'}
+              </button>
+              <button onClick={confirmConvert} disabled={converting} className="btn-primary text-sm disabled:opacity-50">
+                {converting ? 'Criando...' : '✓ Criar cliente'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -189,6 +189,16 @@ export const updateOpportunity = (id: number, data: Partial<Opportunity>): Promi
   req(`/opportunities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteOpportunity = (id: number): Promise<{ success: boolean }> =>
   req(`/opportunities/${id}`, { method: 'DELETE' });
+export const convertOpportunityToClient = (id: number, data: {
+  client_type: 'mrr' | 'tcv' | 'ambos';
+  monthly_fee?: number;
+  margin_target?: number;
+  project_title?: string;
+  contract_value?: number;
+  service_type?: string;
+  start_date?: string;
+}): Promise<{ success: boolean; client: AgencyClient }> =>
+  req(`/opportunities/${id}/convert-to-client`, { method: 'POST', body: JSON.stringify(data) });
 
 // Opportunity activities
 export const getOppActivities = (oppId: number): Promise<OppActivity[]> =>
