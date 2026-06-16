@@ -71,20 +71,20 @@ import pool from './db';
 (async () => {
   try {
     // Merge "Marketing Próprio" + "Mídia/Ads" → "Marketing e Anúncios"
-    await pool.query(`
-      INSERT INTO financial_categories (name, type, color)
-      VALUES ('Marketing e Anúncios', 'expense', '#f59e0b')
-      ON CONFLICT (name, type) DO NOTHING
-    `);
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM financial_categories WHERE name = 'Marketing e Anúncios' AND type = 'expense'`
+    );
+    if (existing.length === 0) {
+      await pool.query(
+        `INSERT INTO financial_categories (name, type, color) VALUES ('Marketing e Anúncios', 'expense', '#f59e0b')`
+      );
+    }
     await pool.query(`
       DELETE FROM financial_categories
-      WHERE name IN ('Marketing Próprio', 'Mídia/Ads')
-        AND type = 'expense'
-        AND NOT EXISTS (
-          SELECT 1 FROM financial_expenses WHERE category_id = financial_categories.id
-        )
+      WHERE name IN ('Marketing Próprio', 'Mídia/Ads') AND type = 'expense'
+        AND NOT EXISTS (SELECT 1 FROM financial_expenses WHERE category_id = financial_categories.id)
     `);
-  } catch { /* ignore if table doesn't exist yet */ }
+  } catch (e) { console.error('[migration] category merge error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
