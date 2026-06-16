@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, SupplierRule } from '../api';
+import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, SupplierRule } from '../api';
 import type { Expense, Category } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -202,6 +202,17 @@ export default function Expenses() {
       await deleteSupplierRule(id);
       loadRules();
     } catch { alert('Erro ao remover regra'); }
+  };
+
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncEmployees = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncEmployeesAsSuppliers();
+      loadRules();
+      alert(`✅ ${result.employees} funcionários sincronizados como fornecedores!`);
+    } catch { alert('Erro ao sincronizar'); }
+    finally { setSyncing(false); }
   };
 
   const handleBulkSave = async () => {
@@ -678,7 +689,17 @@ export default function Expenses() {
                 <h2 className="font-semibold text-white">Regras de Fornecedores</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Palavras-chave que mapeiam automaticamente fornecedor e categoria durante a importação.</p>
               </div>
-              <button onClick={() => setShowRules(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleSyncEmployees}
+                  disabled={syncing}
+                  className="btn-ghost text-xs flex items-center gap-1.5 whitespace-nowrap"
+                  title="Cria regras automáticas para todos os funcionários ativos"
+                >
+                  {syncing ? '...' : '👥 Sincronizar funcionários'}
+                </button>
+                <button onClick={() => setShowRules(false)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+              </div>
             </div>
 
             <div className="overflow-y-auto flex-1 p-5 space-y-4">

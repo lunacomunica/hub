@@ -75,6 +75,7 @@ export async function suggestForDescription(
   if (keywords.length === 0) return {};
 
   try {
+    // 1. Check learned categorization rules first (highest priority)
     const { rows } = await query<{ category_id: number | null; supplier: string | null }>(
       `SELECT category_id, supplier
        FROM categorization_rules
@@ -92,6 +93,29 @@ export async function suggestForDescription(
   } catch (e) {
     console.error('[categorization] suggest error:', e);
   }
+
+  // 2. For expenses only: try matching against active employee names
+  //    e.g. "PIX ADRIANO PEREIRA DE CAMARGO" → supplier = employee full name
+  if (type === 'expense') {
+    try {
+      const { rows: employees } = await query<{ id: number; name: string }>(
+        "SELECT id, name FROM employees WHERE status != 'inativo'"
+      );
+      const normDesc = normalize(description);
+      for (const emp of employees) {
+        const normName = normalize(emp.name);
+        const nameWords = normName.split(' ').filter(w => w.length >= 4);
+        // Need at least 2 significant name words to appear in the description
+        const hits = nameWords.filter(w => normDesc.includes(w));
+        if (hits.length >= Math.min(2, nameWords.length)) {
+          return { supplier: emp.name };
+        }
+      }
+    } catch (e) {
+      console.error('[categorization] employee match error:', e);
+    }
+  }
+
   return {};
 }
 

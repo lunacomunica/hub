@@ -272,3 +272,5 @@ export const updateSupplierRule = (id: number, data: { category_id?: number | nu
   req(`/supplier-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteSupplierRule = (id: number): Promise<{ success: boolean }> =>
   req(`/supplier-rules/${id}`, { method: 'DELETE' });
+export const syncEmployeesAsSuppliers = (): Promise<{ synced: number; employees: number }> =>
+  req('/supplier-rules/sync-employees', { method: 'POST' });

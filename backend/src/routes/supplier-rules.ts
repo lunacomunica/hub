@@ -94,6 +94,50 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/supplier-rules/sync-employees
+// Creates categorization rules for all active employees so their names
+// are auto-matched as suppliers when importing bank statements
+router.post('/sync-employees', async (req: Request, res: Response) => {
+  try {
+    await ensureTable();
+    const { rows: employees } = await query(
+      "SELECT id, name FROM employees WHERE status != 'inativo'"
+    );
+    if (employees.length === 0) return res.json({ synced: 0 });
+
+    let synced = 0;
+    for (const emp of employees) {
+      // Use lowercase normalized words as keywords (same normalization as extractKeywords)
+      const norm = emp.name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const words = norm.split(' ').filter((w: string) => w.length >= 4);
+
+      for (const keyword of words) {
+        try {
+          await query(
+            `INSERT INTO categorization_rules (keyword, trans_type, supplier, usage_count)
+             VALUES ($1, 'expense', $2, 0)
+             ON CONFLICT (keyword, trans_type) DO UPDATE SET
+               supplier   = COALESCE(categorization_rules.supplier, EXCLUDED.supplier),
+               updated_at = NOW()`,
+            [keyword, emp.name]
+          );
+          synced++;
+        } catch { /* skip conflicts */ }
+      }
+    }
+    res.json({ synced, employees: employees.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao sincronizar funcionários' });
+  }
+});
+
 // DELETE /api/supplier-rules/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
