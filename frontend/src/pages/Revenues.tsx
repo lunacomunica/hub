@@ -108,9 +108,18 @@ export default function Revenues() {
   }, [items, search]);
 
   // Summary computed from visibleItems
+  const today = now.toISOString().slice(0, 10);
   const paid = visibleItems.filter(r => r.status === 'pago').reduce((s, r) => s + Number(r.amount), 0);
-  const pending = visibleItems.filter(r => r.status === 'pendente').reduce((s, r) => s + Number(r.amount), 0);
-  const overdue = visibleItems.filter(r => r.status === 'atrasado').reduce((s, r) => s + Number(r.amount), 0);
+  const lost = visibleItems.filter(r => r.status === 'perdido').reduce((s, r) => s + Number(r.amount), 0);
+  // "Em atraso": status atrasado OU pendente com vencimento passado
+  const overdue = visibleItems.filter(r =>
+    r.status === 'atrasado' ||
+    (r.status === 'pendente' && r.due_date && r.due_date < today)
+  ).reduce((s, r) => s + Number(r.amount), 0);
+  // "A receber": pendente sem vencimento passado
+  const pending = visibleItems.filter(r =>
+    r.status === 'pendente' && !(r.due_date && r.due_date < today)
+  ).reduce((s, r) => s + Number(r.amount), 0);
 
   const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -278,7 +287,7 @@ export default function Revenues() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="card p-4">
           <div className="label-dark mb-1">Recebido</div>
           <div className="metric-md text-emerald-400">{brl(paid)}</div>
@@ -290,6 +299,10 @@ export default function Revenues() {
         <div className="card p-4">
           <div className="label-dark mb-1">Em atraso</div>
           <div className="metric-md text-red-400">{brl(overdue)}</div>
+        </div>
+        <div className="card p-4" style={lost > 0 ? { border: '1px solid rgba(220,38,38,0.25)', background: 'rgba(220,38,38,0.05)' } : {}}>
+          <div className="label-dark mb-1">Perdido</div>
+          <div className={`metric-md ${lost > 0 ? 'text-red-300' : 'text-slate-500'}`}>{brl(lost)}</div>
         </div>
       </div>
 
