@@ -146,7 +146,7 @@ export default function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Receita Total" value={brl(summary.total_revenue)} color="emerald" icon={<TrendingUp size={20} />} />
         <KpiCard label="Despesas Total" value={brl(summary.total_expenses)} color="red" icon={<TrendingDown size={20} />} />
         <KpiCard
@@ -307,12 +307,12 @@ function KpiCard({ label, value, color, icon }: { label: string; value: string; 
     amber: 'icon-amber',
   };
   return (
-    <div className="card p-4">
+    <div className="card p-4 overflow-hidden min-w-0">
       <div className="flex items-center justify-between mb-2">
-        <span className="label-dark">{label}</span>
-        <div className={iconColors[color] || 'icon-blue'}>{icon}</div>
+        <span className="label-dark truncate pr-2">{label}</span>
+        <div className={`${iconColors[color] || 'icon-blue'} shrink-0`}>{icon}</div>
       </div>
-      <div className="metric">{value}</div>
+      <div className="font-light tracking-tight leading-none truncate" style={{ fontSize: 'clamp(1.1rem, 2.6vw, 1.9rem)', color: 'var(--text-metric)' }}>{value}</div>
     </div>
   );
 }
