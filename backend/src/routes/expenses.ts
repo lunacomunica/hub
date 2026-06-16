@@ -142,7 +142,7 @@ router.post('/', async (req: Request, res: Response) => {
       INSERT INTO financial_expenses (description, category_id, supplier, client_name, amount, date, due_date, status, is_fixed, is_client_cost, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id
-    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? true : false, is_client_cost ? true : false, notes || null]);
+    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? 1 : 0, is_client_cost ? 1 : 0, notes || null]);
 
     const { rows: [newRow] } = await pool.query(`
       SELECT fe.*, fc.name as category_name, fc.color as category_color
@@ -169,7 +169,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         due_date = $7, status = $8, is_fixed = $9, is_client_cost = $10, notes = $11,
         updated_at = NOW()
       WHERE id = $12
-    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? true : false, is_client_cost ? true : false, notes || null, req.params.id]);
+    `, [description, category_id || null, supplier || null, client_name || null, amount, date, due_date || null, status || 'pendente', is_fixed ? 1 : 0, is_client_cost ? 1 : 0, notes || null, req.params.id]);
 
     const { rows: [updated] } = await pool.query(`
       SELECT fe.*, fc.name as category_name, fc.color as category_color

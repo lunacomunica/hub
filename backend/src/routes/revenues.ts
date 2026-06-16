@@ -162,7 +162,7 @@ router.post('/', async (req: Request, res: Response) => {
       INSERT INTO financial_revenues (description, client_name, category_id, client_id, amount, date, due_date, status, is_recurring, recurrence_type, notes)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id
-    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? true : false, recurrence_type || null, notes || null]);
+    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? 1 : 0, recurrence_type || null, notes || null]);
 
     const { rows: [newRow] } = await pool.query(`
       SELECT fr.*, fc.name as category_name, fc.color as category_color,
@@ -191,7 +191,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         due_date = $7, status = $8, is_recurring = $9, recurrence_type = $10, notes = $11,
         updated_at = NOW()
       WHERE id = $12
-    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? true : false, recurrence_type || null, notes || null, req.params.id]);
+    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? 1 : 0, recurrence_type || null, notes || null, req.params.id]);
 
     const { rows: [updated] } = await pool.query(`
       SELECT fr.*, fc.name as category_name, fc.color as category_color,
