@@ -3,8 +3,8 @@ import { TrendingUp, TrendingDown, DollarSign, Percent, AlertCircle, RefreshCw, 
 import { getDashboard, getOpportunities } from '../api';
 import type { DashboardData } from '../types';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const pct = (v: number) => `${v.toFixed(1)}%`;
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct = (v: number) => `${Number(v).toFixed(1)}%`;
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',

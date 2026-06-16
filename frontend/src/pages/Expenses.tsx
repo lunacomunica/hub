@@ -5,7 +5,7 @@ import type { Expense, Category } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -161,7 +161,7 @@ export default function Expenses() {
       r.description,
       r.category_name || '',
       r.supplier || '',
-      r.amount.toFixed(2).replace('.', ','),
+      Number(r.amount).toFixed(2).replace('.', ','),
       STATUS_LABELS[r.status] || r.status,
       [r.is_fixed ? 'Fixo' : '', r.is_client_cost ? 'Cliente' : ''].filter(Boolean).join('+') || '—',
     ]);
@@ -178,9 +178,9 @@ export default function Expenses() {
     URL.revokeObjectURL(url);
   };
 
-  const paid = items.filter(r => r.status === 'pago').reduce((s, r) => s + r.amount, 0);
-  const pending = items.filter(r => r.status === 'pendente').reduce((s, r) => s + r.amount, 0);
-  const fixed = items.filter(r => r.is_fixed).reduce((s, r) => s + r.amount, 0);
+  const paid = items.filter(r => r.status === 'pago').reduce((s, r) => s + Number(r.amount), 0);
+  const pending = items.filter(r => r.status === 'pendente').reduce((s, r) => s + Number(r.amount), 0);
+  const fixed = items.filter(r => r.is_fixed).reduce((s, r) => s + Number(r.amount), 0);
 
   const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];

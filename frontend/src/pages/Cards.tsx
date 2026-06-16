@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, CreditCard, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { getCards, createCard, updateCard, deleteCard, getCardExpenses, CompanyCard } from '../api';
 
-const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
 
 const BRANDS: { value: string; label: string; color: string }[] = [
@@ -265,7 +265,7 @@ export default function Cards() {
                           <tr style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
                             <td colSpan={4} className="px-5 py-2 text-sm font-semibold text-slate-300">Total</td>
                             <td className="px-5 py-2 text-right font-bold text-rose-400">
-                              {fmt(expenses[card.id].reduce((s, e) => s + e.amount, 0))}
+                              {fmt(expenses[card.id].reduce((s, e) => s + Number(e.amount), 0))}
                             </td>
                           </tr>
                         </tbody>

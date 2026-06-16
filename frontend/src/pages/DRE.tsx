@@ -3,7 +3,7 @@ import { Printer, RefreshCw } from 'lucide-react';
 import { getRevenues, getExpenses } from '../api';
 import type { Revenue, Expense } from '../types';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const pct = (v: number, base: number) => base === 0 ? '—' : `${((v / base) * 100).toFixed(1)}%`;
 
 const now = new Date();
@@ -64,12 +64,12 @@ export default function DRE() {
 
   const sumRevByCat = (revs: Revenue[], catNames: string[]): number => {
     if (catNames.length === 0) return 0;
-    return revs.filter(r => r.status !== 'cancelado' && catNames.some(n => r.category_name === n)).reduce((s, r) => s + r.amount, 0);
+    return revs.filter(r => r.status !== 'cancelado' && catNames.some(n => r.category_name === n)).reduce((s, r) => s + Number(r.amount), 0);
   };
   const sumRevOthers = (revs: Revenue[], usedCats: string[]): number =>
-    revs.filter(r => r.status !== 'cancelado' && !usedCats.includes(r.category_name || '')).reduce((s, r) => s + r.amount, 0);
+    revs.filter(r => r.status !== 'cancelado' && !usedCats.includes(r.category_name || '')).reduce((s, r) => s + Number(r.amount), 0);
   const sumExpByCat = (exps: Expense[], catNames: string[]): number =>
-    exps.filter(e => e.status !== 'cancelado' && catNames.some(n => e.category_name === n)).reduce((s, e) => s + e.amount, 0);
+    exps.filter(e => e.status !== 'cancelado' && catNames.some(n => e.category_name === n)).reduce((s, e) => s + Number(e.amount), 0);
 
   // Precompute per column
   const usedRevCats = REV_GROUPS.flatMap(g => g.keys);

@@ -8,8 +8,8 @@ import { getDashboard } from '../api';
 import type { DashboardData } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const pct = (v: number) => `${v.toFixed(1)}%`;
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct = (v: number) => `${Number(v).toFixed(1)}%`;
 
 const STAGE_LABELS: Record<string, string> = {
   prospeccao: 'Prospecção',

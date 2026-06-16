@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface Product { id: number; name: string; price: number; category: string | null }
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
 
 // Uses local date to avoid UTC offset issues (Brazil = UTC-3)

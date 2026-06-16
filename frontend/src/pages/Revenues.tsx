@@ -11,7 +11,7 @@ interface FormState extends Partial<RevenueRow> {
   client_id?: number | null;
 }
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -93,9 +93,9 @@ export default function Revenues() {
   }, [items, search]);
 
   // Summary computed from visibleItems
-  const paid = visibleItems.filter(r => r.status === 'pago').reduce((s, r) => s + r.amount, 0);
-  const pending = visibleItems.filter(r => r.status === 'pendente').reduce((s, r) => s + r.amount, 0);
-  const overdue = visibleItems.filter(r => r.status === 'atrasado').reduce((s, r) => s + r.amount, 0);
+  const paid = visibleItems.filter(r => r.status === 'pago').reduce((s, r) => s + Number(r.amount), 0);
+  const pending = visibleItems.filter(r => r.status === 'pendente').reduce((s, r) => s + Number(r.amount), 0);
+  const overdue = visibleItems.filter(r => r.status === 'atrasado').reduce((s, r) => s + Number(r.amount), 0);
 
   const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -186,7 +186,7 @@ export default function Revenues() {
       `"${(r.description || '').replace(/"/g, '""')}"`,
       `"${((r.client_display_name || r.client_name) || '').replace(/"/g, '""')}"`,
       `"${(r.category_name || '').replace(/"/g, '""')}"`,
-      r.amount.toFixed(2).replace('.', ','),
+      Number(r.amount).toFixed(2).replace('.', ','),
       STATUS_LABELS[r.status] || r.status,
     ]);
     const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\n');

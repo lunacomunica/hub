@@ -3,7 +3,7 @@ import { Plus, X, AlertCircle, RefreshCw, Trash2, CheckCircle, ChevronDown, Chev
 import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost } from '../api';
 import type { AgencyClient, ClientCost } from '../types';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const pct = (v: number) => `${v.toFixed(1)}%`;
 
 const HEALTH_CONFIG = {
@@ -277,7 +277,7 @@ export default function ClientHealth() {
                         <tfoot>
                           <tr style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
                             <td colSpan={2} className="py-2 text-xs font-semibold text-slate-400">Total</td>
-                            <td className="py-2 text-right font-bold text-red-400">{brl(clientCosts.reduce((s, c) => s + c.amount, 0))}</td>
+                            <td className="py-2 text-right font-bold text-red-400">{brl(clientCosts.reduce((s, c) => s + Number(c.amount), 0))}</td>
                             <td></td>
                           </tr>
                         </tfoot>
