@@ -220,3 +220,7 @@ export const createUser = (data: { name: string; email: string; password: string
 export const updateUser = (id: number, data: Partial<{ name: string; password: string; role: string; active: number }>) =>
   req(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteUser = (id: number) => req(`/auth/users/${id}`, { method: 'DELETE' });
+
+// Auth / Profile
+export const updateProfile = (data: { name?: string; current_password?: string; new_password?: string }): Promise<{ id: number; name: string; email: string; role: string }> =>
+  req('/auth/profile', { method: 'PUT', body: JSON.stringify(data) });

@@ -18,6 +18,7 @@ import EmployeeDetail from './pages/EmployeeDetail';
 import Relatorio from './pages/Relatorio';
 import LoginPage from './pages/LoginPage';
 import Usuarios from './pages/Usuarios';
+import Configuracoes from './pages/Configuracoes';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -77,6 +78,7 @@ export default function App() {
                 </AdminRoute>
               }
             />
+            <Route path="configuracoes" element={<Configuracoes />} />
           </Route>
         </Routes>
       </BrowserRouter>

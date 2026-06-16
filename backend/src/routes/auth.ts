@@ -211,4 +211,47 @@ router.delete('/users/:id', requireAuth, async (req: AuthRequest, res: Response)
   return res.json({ success: true });
 });
 
+// ─── PUT /api/auth/profile — usuário atualiza o próprio perfil ───────────────
+router.put('/profile', requireAuth, async (req: AuthRequest, res: Response) => {
+  const { name, current_password, new_password } = req.body;
+  const userId = req.user!.id;
+
+  const { rows: [user] } = await dbQuery<{ id: number; email: string; password_hash: string }>(
+    'SELECT id, email, password_hash FROM users WHERE id = $1',
+    [userId]
+  );
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  // Se quer trocar senha, verifica a senha atual
+  if (new_password) {
+    if (!current_password) {
+      return res.status(400).json({ error: 'Informe a senha atual para trocar a senha' });
+    }
+    if (!bcrypt.compareSync(current_password, user.password_hash)) {
+      return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
+    if (!isStrongPassword(new_password)) {
+      return res.status(400).json({
+        error: 'A nova senha deve ter no mínimo 8 caracteres, incluindo pelo menos uma letra e um número.',
+      });
+    }
+    const hash = bcrypt.hashSync(new_password, 10);
+    await dbQuery('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
+  }
+
+  if (name !== undefined && name.trim()) {
+    await dbQuery('UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2', [name.trim(), userId]);
+  }
+
+  const { rows: [updated] } = await dbQuery(
+    'SELECT id, name, email, role, active FROM users WHERE id = $1',
+    [userId]
+  );
+
+  const ip = getClientIp(req);
+  await writeAudit(userId, user.email, 'update_profile', 'profile', ip);
+
+  return res.json(updated);
+});
+
 export default router;

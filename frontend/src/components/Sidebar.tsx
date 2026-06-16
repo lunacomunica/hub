@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound,
+  UsersRound, LogOut, CreditCard, UserRound, Settings,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -241,6 +241,32 @@ export default function Sidebar() {
           {!collapsed && (theme === 'dark' ? 'Modo Claro' : 'Modo Escuro')}
         </button>
 
+        {/* Settings */}
+        <button
+          onClick={() => navigate('/configuracoes')}
+          title="Configurações"
+          style={{
+            background: 'var(--bg-btn-ghost)',
+            border: '1px solid var(--border-input)',
+            borderRadius: '8px',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            padding: collapsed ? '6px' : '7px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: '8px',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            transition: 'all 0.15s ease',
+            whiteSpace: 'nowrap',
+            width: '100%',
+          }}
+        >
+          <Settings size={14} />
+          {!collapsed && 'Configurações'}
+        </button>
+
         {/* User info + logout */}
         {!collapsed && user && (
           <div
@@ -305,9 +331,6 @@ export default function Sidebar() {
           </button>
         )}
 
-        {!collapsed && (
-          <div className="section-label text-center py-0.5">v1.0 · local</div>
-        )}
       </div>
     </aside>
   );
