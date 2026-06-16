@@ -43,10 +43,11 @@ export default function Expenses() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | 'status' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
   const [bulkSupplier, setBulkSupplier] = useState('');
+  const [bulkStatus, setBulkStatus] = useState<string>('pago');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
@@ -140,6 +141,9 @@ export default function Expenses() {
       updates.category_id = bulkCategoryId as number;
     } else if (bulkModal === 'supplier') {
       updates.supplier = bulkSupplier.trim();
+    } else if (bulkModal === 'status') {
+      if (!bulkStatus) return;
+      updates.status = bulkStatus;
     }
     setBulkSaving(true);
     try {
@@ -148,6 +152,7 @@ export default function Expenses() {
       setBulkDescription('');
       setBulkCategoryId('');
       setBulkSupplier('');
+      setBulkStatus('pago');
       clearSelection();
       load();
     } catch {
@@ -255,6 +260,7 @@ export default function Expenses() {
             <button onClick={() => { setBulkDescription(''); setBulkModal('rename'); }} className="btn-ghost text-xs px-3 py-1">Renomear</button>
             <button onClick={() => { setBulkCategoryId(''); setBulkModal('categorize'); }} className="btn-ghost text-xs px-3 py-1">Categorizar</button>
             <button onClick={() => { setBulkSupplier(''); setBulkModal('supplier'); }} className="btn-ghost text-xs px-3 py-1">Fornecedor</button>
+            <button onClick={() => { setBulkStatus('pago'); setBulkModal('status'); }} className="btn-ghost text-xs px-3 py-1">Status</button>
           </div>
           <button onClick={clearSelection} className="ml-auto text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
@@ -475,6 +481,34 @@ export default function Expenses() {
             <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
               <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
               <button onClick={handleBulkSave} disabled={bulkSaving || bulkCategoryId === ''} className="btn-primary text-sm disabled:opacity-50">
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk status modal */}
+      {bulkModal === 'status' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white">Status — {selected.size} {selected.size === 1 ? 'despesa' : 'despesas'}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              <Field label="Novo status">
+                <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="input-dark w-full">
+                  <option value="pago">✅ Pago</option>
+                  <option value="pendente">🕐 Pendente</option>
+                  <option value="atrasado">⚠️ Atrasado</option>
+                  <option value="cancelado">✖ Cancelado</option>
+                </select>
+              </Field>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={handleBulkSave} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
                 {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
             </div>
