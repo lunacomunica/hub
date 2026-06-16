@@ -70,9 +70,9 @@ app.use('/api/auth/login', rateLimit({
 
 // ─── One-time data migrations (safe, idempotent) ─────────────────────────────
 import pool from './db';
-(async () => {
+
+export async function runMigrations() {
   try {
-    // Merge "Marketing Próprio" + "Mídia/Ads" → "Marketing e Anúncios"
     const { rows: existing } = await pool.query(
       `SELECT id FROM financial_categories WHERE name = 'Marketing e Anúncios' AND type = 'expense'`
     );
@@ -88,48 +88,26 @@ import pool from './db';
     `);
   } catch (e) { console.error('[migration] category merge error:', e); }
 
-  // Add risk_alert columns to agency_clients (idempotent)
   try {
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_alert INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_reason TEXT`);
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_since TEXT`);
   } catch (e) { console.error('[migration] risk_alert columns error:', e); }
 
-  // Allow 'perdido' status in financial_revenues (drop old CHECK, add new one)
   try {
-    await pool.query(`
-      ALTER TABLE financial_revenues
-        DROP CONSTRAINT IF EXISTS financial_revenues_status_check
-    `);
-    await pool.query(`
-      ALTER TABLE financial_revenues
-        ADD CONSTRAINT financial_revenues_status_check
-        CHECK(status IN ('pendente', 'pago', 'atrasado', 'cancelado', 'perdido'))
-    `);
+    await pool.query(`ALTER TABLE financial_revenues DROP CONSTRAINT IF EXISTS financial_revenues_status_check`);
+    await pool.query(`ALTER TABLE financial_revenues ADD CONSTRAINT financial_revenues_status_check CHECK(status IN ('pendente', 'pago', 'atrasado', 'cancelado', 'perdido'))`);
   } catch (e) { console.error('[migration] revenues perdido status error:', e); }
 
-  // Create company_settings table (idempotent)
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS company_settings (
-        key VARCHAR(100) PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    // Seed default
-    await pool.query(`
-      INSERT INTO company_settings (key, value) VALUES ('monthly_billable_hours', '160')
-      ON CONFLICT (key) DO NOTHING
-    `);
+    await pool.query(`CREATE TABLE IF NOT EXISTS company_settings (key VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`INSERT INTO company_settings (key, value) VALUES ('monthly_billable_hours', '160') ON CONFLICT (key) DO NOTHING`);
   } catch (e) { console.error('[migration] company_settings error:', e); }
 
-  // Add client_type to agency_clients
   try {
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS client_type VARCHAR(10) DEFAULT 'mrr'`);
   } catch (e) { console.error('[migration] client_type column error:', e); }
 
-  // TCV projects table
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tcv_projects (
@@ -138,8 +116,7 @@ import pool from './db';
         title TEXT NOT NULL,
         contract_value NUMERIC(10,2) NOT NULL DEFAULT 0,
         estimated_hours NUMERIC(8,2) DEFAULT 0,
-        start_date DATE,
-        end_date DATE,
+        start_date DATE, end_date DATE,
         status VARCHAR(20) DEFAULT 'em_andamento',
         notes TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -148,33 +125,27 @@ import pool from './db';
     `);
   } catch (e) { console.error('[migration] tcv_projects error:', e); }
 
-  // TCV payments table
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tcv_payments (
         id SERIAL PRIMARY KEY,
         project_id INTEGER NOT NULL REFERENCES tcv_projects(id) ON DELETE CASCADE,
-        description TEXT,
-        amount NUMERIC(10,2) NOT NULL,
-        due_date DATE,
-        paid_date DATE,
+        description TEXT, amount NUMERIC(10,2) NOT NULL,
+        due_date DATE, paid_date DATE,
         status VARCHAR(20) DEFAULT 'pendente',
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
   } catch (e) { console.error('[migration] tcv_payments error:', e); }
 
-  // Link opportunities → clients
   try {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
   } catch (e) { console.error('[migration] opportunities client_id error:', e); }
 
-  // Add billing_type to products
   try {
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS billing_type VARCHAR(10) DEFAULT 'mrr'`);
   } catch (e) { console.error('[migration] products billing_type error:', e); }
 
-  // Add negotiation fields to opportunities
   try {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS original_price NUMERIC(10,2)`);
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30)`);
@@ -182,7 +153,6 @@ import pool from './db';
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS payment_notes TEXT`);
   } catch (e) { console.error('[migration] opportunities negotiation fields error:', e); }
 
-  // Seed default pipeline stages if none exist
   try {
     const { rows: [cnt] } = await pool.query<{ c: string }>(`SELECT COUNT(*) as c FROM pipeline_stages`);
     if (Number(cnt.c) === 0) {
@@ -197,7 +167,9 @@ import pool from './db';
       `);
     }
   } catch (e) { console.error('[migration] default pipeline stages error:', e); }
-})();
+
+  console.log('✅ Migrations concluídas');
+}
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
