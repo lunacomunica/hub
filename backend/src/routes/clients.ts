@@ -66,6 +66,60 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /clients/breakeven — data for break-even calculator
+router.get('/breakeven', async (_req: Request, res: Response) => {
+  try {
+    // Current MRR and client count
+    const { rows: [mrrRow] } = await pool.query<{ mrr: string; count: string }>(`
+      SELECT COALESCE(SUM(monthly_fee), 0) as mrr, COUNT(*) as count
+      FROM agency_clients WHERE active = 1
+    `);
+    const currentMrr = Number(mrrRow.mrr);
+    const clientCount = Number(mrrRow.count);
+
+    // Avg shared fixed costs last 3 complete months
+    const { rows: [fixedRow] } = await pool.query<{ avg_fixed: string }>(`
+      SELECT COALESCE(AVG(monthly_total), 0) as avg_fixed
+      FROM (
+        SELECT SUM(amount) as monthly_total
+        FROM financial_expenses
+        WHERE is_fixed = 1 AND is_client_cost = 0
+          AND date >= TO_CHAR(CURRENT_DATE - INTERVAL '3 months', 'YYYY-MM-01')
+          AND date < TO_CHAR(DATE_TRUNC('month', CURRENT_DATE), 'YYYY-MM-DD')
+        GROUP BY TO_CHAR(date::date, 'YYYY-MM')
+        LIMIT 3
+      ) sub
+    `);
+    const avgFixed = Number(fixedRow.avg_fixed);
+
+    // Total direct client costs this month
+    const now = new Date();
+    const { rows: [directRow] } = await pool.query<{ total: string }>(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM client_costs
+      WHERE (month = $1 OR month IS NULL) AND (year = $2 OR year IS NULL)
+    `, [now.getMonth() + 1, now.getFullYear()]);
+    const totalDirect = Number(directRow.total);
+
+    const avgTicket = clientCount > 0 ? currentMrr / clientCount : 0;
+    const directRate = currentMrr > 0 ? totalDirect / currentMrr : 0;
+    const currentRealMargin = currentMrr > 0 ? (currentMrr - avgFixed - totalDirect) / currentMrr : 0;
+
+    res.json({
+      current_mrr: currentMrr,
+      client_count: clientCount,
+      avg_ticket: avgTicket,
+      avg_fixed_costs: avgFixed,
+      total_direct_costs: totalDirect,
+      direct_cost_rate: directRate,
+      current_real_margin_pct: currentRealMargin * 100,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao calcular break-even' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { rows: [client] } = await pool.query<{
@@ -264,60 +318,6 @@ router.post('/:id/plan-change', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Erro ao registrar mudança de plano' });
   } finally {
     db.release();
-  }
-});
-
-// GET /clients/breakeven — data for break-even calculator
-router.get('/breakeven', async (_req: Request, res: Response) => {
-  try {
-    // Current MRR and client count
-    const { rows: [mrrRow] } = await pool.query<{ mrr: string; count: string }>(`
-      SELECT COALESCE(SUM(monthly_fee), 0) as mrr, COUNT(*) as count
-      FROM agency_clients WHERE active = 1
-    `);
-    const currentMrr = Number(mrrRow.mrr);
-    const clientCount = Number(mrrRow.count);
-
-    // Avg shared fixed costs last 3 complete months
-    const { rows: [fixedRow] } = await pool.query<{ avg_fixed: string }>(`
-      SELECT COALESCE(AVG(monthly_total), 0) as avg_fixed
-      FROM (
-        SELECT SUM(amount) as monthly_total
-        FROM financial_expenses
-        WHERE is_fixed = 1 AND is_client_cost = 0
-          AND date >= TO_CHAR(CURRENT_DATE - INTERVAL '3 months', 'YYYY-MM-01')
-          AND date < TO_CHAR(DATE_TRUNC('month', CURRENT_DATE), 'YYYY-MM-DD')
-        GROUP BY TO_CHAR(date::date, 'YYYY-MM')
-        LIMIT 3
-      ) sub
-    `);
-    const avgFixed = Number(fixedRow.avg_fixed);
-
-    // Total direct client costs this month
-    const now = new Date();
-    const { rows: [directRow] } = await pool.query<{ total: string }>(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM client_costs
-      WHERE (month = $1 OR month IS NULL) AND (year = $2 OR year IS NULL)
-    `, [now.getMonth() + 1, now.getFullYear()]);
-    const totalDirect = Number(directRow.total);
-
-    const avgTicket = clientCount > 0 ? currentMrr / clientCount : 0;
-    const directRate = currentMrr > 0 ? totalDirect / currentMrr : 0;
-    const currentRealMargin = currentMrr > 0 ? (currentMrr - avgFixed - totalDirect) / currentMrr : 0;
-
-    res.json({
-      current_mrr: currentMrr,
-      client_count: clientCount,
-      avg_ticket: avgTicket,
-      avg_fixed_costs: avgFixed,
-      total_direct_costs: totalDirect,
-      direct_cost_rate: directRate,
-      current_real_margin_pct: currentRealMargin * 100,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erro ao calcular break-even' });
   }
 });
 
