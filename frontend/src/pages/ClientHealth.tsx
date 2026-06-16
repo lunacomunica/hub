@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert, Info, Briefcase } from 'lucide-react';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert, Info, Briefcase, Pencil } from 'lucide-react';
 import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient, setClientRisk, getTcvProjects, createTcvProject, updateTcvProject, deleteTcvProject, addTcvPayment, updateTcvPayment, deleteTcvPayment } from '../api';
 import type { AgencyClient, ClientCost, TcvProject, TcvPayment } from '../types';
 
@@ -474,7 +474,7 @@ export default function ClientHealth() {
                       ) : (
                         <button onClick={() => handleReactivate(c.id)} disabled={reactivating === c.id} title="Reativar cliente" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded disabled:opacity-40"><RefreshCw size={14} /></button>
                       )}
-                      <button onClick={() => openEdit(c)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><X size={13} className="rotate-45" /></button>
+                      <button onClick={() => openEdit(c)} title="Editar cliente" className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><Pencil size={13} /></button>
                       <button onClick={() => handleDelete(c.id)} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={13} /></button>
                       <button onClick={() => toggleExpand(c.id)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded">
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
