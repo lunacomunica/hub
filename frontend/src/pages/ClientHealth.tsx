@@ -4,7 +4,7 @@ import { getClients, createClient, updateClient, deleteClient, getClientCosts, a
 import type { AgencyClient, ClientCost } from '../types';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const pct = (v: number) => `${v.toFixed(1)}%`;
+const pct = (v: number | string) => `${Number(v).toFixed(1)}%`;
 
 const HEALTH_CONFIG = {
   saudavel: {
@@ -113,7 +113,7 @@ export default function ClientHealth() {
   };
 
   const activeClients = clients.filter(c => c.active);
-  const totalMRR = activeClients.reduce((s, c) => s + c.monthly_fee, 0);
+  const totalMRR = activeClients.reduce((s, c) => s + Number(c.monthly_fee), 0);
   const avgMargin = activeClients.length > 0
     ? activeClients.reduce((s, c) => s + (c.margin_percent || 0), 0) / activeClients.length
     : 0;
