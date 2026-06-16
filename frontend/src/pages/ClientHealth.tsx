@@ -434,13 +434,13 @@ export default function ClientHealth() {
               <Field label="Motivo do cancelamento">
                 <select value={churnReason} onChange={e => setChurnReason(e.target.value)} className="input-dark w-full">
                   <option value="">Não informado</option>
-                  <option value="preco">Preço</option>
-                  <option value="resultado">Resultado insatisfatório</option>
-                  <option value="concorrente">Foi para concorrente</option>
-                  <option value="encerrou">Encerrou a empresa</option>
-                  <option value="pausou">Pausou investimentos</option>
-                  <option value="servico_interno">Levou serviço para interno</option>
-                  <option value="outro">Outro</option>
+                  <option value="Preço">Preço</option>
+                  <option value="Resultado insatisfatório">Resultado insatisfatório</option>
+                  <option value="Concorrência">Concorrência</option>
+                  <option value="Corte de orçamento">Corte de orçamento</option>
+                  <option value="Fechamento da empresa">Fechamento da empresa</option>
+                  <option value="Decisão interna">Decisão interna</option>
+                  <option value="Outros">Outros</option>
                 </select>
               </Field>
               <Field label="Observações (opcional)">
@@ -448,14 +448,14 @@ export default function ClientHealth() {
               </Field>
               <Field label="Potencial de reativação">
                 <div className="flex gap-2">
-                  {[['nao', 'Não'], ['baixo', 'Baixo'], ['medio', 'Médio'], ['alto', 'Alto']] .map(([v, l]) => (
+                  {[['nao', 'Não'], ['baixa', 'Baixo'], ['media', 'Médio'], ['alta', 'Alto']] .map(([v, l]) => (
                     <button
                       key={v}
                       onClick={() => setChurnReactivation(v)}
                       className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${churnReactivation === v
-                        ? v === 'alto' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                          : v === 'medio' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                          : v === 'baixo' ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                        ? v === 'alta' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                          : v === 'media' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                          : v === 'baixa' ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
                           : 'bg-slate-500/20 border-slate-500/50 text-slate-400'
                         : 'border-white/10 text-slate-500 hover:border-white/20'}`}
                     >{l}</button>
