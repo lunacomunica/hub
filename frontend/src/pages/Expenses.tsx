@@ -43,9 +43,10 @@ export default function Expenses() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'supplier' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
+  const [bulkSupplier, setBulkSupplier] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
@@ -137,6 +138,8 @@ export default function Expenses() {
     } else if (bulkModal === 'categorize') {
       if (bulkCategoryId === '') return;
       updates.category_id = bulkCategoryId as number;
+    } else if (bulkModal === 'supplier') {
+      updates.supplier = bulkSupplier.trim();
     }
     setBulkSaving(true);
     try {
@@ -144,6 +147,7 @@ export default function Expenses() {
       setBulkModal(null);
       setBulkDescription('');
       setBulkCategoryId('');
+      setBulkSupplier('');
       clearSelection();
       load();
     } catch {
@@ -250,6 +254,7 @@ export default function Expenses() {
           <div className="flex items-center gap-2 ml-2">
             <button onClick={() => { setBulkDescription(''); setBulkModal('rename'); }} className="btn-ghost text-xs px-3 py-1">Renomear</button>
             <button onClick={() => { setBulkCategoryId(''); setBulkModal('categorize'); }} className="btn-ghost text-xs px-3 py-1">Categorizar</button>
+            <button onClick={() => { setBulkSupplier(''); setBulkModal('supplier'); }} className="btn-ghost text-xs px-3 py-1">Fornecedor</button>
           </div>
           <button onClick={clearSelection} className="ml-auto text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
@@ -470,6 +475,37 @@ export default function Expenses() {
             <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
               <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
               <button onClick={handleBulkSave} disabled={bulkSaving || bulkCategoryId === ''} className="btn-primary text-sm disabled:opacity-50">
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk supplier modal */}
+      {bulkModal === 'supplier' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white">Fornecedor — {selected.size} {selected.size === 1 ? 'despesa' : 'despesas'}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5">
+              <Field label="Fornecedor">
+                <input
+                  value={bulkSupplier}
+                  onChange={e => setBulkSupplier(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleBulkSave()}
+                  placeholder="Nome do fornecedor..."
+                  className="input-dark w-full"
+                  autoFocus
+                />
+              </Field>
+              <p className="text-xs text-slate-500 mt-2">Deixe em branco para remover o fornecedor das selecionadas.</p>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button onClick={handleBulkSave} disabled={bulkSaving} className="btn-primary text-sm disabled:opacity-50">
                 {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
             </div>

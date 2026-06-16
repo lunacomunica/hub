@@ -61,6 +61,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
     const allowed: Record<string, unknown> = {};
     if (updates.description !== undefined) allowed['description'] = updates.description;
     if (updates.category_id !== undefined) allowed['category_id'] = updates.category_id ?? null;
+    if (updates.supplier !== undefined) allowed['supplier'] = updates.supplier || null;
 
     if (Object.keys(allowed).length === 0) {
       return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
