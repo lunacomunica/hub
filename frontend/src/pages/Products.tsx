@@ -42,7 +42,7 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState<{ name: string; price: number; category: string; description: string; active: boolean; billing_type: 'mrr' | 'tcv' | 'ambos' }>(empty);
   const [filterCat, setFilterCat] = useState('');
 
   const load = async () => {

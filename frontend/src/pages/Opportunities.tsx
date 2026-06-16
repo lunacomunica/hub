@@ -57,7 +57,7 @@ const LOST_REASONS = [
   'Outro',
 ];
 
-const EMPTY: Partial<Opportunity & { product_id?: number }> = {
+const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   title: '', client_name: '', value: 0, stage: 'prospeccao', probability: 10,
   temperature: 'morno', next_followup: '', owner_id: null, source: '',
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
@@ -390,7 +390,7 @@ export default function Opportunities() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
-  const [form, setForm] = useState<Partial<Opportunity & { product_id?: number }>>(EMPTY);
+  const [form, setForm] = useState<Partial<Opportunity & { product_id?: number | null }>>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState<'kanban' | 'won' | 'lost'>('kanban');
 

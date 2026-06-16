@@ -154,7 +154,7 @@ export interface Opportunity {
   activity_count: number;
   expected_close_date: string | null;
   service_type: string | null;
-  product_id: number | null;
+  product_id: number | null | undefined;
   lost_reason: string | null;
   notes: string | null;
   client_id: number | null;
