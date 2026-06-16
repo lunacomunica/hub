@@ -61,11 +61,11 @@ export default function SalesPlanning() {
     try {
       const [gd, prods, opps] = await Promise.all([
         authFetch(`${API}/sales-goals/${month}/${year}`).then(r => r.json()),
-        authFetch(`${API}/products?active=true`).then(r => r.json()),
+        authFetch(`${API}/products`).then(r => r.json()),
         authFetch(`${API}/opportunities`).then(r => r.json()),
       ]);
       setGoalData(gd);
-      setProducts(prods);
+      setProducts(Array.isArray(prods) ? prods.filter((p: Product) => p.active) : []);
       setItems(gd.items.length > 0 ? gd.items : []);
       setNotes(gd.goal?.notes || '');
 
