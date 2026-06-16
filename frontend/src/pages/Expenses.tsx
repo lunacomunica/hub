@@ -221,6 +221,21 @@ export default function Expenses() {
     }, 200);
   };
 
+  const [formSupplierSuggestions, setFormSupplierSuggestions] = useState<string[]>([]);
+  const formSupplierTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFormSupplierChange = (val: string) => {
+    setForm(f => ({ ...f, supplier: val }));
+    if (formSupplierTimeout.current) clearTimeout(formSupplierTimeout.current);
+    if (val.length < 1) { setFormSupplierSuggestions([]); return; }
+    formSupplierTimeout.current = setTimeout(async () => {
+      try {
+        const results = await searchSuppliers(val);
+        setFormSupplierSuggestions(results);
+      } catch { setFormSupplierSuggestions([]); }
+    }, 200);
+  };
+
   const [syncing, setSyncing] = useState(false);
   const handleSyncEmployees = async () => {
     setSyncing(true);
@@ -496,7 +511,26 @@ export default function Expenses() {
                   />
                 </Field>
                 <Field label="Fornecedor">
-                  <input value={form.supplier || ''} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} className="input-dark w-full" />
+                  <div className="relative">
+                    <input
+                      value={form.supplier || ''}
+                      onChange={e => handleFormSupplierChange(e.target.value)}
+                      onBlur={() => setTimeout(() => setFormSupplierSuggestions([]), 150)}
+                      className="input-dark w-full"
+                      autoComplete="off"
+                    />
+                    {formSupplierSuggestions.length > 0 && (
+                      <ul className="absolute z-50 w-full mt-1 rounded-lg shadow-lg overflow-hidden text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+                        {formSupplierSuggestions.map(s => (
+                          <li
+                            key={s}
+                            onMouseDown={() => { setForm(f => ({ ...f, supplier: s })); setFormSupplierSuggestions([]); }}
+                            className="px-3 py-2 cursor-pointer hover:bg-white/5 text-slate-200"
+                          >{s}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">
