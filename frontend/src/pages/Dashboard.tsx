@@ -3,9 +3,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar,
 } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Percent, AlertCircle, RefreshCw, Target } from 'lucide-react';
-import { getDashboard } from '../api';
-import type { DashboardData } from '../types';
+import { TrendingUp, TrendingDown, DollarSign, Percent, AlertCircle, RefreshCw, Target, X, ChevronRight } from 'lucide-react';
+import { getDashboard, getRevenues, getExpenses } from '../api';
+import type { DashboardData, Revenue, Expense } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -26,6 +26,11 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Drill-down panel
+  const [drilldown, setDrilldown] = useState<'revenue' | 'expense' | null>(null);
+  const [drillItems, setDrillItems] = useState<(Revenue | Expense)[]>([]);
+  const [drillLoading, setDrillLoading] = useState(false);
   const { theme } = useTheme();
   const tooltipStyle = theme === 'dark'
     ? { backgroundColor: '#0c0c26', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#e2e8f0' }
@@ -74,6 +79,25 @@ export default function Dashboard() {
   }
 
   if (!data) return null;
+
+  const openDrilldown = async (type: 'revenue' | 'expense') => {
+    setDrilldown(type);
+    setDrillItems([]);
+    setDrillLoading(true);
+    try {
+      const filters = viewMode === 'monthly'
+        ? { month: month, year: year }
+        : { year: year };
+      if (type === 'revenue') {
+        const rows = await getRevenues(filters);
+        setDrillItems(rows);
+      } else {
+        const rows = await getExpenses(filters);
+        setDrillItems(rows);
+      }
+    } catch { /* ignore */ }
+    finally { setDrillLoading(false); }
+  };
 
   const { summary, monthly_trend, revenue_by_category, expense_by_category, top_clients, opportunities_summary, goal_progress, overdue } = data;
 
@@ -147,8 +171,8 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Receita Total" value={brl(summary.total_revenue)} color="emerald" icon={<TrendingUp size={20} />} />
-        <KpiCard label="Despesas Total" value={brl(summary.total_expenses)} color="red" icon={<TrendingDown size={20} />} />
+        <KpiCard label="Receita Total" value={brl(summary.total_revenue)} color="emerald" icon={<TrendingUp size={20} />} onClick={() => openDrilldown('revenue')} />
+        <KpiCard label="Despesas Total" value={brl(summary.total_expenses)} color="red" icon={<TrendingDown size={20} />} onClick={() => openDrilldown('expense')} />
         <KpiCard
           label="Lucro Líquido"
           value={brl(summary.net_profit)}
@@ -295,11 +319,112 @@ export default function Dashboard() {
           </table>
         )}
       </div>
+
+      {/* Drilldown panel */}
+      {drilldown && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setDrilldown(null)} />
+          {/* Drawer */}
+          <div className="fixed top-0 right-0 h-full w-full max-w-xl z-50 flex flex-col shadow-2xl" style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-card)' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border-card)' }}>
+              <div>
+                <h2 className="font-semibold text-white">
+                  {drilldown === 'revenue' ? '📥 Receitas' : '📤 Despesas'}
+                  <span className="text-slate-400 font-normal text-sm ml-2">
+                    {viewMode === 'monthly' ? `${String(month).padStart(2,'0')}/${year}` : String(year)}
+                  </span>
+                </h2>
+                {!drillLoading && (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {drillItems.length} lançamento{drillItems.length !== 1 ? 's' : ''} · Total: <span className={drilldown === 'revenue' ? 'text-emerald-400' : 'text-red-400'}>
+                      {brl(drillItems.reduce((s, r) => s + Number(r.amount), 0))}
+                    </span>
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setDrilldown(null)} className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-white/5">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto">
+              {drillLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                </div>
+              ) : drillItems.length === 0 ? (
+                <div className="text-center py-16 text-slate-500 text-sm">Nenhum lançamento encontrado</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0" style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-card)' }}>
+                    <tr>
+                      <th className="th text-left px-4 py-3">Data</th>
+                      <th className="th text-left px-4 py-3">Descrição</th>
+                      <th className="th text-left px-4 py-3">Categoria</th>
+                      <th className="th text-right px-4 py-3">Valor</th>
+                      <th className="th text-center px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drillItems.map((r, i) => {
+                      const STATUS_COLOR: Record<string, string> = {
+                        pago: 'badge badge-green', pendente: 'badge badge-amber',
+                        atrasado: 'badge badge-red', cancelado: 'badge badge-slate',
+                      };
+                      const STATUS_LABEL: Record<string, string> = {
+                        pago: 'Pago', pendente: 'Pendente', atrasado: 'Atrasado', cancelado: 'Cancelado',
+                      };
+                      const catName = (r as Revenue).category_name ?? null;
+                      const catColor = (r as Revenue).category_color ?? '#6366f1';
+                      const dateStr = r.date ? r.date.slice(0, 10).split('-').reverse().join('/') : '—';
+                      return (
+                        <tr key={i} className="tr" style={{ borderBottom: '1px solid var(--border-card)' }}>
+                          <td className="td px-4 py-2.5 text-slate-400 whitespace-nowrap">{dateStr}</td>
+                          <td className="td px-4 py-2.5 font-medium text-slate-200 max-w-[180px]">
+                            <span className="line-clamp-2">{r.description}</span>
+                          </td>
+                          <td className="td px-4 py-2.5">
+                            {catName ? (
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: catColor + '22', color: catColor }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: catColor }} />
+                                {catName}
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className={`td px-4 py-2.5 text-right font-semibold whitespace-nowrap ${drilldown === 'revenue' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {brl(r.amount)}
+                          </td>
+                          <td className="td px-4 py-2.5 text-center">
+                            <span className={STATUS_COLOR[r.status] || 'badge badge-slate'}>{STATUS_LABEL[r.status] || r.status}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer total */}
+            {!drillLoading && drillItems.length > 0 && (
+              <div className="px-5 py-4 shrink-0 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-card)' }}>
+                <span className="text-sm text-slate-400">{drillItems.length} lançamentos</span>
+                <span className={`text-lg font-semibold ${drilldown === 'revenue' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {brl(drillItems.reduce((s, r) => s + Number(r.amount), 0))}
+                </span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function KpiCard({ label, value, color, icon }: { label: string; value: string; color: string; icon: React.ReactNode }) {
+function KpiCard({ label, value, color, icon, onClick }: { label: string; value: string; color: string; icon: React.ReactNode; onClick?: () => void }) {
   const iconColors: Record<string, string> = {
     emerald: 'icon-green',
     red: 'icon-red',
@@ -307,10 +432,16 @@ function KpiCard({ label, value, color, icon }: { label: string; value: string; 
     amber: 'icon-amber',
   };
   return (
-    <div className="card p-4 overflow-hidden min-w-0">
+    <div
+      className={`card p-4 overflow-hidden min-w-0 ${onClick ? 'cursor-pointer hover:ring-1 hover:ring-blue-500/40 transition-all' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="label-dark truncate pr-2">{label}</span>
-        <div className={`${iconColors[color] || 'icon-blue'} shrink-0`}>{icon}</div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className={iconColors[color] || 'icon-blue'}>{icon}</div>
+          {onClick && <ChevronRight size={13} className="text-slate-500" />}
+        </div>
       </div>
       <div className="font-light tracking-tight leading-none truncate" style={{ fontSize: 'clamp(1.1rem, 2.6vw, 1.9rem)', color: 'var(--text-metric)' }}>{value}</div>
     </div>
