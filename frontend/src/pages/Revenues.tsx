@@ -46,6 +46,7 @@ export default function Revenues() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
 
+  const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [filterStatus, setFilterStatus] = useState('');
@@ -65,7 +66,7 @@ export default function Revenues() {
     setLoading(true); setError('');
     try {
       const [revsResult, catsResult, clsResult] = await Promise.allSettled([
-        getRevenues({ month: filterMonth, year: filterYear, status: filterStatus || undefined }),
+        getRevenues({ month: viewMode === 'annual' ? undefined : filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('revenue'),
         getClients(),
       ]);
@@ -80,7 +81,7 @@ export default function Revenues() {
     }
   };
 
-  useEffect(() => { load(); }, [filterMonth, filterYear, filterStatus]);
+  useEffect(() => { load(); }, [viewMode, filterMonth, filterYear, filterStatus]);
 
   // Filtered items (frontend search)
   const visibleItems = useMemo(() => {
@@ -230,11 +231,24 @@ export default function Revenues() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input-dark text-sm py-1.5">
-          {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-        </select>
+      {/* Filters — compact single row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Toggle Mensal / Anual */}
+        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-input)' }}>
+          <button onClick={() => setViewMode('monthly')} className="text-sm px-3 py-1.5 transition-colors whitespace-nowrap"
+            style={{ background: viewMode === 'monthly' ? 'var(--primary,#6366f1)' : 'transparent', color: viewMode === 'monthly' ? '#fff' : 'var(--text-secondary)' }}>
+            Mensal
+          </button>
+          <button onClick={() => setViewMode('annual')} className="text-sm px-3 py-1.5 transition-colors whitespace-nowrap"
+            style={{ background: viewMode === 'annual' ? 'var(--primary,#6366f1)' : 'transparent', color: viewMode === 'annual' ? '#fff' : 'var(--text-secondary)' }}>
+            Anual
+          </button>
+        </div>
+        {viewMode === 'monthly' && (
+          <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input-dark text-sm py-1.5">
+            {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        )}
         <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="input-dark text-sm py-1.5">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>

@@ -36,6 +36,7 @@ export default function Expenses() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
 
+  const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly');
   const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [filterStatus, setFilterStatus] = useState('');
@@ -55,7 +56,7 @@ export default function Expenses() {
     setLoading(true); setError('');
     try {
       const [expsResult, catsResult, cdsResult] = await Promise.allSettled([
-        getExpenses({ month: filterMonth, year: filterYear, status: filterStatus || undefined }),
+        getExpenses({ month: viewMode === 'annual' ? undefined : filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('expense'),
         getCards(true),
       ]);
@@ -70,7 +71,7 @@ export default function Expenses() {
     }
   };
 
-  useEffect(() => { load(); }, [filterMonth, filterYear, filterStatus]);
+  useEffect(() => { load(); }, [viewMode, filterMonth, filterYear, filterStatus]);
 
   // Filtered list (frontend search)
   const filtered = items.filter(r => {
@@ -211,10 +212,24 @@ export default function Expenses() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input-dark text-sm py-1.5">
-          {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-        </select>
+      {/* Filters — compact single row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Toggle Mensal / Anual */}
+        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-input)' }}>
+          <button onClick={() => setViewMode('monthly')} className="text-sm px-3 py-1.5 transition-colors whitespace-nowrap"
+            style={{ background: viewMode === 'monthly' ? 'var(--primary,#6366f1)' : 'transparent', color: viewMode === 'monthly' ? '#fff' : 'var(--text-secondary)' }}>
+            Mensal
+          </button>
+          <button onClick={() => setViewMode('annual')} className="text-sm px-3 py-1.5 transition-colors whitespace-nowrap"
+            style={{ background: viewMode === 'annual' ? 'var(--primary,#6366f1)' : 'transparent', color: viewMode === 'annual' ? '#fff' : 'var(--text-secondary)' }}>
+            Anual
+          </button>
+        </div>
+        {viewMode === 'monthly' && (
+          <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="input-dark text-sm py-1.5">
+            {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        )}
         <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="input-dark text-sm py-1.5">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
@@ -225,14 +240,9 @@ export default function Expenses() {
           <option value="atrasado">Atrasado</option>
           <option value="cancelado">Cancelado</option>
         </select>
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por descrição ou fornecedor..."
-            className="input-dark text-sm py-1.5 pl-8 w-full"
-          />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por descrição ou fornecedor..." className="input-dark text-sm py-1.5 pl-8 w-full" />
         </div>
         <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400"><RefreshCw size={15} /></button>
       </div>
