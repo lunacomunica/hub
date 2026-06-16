@@ -86,6 +86,7 @@ export default function Expenses() {
   };
 
   useEffect(() => { load(); }, [viewMode, filterMonth, filterYear, filterStatus]);
+  useEffect(() => { setSelected(new Set()); }, [viewMode, filterMonth, filterYear, filterStatus, search]);
 
   // Filtered list (frontend search)
   const filtered = items.filter(r => {
