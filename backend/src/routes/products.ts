@@ -33,14 +33,14 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, price, category, description, active } = req.body;
+    const { name, price, category, description, active, billing_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
     const activeVal = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [created] } = await pool.query(
-      `INSERT INTO products (name, price, category, description, active)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO products (name, price, category, description, active, billing_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, price || 0, category || null, description || null, activeVal]
+      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr']
     );
     res.status(201).json(created);
   } catch (err) {
@@ -51,14 +51,14 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { name, price, category, description, active } = req.body;
+    const { name, price, category, description, active, billing_type } = req.body;
     const activeVal = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [existing] } = await pool.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Produto não encontrado' });
     await pool.query(
-      `UPDATE products SET name = $1, price = $2, category = $3, description = $4, active = $5, updated_at = NOW()
-       WHERE id = $6`,
-      [name, price || 0, category || null, description || null, activeVal, req.params.id]
+      `UPDATE products SET name = $1, price = $2, category = $3, description = $4, active = $5, billing_type = $6, updated_at = NOW()
+       WHERE id = $7`,
+      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr', req.params.id]
     );
     const { rows: [updated] } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     res.json(updated);

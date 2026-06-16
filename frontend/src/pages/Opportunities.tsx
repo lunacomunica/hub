@@ -14,7 +14,7 @@ import {
 import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
 
-interface Product { id: number; name: string; price: number; category: string | null }
+interface Product { id: number; name: string; price: number; category: string | null; billing_type?: 'mrr' | 'tcv' | 'ambos' }
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
@@ -458,14 +458,16 @@ export default function Opportunities() {
   };
 
   const openConvertModal = (opp: Opportunity, pendingStage?: string) => {
-    const isOnlyTcv = !opp.value || opp.value < 500; // heuristic — low value = likely project
+    // Try to infer billing_type from the linked product
+    const linkedProduct = opp.product_id ? products.find(p => p.id === opp.product_id) : null;
+    const billingType: 'mrr' | 'tcv' | 'ambos' = linkedProduct?.billing_type || 'mrr';
     setConvertForm({
-      client_type: 'mrr',
+      client_type: billingType,
       monthly_fee: Number(opp.value || 0),
       margin_target: 30,
       project_title: opp.title,
       contract_value: Number(opp.value || 0),
-      service_type: opp.service_type || '',
+      service_type: opp.service_type || (linkedProduct?.category || ''),
       start_date: new Date().toISOString().split('T')[0],
     });
     setConvertModal({ opp, pendingStage });

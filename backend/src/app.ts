@@ -168,6 +168,11 @@ import pool from './db';
   try {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
   } catch (e) { console.error('[migration] opportunities client_id error:', e); }
+
+  // Add billing_type to products
+  try {
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS billing_type VARCHAR(10) DEFAULT 'mrr'`);
+  } catch (e) { console.error('[migration] products billing_type error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────

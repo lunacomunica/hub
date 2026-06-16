@@ -25,9 +25,16 @@ interface Product {
   category: string | null;
   description: string | null;
   active: number;
+  billing_type: 'mrr' | 'tcv' | 'ambos';
 }
 
-const empty = { name: '', price: 0, category: '', description: '', active: true };
+const BILLING_CONFIG = {
+  mrr:   { label: 'MRR',       color: '#3b82f6', bg: 'rgba(59,130,246,0.15)'  },
+  tcv:   { label: 'TCV',       color: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
+  ambos: { label: 'MRR + TCV', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
+};
+
+const empty = { name: '', price: 0, category: '', description: '', active: true, billing_type: 'mrr' as const };
 
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -54,7 +61,7 @@ export default function Products() {
   const openNew = () => { setEditing(null); setForm(empty); setShowModal(true); };
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({ name: p.name, price: p.price, category: p.category || '', description: p.description || '', active: !!p.active });
+    setForm({ name: p.name, price: p.price, category: p.category || '', description: p.description || '', active: !!p.active, billing_type: p.billing_type || 'mrr' });
     setShowModal(true);
   };
 
@@ -200,6 +207,7 @@ export default function Products() {
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
                   <th className="th text-left px-4 py-3">Nome</th>
+                  <th className="th text-left px-4 py-3">Tipo</th>
                   <th className="th text-left px-4 py-3">Categoria</th>
                   <th className="th text-left px-4 py-3">Descrição</th>
                   <th className="th text-right px-4 py-3">Preço</th>
@@ -207,9 +215,14 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody>
-                {active.map(p => (
+                {active.map(p => {
+                  const bt = BILLING_CONFIG[p.billing_type || 'mrr'];
+                  return (
                   <tr key={p.id} className="tr">
                     <td className="td px-4 py-3 font-medium text-slate-200">{p.name}</td>
+                    <td className="td px-4 py-3">
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: bt.bg, color: bt.color }}>{bt.label}</span>
+                    </td>
                     <td className="td px-4 py-3">
                       {p.category ? (() => {
                         const cat = categories.find(c => c.name === p.category);
@@ -230,7 +243,8 @@ export default function Products() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -272,7 +286,27 @@ export default function Products() {
               <Field label="Nome do serviço *">
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Plano Start, Gestão Eleva..." className="input-dark w-full" />
               </Field>
-              <Field label="Preço mensal (R$)">
+              <div>
+                <label className="label-dark mb-2 block">Tipo de cobrança</label>
+                <div className="flex gap-2">
+                  {(['mrr', 'tcv', 'ambos'] as const).map(v => {
+                    const bt = BILLING_CONFIG[v];
+                    const active = (form.billing_type || 'mrr') === v;
+                    return (
+                      <button key={v} type="button" onClick={() => setForm(f => ({ ...f, billing_type: v }))}
+                        className="flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors"
+                        style={{
+                          background: active ? bt.bg : 'transparent',
+                          border: `1px solid ${active ? bt.color + '80' : 'rgba(255,255,255,0.08)'}`,
+                          color: active ? bt.color : '#64748b',
+                        }}>
+                        {bt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Field label="Preço (R$)">
                 <input type="number" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
               </Field>
               <Field label="Categoria">
