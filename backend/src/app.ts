@@ -66,6 +66,27 @@ app.use('/api/auth/login', rateLimit({
   message: { error: 'Muitas tentativas de login. Aguarde 15 minutos.' },
 }));
 
+// ─── One-time data migrations (safe, idempotent) ─────────────────────────────
+import pool from './db';
+(async () => {
+  try {
+    // Merge "Marketing Próprio" + "Mídia/Ads" → "Marketing e Anúncios"
+    await pool.query(`
+      INSERT INTO financial_categories (name, type, color)
+      VALUES ('Marketing e Anúncios', 'expense', '#f59e0b')
+      ON CONFLICT (name, type) DO NOTHING
+    `);
+    await pool.query(`
+      DELETE FROM financial_categories
+      WHERE name IN ('Marketing Próprio', 'Mídia/Ads')
+        AND type = 'expense'
+        AND NOT EXISTS (
+          SELECT 1 FROM financial_expenses WHERE category_id = financial_categories.id
+        )
+    `);
+  } catch { /* ignore if table doesn't exist yet */ }
+})();
+
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
 
