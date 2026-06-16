@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, X, Check } from 'lucide-react';
 import { previewImport } from '../api';
+import CategorySelect from './CategorySelect';
+import type { Category } from '../types';
 
 interface ParsedRow {
   date: string;
@@ -11,12 +13,6 @@ interface ParsedRow {
 interface ImportRow extends ParsedRow {
   selected: boolean;
   category_id?: number;
-}
-
-interface Category {
-  id: number;
-  name: string;
-  type: string;
 }
 
 interface Props {
@@ -36,7 +32,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
-  const filteredCategories = categories.filter(c => c.type === (type === 'revenue' ? 'revenue' : 'expense'));
+  const [localCategories, setLocalCategories] = useState(categories.filter(c => c.type === (type === 'revenue' ? 'revenue' : 'expense')));
 
   const processFile = async (file: File) => {
     setLoading(true);
@@ -159,16 +155,15 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                 </label>
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Categoria para todos:</span>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      value={globalCategory || ''}
-                      onChange={e => applyGlobalCategory(Number(e.target.value))}
-                      className="input-dark"
-                      style={{ fontSize: '0.8125rem', padding: '4px 28px 4px 8px', minWidth: '160px' }}
-                    >
-                      <option value="">Sem categoria</option>
-                      {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                  <div style={{ minWidth: '200px' }}>
+                    <CategorySelect
+                      value={globalCategory}
+                      onChange={id => { if (id) applyGlobalCategory(id); else setGlobalCategory(undefined); }}
+                      categories={localCategories}
+                      onCategoryCreated={cat => setLocalCategories(prev => [...prev, cat])}
+                      type={type === 'revenue' ? 'revenue' : 'expense'}
+                      style={{ fontSize: '0.8125rem', padding: '4px 28px 4px 8px' }}
+                    />
                   </div>
                 </div>
               </div>
@@ -208,7 +203,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                             style={{ fontSize: '0.75rem', padding: '3px 6px', minWidth: '120px' }}
                           >
                             <option value="">&mdash;</option>
-                            {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {localCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
                         </td>
                       </tr>

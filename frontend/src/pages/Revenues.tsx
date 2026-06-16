@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag,
 import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues } from '../api';
 import type { Revenue, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
+import CategorySelect from '../components/CategorySelect';
 
 type RevenueRow = Revenue & { client_id?: number | null; client_display_name?: string | null };
 
@@ -434,10 +435,13 @@ export default function Revenues() {
                   )}
                 </Field>
                 <Field label="Categoria">
-                  <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value ? Number(e.target.value) : undefined }))} className="input-dark w-full">
-                    <option value="">Sem categoria</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <CategorySelect
+                    value={form.category_id}
+                    onChange={id => setForm(f => ({ ...f, category_id: id }))}
+                    categories={categories}
+                    onCategoryCreated={cat => setCategories(prev => [...prev, cat])}
+                    type="revenue"
+                  />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-3">

@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Uplo
 import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, getCards, CompanyCard, bulkImportExpenses } from '../api';
 import type { Expense, Category } from '../types';
 import ImportModal from '../components/ImportModal';
+import CategorySelect from '../components/CategorySelect';
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
@@ -353,10 +354,13 @@ export default function Expenses() {
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Categoria">
-                  <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value ? Number(e.target.value) : undefined }))} className="input-dark w-full">
-                    <option value="">Sem categoria</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <CategorySelect
+                    value={form.category_id}
+                    onChange={id => setForm(f => ({ ...f, category_id: id }))}
+                    categories={categories}
+                    onCategoryCreated={cat => setCategories(prev => [...prev, cat])}
+                    type="expense"
+                  />
                 </Field>
                 <Field label="Fornecedor">
                   <input value={form.supplier || ''} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} className="input-dark w-full" />
