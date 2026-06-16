@@ -4,7 +4,7 @@ import { getCategories } from '../api';
 import type { Category } from '../types';
 
 const BASE = '/api/products';
-const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function authFetch(url: string, options?: RequestInit) {
   const token = localStorage.getItem('auth-token');
@@ -86,12 +86,12 @@ export default function Products() {
     .map(c => ({
       ...c,
       count: products.filter(p => p.active && p.category === c.name).length,
-      mrr: products.filter(p => p.active && p.category === c.name).reduce((s, p) => s + p.price, 0),
+      mrr: products.filter(p => p.active && p.category === c.name).reduce((s, p) => s + Number(p.price), 0),
     }))
     .filter(c => c.count > 0)
     .sort((a, b) => b.mrr - a.mrr);
 
-  const allActiveMrr = products.filter(p => p.active).reduce((s, p) => s + p.price, 0);
+  const allActiveMrr = products.filter(p => p.active).reduce((s, p) => s + Number(p.price), 0);
 
   return (
     <div className="space-y-6">
@@ -140,12 +140,12 @@ export default function Products() {
         <div className="card p-4">
           <div className="label-dark mb-1">Ticket médio</div>
           <div className="metric">
-            {active.length > 0 ? fmt(active.reduce((s, p) => s + p.price, 0) / active.length) : '—'}
+            {active.length > 0 ? fmt(active.reduce((s, p) => s + Number(p.price), 0) / active.length) : '—'}
           </div>
         </div>
         <div className="card p-4">
           <div className="label-dark mb-1">Receita potencial/mês</div>
-          <div className="metric text-emerald-400">{fmt(active.reduce((s, p) => s + p.price, 0))}</div>
+          <div className="metric text-emerald-400">{fmt(active.reduce((s, p) => s + Number(p.price), 0))}</div>
         </div>
       </div>
 
