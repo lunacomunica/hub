@@ -27,6 +27,7 @@ export default function Configuracoes() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [editType, setEditType] = useState<'revenue' | 'expense'>('revenue');
   const [catSaving, setCatSaving] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('#6366f1');
@@ -90,6 +91,7 @@ export default function Configuracoes() {
     setEditingId(c.id);
     setEditName(c.name);
     setEditColor(c.color || '#6366f1');
+    setEditType(c.type as 'revenue' | 'expense');
     setCatError('');
   };
 
@@ -100,7 +102,7 @@ export default function Configuracoes() {
     setCatSaving(true);
     setCatError('');
     try {
-      await updateCategory(id, { name: editName.trim(), color: editColor });
+      await updateCategory(id, { name: editName.trim(), color: editColor, type: editType });
       setEditingId(null);
       loadCategories();
     } catch (e: unknown) {
