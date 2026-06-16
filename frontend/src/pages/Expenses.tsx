@@ -427,7 +427,7 @@ export default function Expenses() {
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} className="tr">
+                <tr key={r.id} className={`tr transition-colors ${selected.has(r.id) ? 'bg-indigo-500/10 border-l-2 border-indigo-500' : ''}`}>
                   <td className="td px-4 py-3 w-8">
                     <input
                       type="checkbox"
