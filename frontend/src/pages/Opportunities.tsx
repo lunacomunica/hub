@@ -422,19 +422,21 @@ export default function Opportunities() {
 
   const load = async () => {
     setLoading(true);
-    try {
-      const [opps, allProds, stgs, usrs] = await Promise.all([
-        getOpportunities(), getProducts(), getPipelineStages(), getUsers(),
-      ]);
-      const prods = allProds.filter(p => p.active);
-      setData(opps); setProducts(prods); setStages(stgs); setUsers(usrs);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-    // Load settings separately so a failure here doesn't break the main data load
-    try {
-      const settings = await getCompanySettings();
-      if (settings.lead_sources?.length) setSources(settings.lead_sources);
-    } catch { /* use default sources */ }
+    // Each request is independent — one failure won't block the others
+    const [opps, allProds, stgs, usrs, settings] = await Promise.all([
+      getOpportunities().catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
+      getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
+      getPipelineStages().catch(e => { console.error('stages', e); return [] as any[]; }),
+      getUsers().catch(e => { console.error('users', e); return [] as any[]; }),
+      getCompanySettings().catch(() => ({} as any)),
+    ]);
+    const prods = Array.isArray(allProds) ? allProds.filter(p => p.active) : [];
+    setData(opps);
+    setProducts(prods);
+    setStages(stgs);
+    setUsers(usrs);
+    if (settings?.lead_sources?.length) setSources(settings.lead_sources);
+    setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
