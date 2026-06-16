@@ -11,7 +11,7 @@ router.get('/', async (req: Request, res: Response) => {
     let paramIdx = 1;
     if (active !== undefined) {
       query += ` AND active = $${paramIdx++}`;
-      params.push(active === 'true' || active === '1' ? true : false);
+      params.push(active === 'true' || active === '1' ? 1 : 0);
     }
     query += ' ORDER BY name';
     const { rows } = await pool.query(query, params);
