@@ -224,3 +224,33 @@ export const deleteUser = (id: number) => req(`/auth/users/${id}`, { method: 'DE
 // Auth / Profile
 export const updateProfile = (data: { name?: string; current_password?: string; new_password?: string }): Promise<{ id: number; name: string; email: string; role: string }> =>
   req('/auth/profile', { method: 'PUT', body: JSON.stringify(data) });
+
+// Import
+export async function previewImport(file: File): Promise<{ rows: { date: string; description: string; amount: number }[]; total: number }> {
+  const token = localStorage.getItem('auth-token');
+  const formData = new FormData();
+  formData.append('file', file);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch('/api/import/preview', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Erro ao processar arquivo' }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export const bulkImportRevenues = (items: { description: string; date: string; amount: number; category_id?: number }[]): Promise<{ imported: number }> =>
+  req('/revenues/bulk-import', { method: 'POST', body: JSON.stringify({ items }) });
+
+export const bulkImportExpenses = (items: { description: string; date: string; amount: number; category_id?: number }[]): Promise<{ imported: number }> =>
+  req('/expenses/bulk-import', { method: 'POST', body: JSON.stringify({ items }) });

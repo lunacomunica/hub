@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -124,6 +125,29 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar receita' });
+  }
+});
+
+// POST /api/revenues/bulk-import
+router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
+  const { items } = req.body as { items: { description: string; date: string; amount: number; category_id?: number; notes?: string }[] };
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Nenhum item para importar' });
+  }
+  const imported: unknown[] = [];
+  try {
+    for (const item of items) {
+      const { rows: [row] } = await pool.query(
+        `INSERT INTO financial_revenues (description, amount, date, category_id, notes, status)
+         VALUES ($1, $2, $3, $4, $5, 'pendente') RETURNING *`,
+        [item.description, item.amount, item.date, item.category_id || null, item.notes || null]
+      );
+      imported.push(row);
+    }
+    return res.status(201).json({ imported: imported.length, items: imported });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao importar receitas' });
   }
 });
 

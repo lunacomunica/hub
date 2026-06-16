@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, getCards, CompanyCard } from '../api';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload } from 'lucide-react';
+import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, getCards, CompanyCard, bulkImportExpenses } from '../api';
 import type { Expense, Category } from '../types';
+import ImportModal from '../components/ImportModal';
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
@@ -45,6 +46,7 @@ export default function Expenses() {
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -188,6 +190,9 @@ export default function Expenses() {
         <div className="flex items-center gap-2">
           <button onClick={exportCSV} className="btn-ghost flex items-center gap-2 text-sm">
             <Download size={15} /> CSV
+          </button>
+          <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <Upload size={15} /> Importar
           </button>
           <button onClick={openCreate} className="btn-danger flex items-center gap-2 text-sm">
             <Plus size={16} /> Nova Despesa
@@ -465,6 +470,15 @@ export default function Expenses() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ImportModal
+          type="expense"
+          categories={categories}
+          onImport={async (items) => { await bulkImportExpenses(items); await load(); }}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </div>
   );

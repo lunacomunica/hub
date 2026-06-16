@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type } from 'lucide-react';
-import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues } from '../api';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload } from 'lucide-react';
+import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues } from '../api';
 import type { Revenue, Category, AgencyClient } from '../types';
+import ImportModal from '../components/ImportModal';
 
 type RevenueRow = Revenue & { client_id?: number | null; client_display_name?: string | null };
 
@@ -57,6 +58,7 @@ export default function Revenues() {
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = async () => {
     setLoading(true); setError('');
@@ -216,6 +218,9 @@ export default function Revenues() {
         <div className="flex items-center gap-2">
           <button onClick={exportCSV} className="btn-ghost flex items-center gap-1.5 text-sm">
             <Download size={14} /> CSV
+          </button>
+          <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <Upload size={15} /> Importar
           </button>
           <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm">
             <Plus size={16} /> Nova Receita
@@ -548,6 +553,15 @@ export default function Revenues() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ImportModal
+          type="revenue"
+          categories={categories}
+          onImport={async (items) => { await bulkImportRevenues(items); await load(); }}
+          onClose={() => setShowImport(false)}
+        />
       )}
     </div>
   );
