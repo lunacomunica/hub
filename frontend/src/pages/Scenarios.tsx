@@ -5,7 +5,7 @@ import { getScenarios, createScenario, updateScenario, deleteScenario, getBreake
 import type { BreakevenData } from '../api';
 import type { Scenario } from '../types';
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const tooltipStyle = { backgroundColor: '#0c0c26', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#e2e8f0' };
 
