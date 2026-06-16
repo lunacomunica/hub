@@ -145,6 +145,7 @@ export default function Expenses() {
   const [removingFixed, setRemovingFixed] = useState<string | null>(null);
   const [selectedProj, setSelectedProj] = useState<Set<string>>(new Set());
   const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkRemovingFixed, setBulkRemovingFixed] = useState(false);
 
   const confirmProjection = async (p: Expense & { is_projection: true }) => {
     setConfirmingProj(String(p.id));
@@ -230,6 +231,27 @@ export default function Expenses() {
       load();
     } catch { alert('Erro ao confirmar despesas'); }
     finally { setBulkConfirming(false); }
+  };
+
+  const bulkRemoveFixed = async () => {
+    const toRemove = filteredProjections.filter(p => selectedProj.has(String(p.id)));
+    if (toRemove.length === 0) return;
+    if (!confirm(`Remover ${toRemove.length} despesa${toRemove.length !== 1 ? 's' : ''} dos custos fixos? As projeções vão sumir.`)) return;
+    setBulkRemovingFixed(true);
+    try {
+      await Promise.all(toRemove.map(p => {
+        const originalId = Number(String(p.id).replace('proj_', ''));
+        return updateExpense(originalId, {
+          description: p.description, category_id: p.category_id, supplier: p.supplier,
+          client_name: p.client_name, amount: p.amount, date: p.date, due_date: p.due_date,
+          status: 'pendente', is_fixed: 0, is_client_cost: p.is_client_cost,
+          notes: p.notes, card_id: p.card_id,
+        });
+      }));
+      setSelectedProj(new Set());
+      load();
+    } catch { alert('Erro ao atualizar despesas'); }
+    finally { setBulkRemovingFixed(false); }
   };
 
   // Selection helpers
@@ -496,14 +518,24 @@ export default function Expenses() {
       {selectedProj.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)' }}>
           <span className="font-medium" style={{ color: '#f59e0b' }}>{selectedProj.size} provisão{selectedProj.size !== 1 ? 'ões' : ''} selecionada{selectedProj.size !== 1 ? 's' : ''}</span>
-          <button
-            onClick={bulkConfirmProjections}
-            disabled={bulkConfirming}
-            className="text-xs px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-40 ml-2"
-            style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}
-          >
-            {bulkConfirming ? 'Confirmando...' : `✓ Confirmar ${selectedProj.size}`}
-          </button>
+          <div className="flex items-center gap-2 ml-2">
+            <button
+              onClick={bulkConfirmProjections}
+              disabled={bulkConfirming || bulkRemovingFixed}
+              className="text-xs px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-40"
+              style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}
+            >
+              {bulkConfirming ? 'Confirmando...' : `✓ Confirmar ${selectedProj.size}`}
+            </button>
+            <button
+              onClick={bulkRemoveFixed}
+              disabled={bulkConfirming || bulkRemovingFixed}
+              className="text-xs px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-40"
+              style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              {bulkRemovingFixed ? 'Removendo...' : `✕ Remover fixo`}
+            </button>
+          </div>
           <button onClick={() => setSelectedProj(new Set())} className="ml-auto text-slate-400 hover:text-slate-200"><X size={16} /></button>
         </div>
       )}
