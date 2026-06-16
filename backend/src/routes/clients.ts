@@ -22,6 +22,25 @@ router.get('/', async (_req: Request, res: Response) => {
       created_at: string; updated_at: string;
     }>('SELECT * FROM agency_clients ORDER BY name');
 
+    // Calculate total MRR from all active clients
+    const totalMrr = clients.filter(c => c.active).reduce((s, c) => s + Number(c.monthly_fee), 0);
+
+    // Calculate average shared fixed costs from last 3 complete months
+    const { rows: [fixedRow] } = await pool.query<{ avg_fixed: string }>(`
+      SELECT COALESCE(AVG(monthly_total), 0) as avg_fixed
+      FROM (
+        SELECT SUM(amount) as monthly_total
+        FROM financial_expenses
+        WHERE is_fixed = 1 AND is_client_cost = 0
+          AND date >= TO_CHAR(CURRENT_DATE - INTERVAL '3 months', 'YYYY-MM-01')
+          AND date < TO_CHAR(DATE_TRUNC('month', CURRENT_DATE), 'YYYY-MM-DD')
+        GROUP BY TO_CHAR(date::date, 'YYYY-MM')
+        ORDER BY TO_CHAR(date::date, 'YYYY-MM') DESC
+        LIMIT 3
+      ) sub
+    `);
+    const avgFixed = Number(fixedRow.avg_fixed);
+
     const result = await Promise.all(clients.map(async (c) => {
       const { rows: [costRow] } = await pool.query<{ total: string }>(
         `SELECT COALESCE(SUM(amount), 0) as total
@@ -32,11 +51,12 @@ router.get('/', async (_req: Request, res: Response) => {
 
       const monthly_cost = Number(costRow.total);
       const monthly_fee = Number(c.monthly_fee);
-      const margin = monthly_fee - monthly_cost;
+      const allocated_fixed = totalMrr > 0 ? (Number(c.monthly_fee) / totalMrr) * avgFixed : 0;
+      const margin = monthly_fee - monthly_cost - allocated_fixed;
       const margin_percent = monthly_fee > 0 ? (margin / monthly_fee) * 100 : 0;
       const health = computeHealth(margin_percent, Number(c.margin_target), Number((c as { risk_alert?: number }).risk_alert));
 
-      return { ...c, monthly_cost, margin, margin_percent, health };
+      return { ...c, monthly_cost, allocated_fixed, avg_shared_fixed: avgFixed, margin, margin_percent, health };
     }));
 
     res.json(result);

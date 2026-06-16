@@ -71,6 +71,8 @@ export interface AgencyClient {
   risk_since?: string | null;
   // computed
   monthly_cost?: number;
+  allocated_fixed?: number;
+  avg_shared_fixed?: number;
   margin?: number;
   margin_percent?: number;
   health?: 'saudavel' | 'atencao' | 'critico' | 'em_risco';

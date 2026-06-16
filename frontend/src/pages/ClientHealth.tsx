@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert, Info } from 'lucide-react';
 import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient, setClientRisk } from '../api';
 import type { AgencyClient, ClientCost } from '../types';
 
@@ -289,6 +289,21 @@ export default function ClientHealth() {
         </div>
       </div>
 
+      {/* Margin calculation info box */}
+      <div className="rounded-xl px-5 py-4 text-sm" style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
+        <div className="flex items-center gap-2 mb-2">
+          <Info size={14} className="text-indigo-400 shrink-0" />
+          <span className="font-semibold text-slate-300">Como calculamos a margem real</span>
+        </div>
+        <p className="text-slate-400 leading-relaxed">
+          <strong className="text-slate-300">Margem real = Mensalidade − Custos diretos do cliente − Rateio de custos fixos</strong>
+          <br />
+          O rateio distribui os custos fixos compartilhados da agência proporcionalmente ao MRR de cada cliente
+          (quem paga mais, sustenta mais da estrutura). A base usada é a <strong className="text-slate-300">média dos últimos 3 meses</strong> de despesas
+          fixas não alocadas a clientes — excluindo o que já está em "Custos do cliente" para evitar dupla contagem.
+        </p>
+      </div>
+
       {/* Client cards */}
       {activeClients.length === 0 ? (
         <div className="card py-12 text-center text-slate-500 text-sm">
@@ -321,8 +336,9 @@ export default function ClientHealth() {
                         ) : null}
                         <div className="flex items-center gap-4 text-sm text-slate-400">
                           <span>Mensalidade: <strong className="text-slate-200">{brl(c.monthly_fee)}</strong></span>
-                          <span>Custos: <strong className="text-red-400">{brl(c.monthly_cost || 0)}</strong></span>
-                          <span>Margem: <strong className={c.margin && c.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}>{brl(c.margin || 0)}</strong></span>
+                          <span>Custos diretos: <strong className="text-red-400">{brl(c.monthly_cost || 0)}</strong></span>
+                          <span>Rateio fixos: <strong className="text-amber-400">{brl(c.allocated_fixed || 0)}</strong></span>
+                          <span>Margem real: <strong className={c.margin && c.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}>{brl(c.margin || 0)}</strong></span>
                         </div>
                       </div>
                     </div>
