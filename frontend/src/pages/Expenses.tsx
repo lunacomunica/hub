@@ -142,6 +142,8 @@ export default function Expenses() {
   };
 
   const [confirmingProj, setConfirmingProj] = useState<string | null>(null);
+  const [removingFixed, setRemovingFixed] = useState<string | null>(null);
+
   const confirmProjection = async (p: Expense & { is_projection: true }) => {
     setConfirmingProj(String(p.id));
     try {
@@ -164,6 +166,17 @@ export default function Expenses() {
       load();
     } catch { alert('Erro ao confirmar despesa'); }
     finally { setConfirmingProj(null); }
+  };
+
+  const removeFixed = async (p: Expense & { is_projection: true }) => {
+    if (!confirm(`Remover "${p.description}" dos custos fixos? A projeção vai sumir.`)) return;
+    const originalId = Number(String(p.id).replace('proj_', ''));
+    setRemovingFixed(String(p.id));
+    try {
+      await updateExpense(originalId, { ...p, id: originalId, is_fixed: 0 });
+      load();
+    } catch { alert('Erro ao atualizar despesa'); }
+    finally { setRemovingFixed(null); }
   };
 
   // Selection helpers
@@ -504,7 +517,7 @@ export default function Expenses() {
                     <span className="badge badge-blue">Fixo</span>
                   </td>
                   <td className="td px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
+                    <div className="flex items-center gap-1.5 justify-end">
                       <button
                         onClick={() => confirmProjection(p)}
                         disabled={confirmingProj === String(p.id)}
@@ -512,6 +525,21 @@ export default function Expenses() {
                         style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
                       >
                         {confirmingProj === String(p.id) ? '...' : 'Confirmar'}
+                      </button>
+                      <button
+                        onClick={() => { const originalId = Number(String(p.id).replace('proj_', '')); openEdit({ ...p, id: originalId }); }}
+                        className="p-1.5 text-slate-500 hover:text-blue-400 rounded"
+                        title="Editar despesa fixa"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => removeFixed(p)}
+                        disabled={removingFixed === String(p.id)}
+                        className="p-1.5 text-slate-500 hover:text-red-400 rounded disabled:opacity-40"
+                        title="Remover dos fixos"
+                      >
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </td>
