@@ -70,6 +70,8 @@ export const bulkUpdateRevenues = (ids: number[], updates: Record<string, unknow
   req('/revenues/bulk', { method: 'PATCH', body: JSON.stringify({ ids, updates }) });
 
 // Expenses
+export const getExpenseProjections = (month: number, year: number): Promise<(Expense & { is_projection: true })[]> =>
+  req(`/expenses/projections?month=${month}&year=${year}`);
 export const getExpenses = (filters?: { month?: number; year?: number; status?: string; is_fixed?: number; is_client_cost?: number; category_id?: number }): Promise<Expense[]> => {
   const params = new URLSearchParams();
   if (filters?.month) params.set('month', String(filters.month));

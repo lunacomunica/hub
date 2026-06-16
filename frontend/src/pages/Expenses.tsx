@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Upload, BookOpen } from 'lucide-react';
-import { getExpenses, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule, getClients } from '../api';
+import { getExpenses, getExpenseProjections, createExpense, updateExpense, updateExpenseStatus, deleteExpense, getCategories, bulkUpdateExpenses, bulkDeleteExpenses, getCards, CompanyCard, bulkImportExpenses, getSupplierRules, createSupplierRule, updateSupplierRule, deleteSupplierRule, syncEmployeesAsSuppliers, searchSuppliers, SupplierRule, getClients } from '../api';
 import type { Expense, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -27,6 +27,7 @@ const EMPTY: Partial<Expense> = {
 
 export default function Expenses() {
   const [items, setItems] = useState<Expense[]>([]);
+  const [projections, setProjections] = useState<(Expense & { is_projection: true })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cards, setCards] = useState<CompanyCard[]>([]);
   const [clients, setClients] = useState<AgencyClient[]>([]);
@@ -72,17 +73,20 @@ export default function Expenses() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [expsResult, catsResult, cdsResult, clsResult] = await Promise.allSettled([
+      const [expsResult, catsResult, cdsResult, clsResult, projResult] = await Promise.allSettled([
         getExpenses({ month: viewMode === 'annual' ? undefined : filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('expense'),
         getCards(true),
         getClients(),
+        viewMode === 'monthly' ? getExpenseProjections(filterMonth, filterYear) : Promise.resolve([]),
       ]);
       if (expsResult.status === 'fulfilled') setItems(expsResult.value);
       else setError('Erro ao buscar despesas');
       if (catsResult.status === 'fulfilled') setCategories(catsResult.value);
       if (cdsResult.status === 'fulfilled') setCards(cdsResult.value);
       if (clsResult.status === 'fulfilled') setClients(clsResult.value);
+      if (projResult.status === 'fulfilled') setProjections(projResult.value as (Expense & { is_projection: true })[]);
+      else setProjections([]);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -92,12 +96,18 @@ export default function Expenses() {
 
   useEffect(() => { load(); }, [viewMode, filterMonth, filterYear, filterStatus]);
   useEffect(() => { setSelected(new Set()); }, [viewMode, filterMonth, filterYear, filterStatus, search]);
+  useEffect(() => { if (viewMode === 'annual') setProjections([]); }, [viewMode]);
 
   // Filtered list (frontend search)
   const filtered = items.filter(r => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (r.description || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q) || String(r.amount).includes(q);
+  });
+  const filteredProjections = projections.filter(p => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (p.description || '').toLowerCase().includes(q) || (p.supplier || '').toLowerCase().includes(q) || String(p.amount).includes(q);
   });
 
   const openCreate = () => { setForm({ ...EMPTY }); setModal(true); };
@@ -129,6 +139,31 @@ export default function Expenses() {
     try { await deleteExpense(id); load(); }
     catch { alert('Erro ao deletar'); }
     finally { setDeleting(null); }
+  };
+
+  const [confirmingProj, setConfirmingProj] = useState<string | null>(null);
+  const confirmProjection = async (p: Expense & { is_projection: true }) => {
+    setConfirmingProj(String(p.id));
+    try {
+      const m = String(filterMonth).padStart(2, '0');
+      const day = new Date().getDate();
+      const dateStr = `${filterYear}-${m}-${String(day).padStart(2, '0')}`;
+      await createExpense({
+        description: p.description,
+        category_id: p.category_id,
+        supplier: p.supplier,
+        client_name: p.client_name,
+        amount: p.amount,
+        date: dateStr,
+        status: 'pendente',
+        is_fixed: 1,
+        is_client_cost: p.is_client_cost,
+        notes: p.notes,
+        card_id: p.card_id,
+      });
+      load();
+    } catch { alert('Erro ao confirmar despesa'); }
+    finally { setConfirmingProj(null); }
   };
 
   // Selection helpers
@@ -417,7 +452,7 @@ export default function Expenses() {
             <AlertCircle size={32} /><p className="text-sm">{error}</p>
             <button onClick={load} className="text-xs text-blue-400 underline">Tentar novamente</button>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && filteredProjections.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-sm">
             {items.length === 0
               ? <><span>Nenhuma despesa encontrada. </span><button onClick={openCreate} className="text-blue-400 underline">Adicionar primeira despesa</button></>
@@ -447,6 +482,41 @@ export default function Expenses() {
               </tr>
             </thead>
             <tbody>
+              {filteredProjections.map(p => (
+                <tr key={p.id} className="tr border-l-2 border-amber-500/60 opacity-70">
+                  <td className="td px-4 py-3 w-8"></td>
+                  <td className="td px-4 py-3 text-amber-400/80">{String(filterMonth).padStart(2,'0')}/{filterYear}</td>
+                  <td className="td px-4 py-3 font-medium text-slate-300">{p.description}</td>
+                  <td className="td px-4 py-3">
+                    {p.category_name ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (p.category_color || '#6366f1') + '22', color: p.category_color || '#6366f1' }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.category_color || '#6366f1' }} />
+                        {p.category_name}
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td className="td px-4 py-3 text-slate-400">{p.supplier || '—'}</td>
+                  <td className="td px-4 py-3 text-right font-semibold text-slate-300">{brl(p.amount)}</td>
+                  <td className="td px-4 py-3 text-center">
+                    <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>PROVISÃO</span>
+                  </td>
+                  <td className="td px-4 py-3 text-center">
+                    <span className="badge badge-blue">Fixo</span>
+                  </td>
+                  <td className="td px-4 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button
+                        onClick={() => confirmProjection(p)}
+                        disabled={confirmingProj === String(p.id)}
+                        className="text-xs px-2.5 py-1 rounded-md font-medium transition-colors disabled:opacity-40"
+                        style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
+                      >
+                        {confirmingProj === String(p.id) ? '...' : 'Confirmar'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
               {filtered.map(r => (
                 <tr key={r.id} className={`tr transition-colors ${selected.has(r.id) ? 'bg-indigo-500/10 border-l-2 border-indigo-500' : ''}`}>
                   <td className="td px-4 py-3 w-8">

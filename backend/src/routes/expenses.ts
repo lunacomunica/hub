@@ -140,6 +140,50 @@ router.get('/suppliers', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/expenses/projections?month=X&year=Y
+// Returns fixed expense templates that have no real entry in the requested month
+router.get('/projections', async (req: Request, res: Response) => {
+  try {
+    const { month, year } = req.query;
+    if (!month || !year) return res.json([]);
+
+    const m = String(month).padStart(2, '0');
+    const monthStart = `${year}-${m}-01`;
+    const monthEnd = `${year}-${m}-31`;
+
+    // Get the latest is_fixed entry per description (to use as template)
+    const { rows: templates } = await pool.query(`
+      SELECT DISTINCT ON (fe.description)
+        fe.*, fc.name as category_name, fc.color as category_color
+      FROM financial_expenses fe
+      LEFT JOIN financial_categories fc ON fe.category_id = fc.id
+      WHERE fe.is_fixed = 1
+        AND fe.date < $1
+      ORDER BY fe.description, fe.date DESC
+    `, [monthStart]);
+
+    // For each template, check if there's already an entry in the requested month
+    const projections = [];
+    for (const t of templates) {
+      const check = await pool.query(`
+        SELECT 1 FROM financial_expenses
+        WHERE date >= $1 AND date <= $2
+          AND description = $3
+        LIMIT 1
+      `, [monthStart, monthEnd, t.description]);
+
+      if (check.rows.length === 0) {
+        projections.push({ ...t, is_projection: true, id: `proj_${t.id}`, status: 'provisao' });
+      }
+    }
+
+    res.json(projections);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar projeções de despesas' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { rows: [row] } = await pool.query(`
