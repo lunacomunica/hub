@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload, Users, Repeat2 } from 'lucide-react';
 import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues } from '../api';
 import type { Revenue, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
@@ -56,9 +56,14 @@ export default function Revenues() {
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | null>(null);
+  const [bulkModal, setBulkModal] = useState<'rename' | 'categorize' | 'client' | 'recurring' | null>(null);
   const [bulkDescription, setBulkDescription] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState<number | ''>('');
+  const [bulkClientId, setBulkClientId] = useState<number | null>(null);
+  const [bulkClientName, setBulkClientName] = useState('');
+  const [bulkClientSearch, setBulkClientSearch] = useState('');
+  const [bulkIsRecurring, setBulkIsRecurring] = useState(true);
+  const [bulkRecurrenceType, setBulkRecurrenceType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
@@ -164,7 +169,7 @@ export default function Revenues() {
 
   const selectedIds = Array.from(selected);
 
-  const saveBulk = async (updates: { description?: string; category_id?: number }) => {
+  const saveBulk = async (updates: Record<string, string | number | null | undefined>) => {
     setBulkSaving(true);
     try {
       await bulkUpdateRevenues(selectedIds, updates);
@@ -296,6 +301,18 @@ export default function Revenues() {
           >
             <Tag size={13} /> Categorizar
           </button>
+          <button
+            onClick={() => { setBulkClientId(null); setBulkClientName(''); setBulkClientSearch(''); setBulkModal('client'); }}
+            className="btn-ghost flex items-center gap-1.5 text-sm"
+          >
+            <Users size={13} /> Cliente
+          </button>
+          <button
+            onClick={() => { setBulkIsRecurring(true); setBulkRecurrenceType('monthly'); setBulkModal('recurring'); }}
+            className="btn-ghost flex items-center gap-1.5 text-sm"
+          >
+            <Repeat2 size={13} /> Recorrente
+          </button>
           <button onClick={clearSelection} className="btn-ghost flex items-center gap-1.5 text-sm ml-auto">
             <X size={13} /> Desmarcar
           </button>
@@ -360,7 +377,7 @@ export default function Revenues() {
             </thead>
             <tbody>
               {visibleItems.map(r => (
-                <tr key={r.id} className="tr">
+                <tr key={r.id} className={`tr transition-colors ${selected.has(r.id) ? 'bg-indigo-500/10 border-l-2 border-indigo-500' : ''}`}>
                   <td className="td px-4 py-3 w-8">
                     <input
                       type="checkbox"
@@ -568,6 +585,114 @@ export default function Revenues() {
                 className="btn-primary text-sm disabled:opacity-50"
               >
                 {bulkSaving ? 'Salvando...' : 'Aplicar a todos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Client Modal */}
+      {bulkModal === 'client' && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white text-sm">Cliente — {selectedIds.length} receita{selectedIds.length !== 1 ? 's' : ''}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={16} /></button>
+            </div>
+            <div className="px-3 pt-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  autoFocus
+                  value={bulkClientSearch}
+                  onChange={e => setBulkClientSearch(e.target.value)}
+                  placeholder="Buscar cliente..."
+                  className="input-dark w-full text-sm pl-8 py-1.5"
+                />
+              </div>
+            </div>
+            <ul className="overflow-y-auto flex-1 px-2 py-2 space-y-0.5">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => { setBulkClientId(null); setBulkClientName(''); }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${bulkClientId === null && bulkClientName === '' ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:bg-white/5'}`}
+                >
+                  — Remover cliente
+                </button>
+              </li>
+              {clients
+                .filter(c => c.active && (bulkClientSearch === '' || c.name.toLowerCase().includes(bulkClientSearch.toLowerCase())))
+                .map(c => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setBulkClientId(c.id); setBulkClientName(c.name); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${bulkClientId === c.id ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-200 hover:bg-white/5'}`}
+                    >
+                      {c.name}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+            <div className="flex justify-end gap-3 px-4 py-3" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={() => saveBulk({ client_id: bulkClientId, client_name: bulkClientId ? bulkClientName : null })}
+                disabled={bulkSaving}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Recurring Modal */}
+      {bulkModal === 'recurring' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white">Recorrente — {selectedIds.length} receita{selectedIds.length !== 1 ? 's' : ''}</h2>
+              <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white/5 transition-colors">
+                  <input type="radio" checked={bulkIsRecurring} onChange={() => setBulkIsRecurring(true)} className="w-4 h-4" />
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">Marcar como recorrente</span>
+                    <p className="text-xs text-slate-500 mt-0.5">Receita se repete periodicamente</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-white/5 transition-colors">
+                  <input type="radio" checked={!bulkIsRecurring} onChange={() => setBulkIsRecurring(false)} className="w-4 h-4" />
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">Remover recorrência</span>
+                    <p className="text-xs text-slate-500 mt-0.5">Receita pontual, sem repetição</p>
+                  </div>
+                </label>
+              </div>
+              {bulkIsRecurring && (
+                <div>
+                  <label className="label-dark mb-1 block">Frequência</label>
+                  <select value={bulkRecurrenceType} onChange={e => setBulkRecurrenceType(e.target.value as typeof bulkRecurrenceType)} className="input-dark w-full">
+                    <option value="monthly">Mensal</option>
+                    <option value="quarterly">Trimestral</option>
+                    <option value="yearly">Anual</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setBulkModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={() => saveBulk({ is_recurring: bulkIsRecurring ? 1 : 0, recurrence_type: bulkIsRecurring ? bulkRecurrenceType : null })}
+                disabled={bulkSaving}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {bulkSaving ? 'Salvando...' : 'Aplicar'}
               </button>
             </div>
           </div>

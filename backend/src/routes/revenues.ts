@@ -14,6 +14,9 @@ router.patch('/bulk', async (req: Request, res: Response) => {
     if (updates.description !== undefined) allowed['description'] = updates.description;
     if (updates.category_id !== undefined) allowed['category_id'] = updates.category_id ?? null;
     if (updates.client_id !== undefined) allowed['client_id'] = updates.client_id ?? null;
+    if (updates.client_name !== undefined) allowed['client_name'] = updates.client_name || null;
+    if (updates.is_recurring !== undefined) allowed['is_recurring'] = updates.is_recurring ? 1 : 0;
+    if (updates.recurrence_type !== undefined) allowed['recurrence_type'] = updates.recurrence_type || null;
 
     if (Object.keys(allowed).length === 0) {
       return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
