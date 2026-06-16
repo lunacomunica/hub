@@ -92,6 +92,19 @@ import pool from './db';
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_reason TEXT`);
     await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS risk_since TEXT`);
   } catch (e) { console.error('[migration] risk_alert columns error:', e); }
+
+  // Allow 'perdido' status in financial_revenues (drop old CHECK, add new one)
+  try {
+    await pool.query(`
+      ALTER TABLE financial_revenues
+        DROP CONSTRAINT IF EXISTS financial_revenues_status_check
+    `);
+    await pool.query(`
+      ALTER TABLE financial_revenues
+        ADD CONSTRAINT financial_revenues_status_check
+        CHECK(status IN ('pendente', 'pago', 'atrasado', 'cancelado', 'perdido'))
+    `);
+  } catch (e) { console.error('[migration] revenues perdido status error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────

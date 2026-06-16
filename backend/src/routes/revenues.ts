@@ -17,7 +17,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
     if (updates.client_name !== undefined) allowed['client_name'] = updates.client_name || null;
     if (updates.is_recurring !== undefined) allowed['is_recurring'] = updates.is_recurring ? 1 : 0;
     if (updates.recurrence_type !== undefined) allowed['recurrence_type'] = updates.recurrence_type || null;
-    const validStatuses = ['pendente', 'pago', 'atrasado', 'cancelado'];
+    const validStatuses = ['pendente', 'pago', 'atrasado', 'cancelado', 'perdido'];
     if (updates.status !== undefined && validStatuses.includes(updates.status as string)) allowed['status'] = updates.status;
 
     if (Object.keys(allowed).length === 0) {
@@ -353,7 +353,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.patch('/:id/status', async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['pendente', 'pago', 'atrasado', 'cancelado'];
+    const validStatuses = ['pendente', 'pago', 'atrasado', 'cancelado', 'perdido'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Status inválido' });
     }

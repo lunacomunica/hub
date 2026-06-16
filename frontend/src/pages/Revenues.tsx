@@ -19,9 +19,13 @@ const STATUS_BADGE: Record<string, string> = {
   pendente: 'badge badge-amber',
   atrasado: 'badge badge-red',
   cancelado: 'badge badge-slate',
+  perdido: 'badge',
+};
+const STATUS_BADGE_STYLE: Record<string, React.CSSProperties> = {
+  perdido: { background: 'rgba(220,38,38,0.15)', color: '#f87171', border: '1px solid rgba(220,38,38,0.3)' },
 };
 const STATUS_LABELS: Record<string, string> = {
-  pago: 'Pago', pendente: 'Pendente', atrasado: 'Atrasado', cancelado: 'Cancelado',
+  pago: 'Pago', pendente: 'Pendente', atrasado: 'Atrasado', cancelado: 'Cancelado', perdido: 'Perdido',
 };
 const REC_LABELS: Record<string, string> = {
   monthly: 'Mensal', quarterly: 'Trimestral', yearly: 'Anual',
@@ -136,7 +140,7 @@ export default function Revenues() {
   };
 
   const handleStatusClick = async (r: RevenueRow) => {
-    const cycle: Revenue['status'][] = ['pendente', 'pago', 'atrasado', 'cancelado'];
+    const cycle: Revenue['status'][] = ['pendente', 'pago', 'atrasado', 'perdido', 'cancelado'];
     const next = cycle[(cycle.indexOf(r.status) + 1) % cycle.length];
     try {
       await updateRevenueStatus(r.id, next);
@@ -267,6 +271,7 @@ export default function Revenues() {
           <option value="pago">Pago</option>
           <option value="pendente">Pendente</option>
           <option value="atrasado">Atrasado</option>
+          <option value="perdido">Perdido</option>
           <option value="cancelado">Cancelado</option>
         </select>
         <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400"><RefreshCw size={15} /></button>
@@ -413,6 +418,7 @@ export default function Revenues() {
                     <button
                       onClick={() => handleStatusClick(r)}
                       className={`cursor-pointer transition-opacity hover:opacity-80 ${STATUS_BADGE[r.status]}`}
+                      style={STATUS_BADGE_STYLE[r.status] || undefined}
                     >
                       {STATUS_LABELS[r.status]}
                     </button>
@@ -546,6 +552,7 @@ export default function Revenues() {
                     <option value="pendente">Pendente</option>
                     <option value="pago">Pago</option>
                     <option value="atrasado">Atrasado</option>
+                    <option value="perdido">Perdido</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
                 </Field>
@@ -662,7 +669,7 @@ export default function Revenues() {
               <button onClick={() => setBulkModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
             </div>
             <div className="p-5 space-y-2">
-              {[['pago', 'Pago', 'badge-green'], ['pendente', 'Pendente', 'badge-amber'], ['atrasado', 'Atrasado', 'badge-red'], ['cancelado', 'Cancelado', 'badge-slate']].map(([v, l, badge]) => (
+              {[['pago', 'Pago', 'badge-green'], ['pendente', 'Pendente', 'badge-amber'], ['atrasado', 'Atrasado', 'badge-red'], ['perdido', 'Perdido', ''], ['cancelado', 'Cancelado', 'badge-slate']].map(([v, l, badge]) => (
                 <label key={v} className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg transition-colors ${bulkStatus === v ? 'bg-white/5' : 'hover:bg-white/3'}`}>
                   <input type="radio" checked={bulkStatus === v} onChange={() => setBulkStatus(v)} className="w-4 h-4" />
                   <span className={`badge ${badge}`}>{l}</span>

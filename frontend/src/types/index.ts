@@ -25,7 +25,7 @@ export interface Revenue {
   amount: number;
   date: string;
   due_date: string | null;
-  status: 'pendente' | 'pago' | 'atrasado' | 'cancelado';
+  status: 'pendente' | 'pago' | 'atrasado' | 'cancelado' | 'perdido';
   client_id: number | null;
   client_display_name: string | null;
   is_recurring: number;
