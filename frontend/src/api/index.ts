@@ -56,6 +56,8 @@ export const getRevenues = (filters?: { month?: number; year?: number; status?: 
   if (filters?.category_id) params.set('category_id', String(filters.category_id));
   return req(`/revenues?${params}`);
 };
+export const getRevenueProjections = (month: number, year: number): Promise<(Revenue & { is_projection: true })[]> =>
+  req(`/revenues/projections?month=${month}&year=${year}`);
 export const createRevenue = (data: Partial<Revenue>): Promise<Revenue> =>
   req('/revenues', { method: 'POST', body: JSON.stringify(data) });
 export const updateRevenue = (id: number, data: Partial<Revenue>): Promise<Revenue> =>

@@ -98,6 +98,75 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/revenues/projections?month=8&year=2026
+// Returns recurring revenue templates that have no real entry in the requested month
+router.get('/projections', async (req: Request, res: Response) => {
+  try {
+    const { month, year } = req.query;
+    if (!month || !year) return res.json([]);
+
+    const m = String(month).padStart(2, '0');
+    const monthStart = `${year}-${m}-01`;
+    const monthEnd = `${year}-${m}-31`;
+
+    // Get the latest recurring entry per client (or per description if no client)
+    const { rows: templates } = await pool.query(`
+      SELECT DISTINCT ON (COALESCE(fr.client_id::text, fr.client_name, fr.description))
+        fr.*, fc.name as category_name, fc.color as category_color,
+        ac.name as client_display_name
+      FROM financial_revenues fr
+      LEFT JOIN financial_categories fc ON fr.category_id = fc.id
+      LEFT JOIN agency_clients ac ON fr.client_id = ac.id
+      WHERE fr.is_recurring = 1
+        AND fr.date < $1
+      ORDER BY COALESCE(fr.client_id::text, fr.client_name, fr.description), fr.date DESC
+    `, [monthStart]);
+
+    // For each template, check if there's already an entry in the requested month
+    const projections = [];
+    for (const t of templates) {
+      // Skip quarterly if this month is not a multiple of 3 from origin
+      if (t.recurrence_type === 'quarterly') {
+        const originDate = new Date(t.date);
+        const targetDate = new Date(monthStart);
+        const diffMonths =
+          (targetDate.getFullYear() - originDate.getFullYear()) * 12 +
+          (targetDate.getMonth() - originDate.getMonth());
+        if (diffMonths % 3 !== 0) continue;
+      }
+      if (t.recurrence_type === 'yearly') {
+        const originDate = new Date(t.date);
+        const targetDate = new Date(monthStart);
+        const diffMonths =
+          (targetDate.getFullYear() - originDate.getFullYear()) * 12 +
+          (targetDate.getMonth() - originDate.getMonth());
+        if (diffMonths % 12 !== 0) continue;
+      }
+
+      // Check if an entry already exists for this client in this month
+      const check = await pool.query(`
+        SELECT 1 FROM financial_revenues
+        WHERE date >= $1 AND date <= $2
+          AND (
+            ($3::int IS NOT NULL AND client_id = $3)
+            OR ($3::int IS NULL AND $4::text IS NOT NULL AND client_name ILIKE $4)
+            OR ($3::int IS NULL AND $4::text IS NULL AND description = $5)
+          )
+        LIMIT 1
+      `, [monthStart, monthEnd, t.client_id || null, t.client_name || null, t.description]);
+
+      if (check.rows.length === 0) {
+        projections.push({ ...t, is_projection: true, id: `proj_${t.id}`, status: 'provisao' });
+      }
+    }
+
+    res.json(projections);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar projeções' });
+  }
+});
+
 router.get('/recurring', async (_req: Request, res: Response) => {
   try {
     const { rows } = await pool.query(`

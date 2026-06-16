@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, AlertCircle, X, Search, Download, Tag, Type, Upload, Users, Repeat2 } from 'lucide-react';
-import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues } from '../api';
+import { getRevenues, createRevenue, updateRevenue, updateRevenueStatus, deleteRevenue, getCategories, getClients, bulkUpdateRevenues, bulkImportRevenues, getRevenueProjections } from '../api';
 import type { Revenue, Category, AgencyClient } from '../types';
 import ImportModal from '../components/ImportModal';
 import CategorySelect from '../components/CategorySelect';
@@ -66,19 +66,23 @@ export default function Revenues() {
   const [bulkRecurrenceType, setBulkRecurrenceType] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [projections, setProjections] = useState<(RevenueRow & { is_projection: true })[]>([]);
 
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [revsResult, catsResult, clsResult] = await Promise.allSettled([
+      const [revsResult, catsResult, clsResult, projResult] = await Promise.allSettled([
         getRevenues({ month: viewMode === 'annual' ? undefined : filterMonth, year: filterYear, status: filterStatus || undefined }),
         getCategories('revenue'),
         getClients(),
+        viewMode === 'monthly' ? getRevenueProjections(filterMonth, filterYear) : Promise.resolve([]),
       ]);
       if (revsResult.status === 'fulfilled') setItems(revsResult.value as RevenueRow[]);
       else setError('Erro ao buscar receitas');
       if (catsResult.status === 'fulfilled') setCategories(catsResult.value);
       if (clsResult.status === 'fulfilled') setClients(clsResult.value);
+      if (projResult.status === 'fulfilled') setProjections(projResult.value as (RevenueRow & { is_projection: true })[]);
+      else setProjections([]);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
     } finally {
@@ -418,6 +422,53 @@ export default function Revenues() {
                       <button onClick={() => openEdit(r)} className="p-1.5 text-slate-500 hover:text-blue-400 rounded"><Pencil size={14} /></button>
                       <button onClick={() => handleDelete(r.id)} disabled={deleting === r.id} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={14} /></button>
                     </div>
+                  </td>
+                </tr>
+              ))}
+              {/* Projections */}
+              {projections.filter(p => {
+                const q = search.toLowerCase();
+                return !q || (p.description || '').toLowerCase().includes(q) || (p.client_display_name || p.client_name || '').toLowerCase().includes(q);
+              }).map(p => (
+                <tr key={p.id} className="tr opacity-60" style={{ borderLeft: '3px solid #f59e0b' }}>
+                  <td className="td px-4 py-3 w-8">
+                    <input type="checkbox" disabled className="rounded cursor-not-allowed opacity-40" />
+                  </td>
+                  <td className="td px-4 py-3 text-slate-400 text-xs italic">—</td>
+                  <td className="td px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-300 text-xs">{p.description}</span>
+                    </div>
+                  </td>
+                  <td className="td px-4 py-3 text-xs text-slate-400">{p.client_display_name || p.client_name || '—'}</td>
+                  <td className="td px-4 py-3">
+                    {p.category_name ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: (p.category_color || '#6366f1') + '22', color: p.category_color || '#6366f1' }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.category_color || '#6366f1' }} />
+                        {p.category_name}
+                      </span>
+                    ) : '—'}
+                  </td>
+                  <td className="td px-4 py-3 text-right font-semibold text-slate-300">{brl(p.amount)}</td>
+                  <td className="td px-4 py-3 text-center">
+                    <span className="badge badge-amber text-xs">PROVISÃO</span>
+                  </td>
+                  <td className="td px-4 py-3 text-center">
+                    <span className="badge badge-purple text-xs">{REC_LABELS[p.recurrence_type || 'monthly']}</span>
+                  </td>
+                  <td className="td px-4 py-3">
+                    <button
+                      onClick={() => {
+                        const today = new Date();
+                        const day = String(today.getDate()).padStart(2, '0');
+                        const m = String(filterMonth).padStart(2, '0');
+                        setForm({ ...p, id: undefined, date: `${filterYear}-${m}-${day}`, status: 'pendente' });
+                        setModal(true);
+                      }}
+                      className="text-xs text-amber-400 hover:text-amber-300 underline whitespace-nowrap"
+                    >
+                      + Confirmar
+                    </button>
                   </td>
                 </tr>
               ))}
