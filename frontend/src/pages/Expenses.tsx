@@ -91,7 +91,7 @@ export default function Expenses() {
   const filtered = items.filter(r => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return (r.description || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q);
+    return (r.description || '').toLowerCase().includes(q) || (r.supplier || '').toLowerCase().includes(q) || String(r.amount).includes(q);
   });
 
   const openCreate = () => { setForm({ ...EMPTY }); setModal(true); };
@@ -365,7 +365,7 @@ export default function Expenses() {
         </select>
         <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por descrição ou fornecedor..." className="input-dark text-sm py-1.5 pl-8 w-full" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por descrição, fornecedor ou valor..." className="input-dark text-sm py-1.5 pl-8 w-full" />
         </div>
         <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400"><RefreshCw size={15} /></button>
       </div>
