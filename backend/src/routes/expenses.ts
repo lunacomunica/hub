@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
 import { AuthRequest } from '../middleware/auth';
+import { saveRule } from '../utils/categorization';
 
 const router = Router();
 
@@ -110,7 +111,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/expenses/bulk-import
 router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
-  const { items } = req.body as { items: { description: string; date: string; amount: number; category_id?: number; notes?: string }[] };
+  const { items } = req.body as { items: { description: string; date: string; amount: number; category_id?: number; supplier?: string; notes?: string }[] };
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Nenhum item para importar' });
   }
@@ -118,11 +119,13 @@ router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
   try {
     for (const item of items) {
       const { rows: [row] } = await pool.query(
-        `INSERT INTO financial_expenses (description, amount, date, category_id, notes, status)
-         VALUES ($1, $2, $3, $4, $5, 'pendente') RETURNING *`,
-        [item.description, item.amount, item.date, item.category_id || null, item.notes || null]
+        `INSERT INTO financial_expenses (description, amount, date, category_id, supplier, notes, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pendente') RETURNING *`,
+        [item.description, item.amount, item.date, item.category_id || null, item.supplier || null, item.notes || null]
       );
       imported.push(row);
+      // Learn from confirmed imports (non-blocking)
+      saveRule(item.description, 'expense', item.category_id, item.supplier).catch(() => {});
     }
     return res.status(201).json({ imported: imported.length, items: imported });
   } catch (err) {
@@ -150,6 +153,10 @@ router.post('/', async (req: Request, res: Response) => {
       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
       WHERE fe.id = $1
     `, [inserted.id]);
+
+    // Learn from this entry (non-blocking)
+    saveRule(description, 'expense', category_id, supplier).catch(() => {});
+
     res.status(201).json(newRow);
   } catch (err) {
     console.error(err);
@@ -177,6 +184,10 @@ router.put('/:id', async (req: Request, res: Response) => {
       LEFT JOIN financial_categories fc ON fe.category_id = fc.id
       WHERE fe.id = $1
     `, [req.params.id]);
+
+    // Learn from this entry (non-blocking)
+    saveRule(description, 'expense', category_id, supplier).catch(() => {});
+
     res.json(updated);
   } catch (err) {
     console.error(err);

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
 import { AuthRequest } from '../middleware/auth';
+import { saveRule } from '../utils/categorization';
 
 const router = Router();
 
@@ -130,7 +131,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/revenues/bulk-import
 router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
-  const { items } = req.body as { items: { description: string; date: string; amount: number; category_id?: number; notes?: string }[] };
+  const { items } = req.body as { items: { description: string; date: string; amount: number; category_id?: number; client_name?: string; notes?: string }[] };
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Nenhum item para importar' });
   }
@@ -138,11 +139,13 @@ router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
   try {
     for (const item of items) {
       const { rows: [row] } = await pool.query(
-        `INSERT INTO financial_revenues (description, amount, date, category_id, notes, status)
-         VALUES ($1, $2, $3, $4, $5, 'pendente') RETURNING *`,
-        [item.description, item.amount, item.date, item.category_id || null, item.notes || null]
+        `INSERT INTO financial_revenues (description, amount, date, category_id, client_name, notes, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pendente') RETURNING *`,
+        [item.description, item.amount, item.date, item.category_id || null, item.client_name || null, item.notes || null]
       );
       imported.push(row);
+      // Learn from confirmed imports (non-blocking)
+      saveRule(item.description, 'revenue', item.category_id, item.client_name).catch(() => {});
     }
     return res.status(201).json({ imported: imported.length, items: imported });
   } catch (err) {
@@ -172,6 +175,10 @@ router.post('/', async (req: Request, res: Response) => {
       LEFT JOIN agency_clients ac ON fr.client_id = ac.id
       WHERE fr.id = $1
     `, [inserted.id]);
+
+    // Learn from this entry (non-blocking)
+    saveRule(description, 'revenue', category_id, client_name).catch(() => {});
+
     res.status(201).json(newRow);
   } catch (err) {
     console.error(err);
@@ -201,6 +208,10 @@ router.put('/:id', async (req: Request, res: Response) => {
       LEFT JOIN agency_clients ac ON fr.client_id = ac.id
       WHERE fr.id = $1
     `, [req.params.id]);
+
+    // Learn from this entry (non-blocking)
+    saveRule(description, 'revenue', category_id, client_name).catch(() => {});
+
     res.json(updated);
   } catch (err) {
     console.error(err);

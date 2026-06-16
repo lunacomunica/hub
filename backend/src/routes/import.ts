@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { suggestForDescription } from '../utils/categorization';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -109,9 +110,16 @@ router.post('/preview', requireAuth, upload.single('file'), (req: AuthRequest, r
     return res.status(422).json({ error: 'Nenhuma transação encontrada. Se o arquivo mistura entradas e saídas, o sistema filtrou apenas as relevantes para esta página.' });
   }
 
-  // Strip the `credit` field from the response (frontend doesn't need it)
-  const out = rows.map(({ credit: _c, ...r }) => r);
-  return res.json({ rows: out, total: out.length });
+  // Enrich with auto-category/supplier suggestions (non-blocking — failures are silently skipped)
+  const transType = (filter === 'revenue' ? 'revenue' : 'expense') as 'revenue' | 'expense';
+  const enriched = await Promise.all(
+    rows.map(async ({ credit: _c, ...r }) => {
+      const suggestion = await suggestForDescription(r.description, transType).catch(() => ({}));
+      return { ...r, ...suggestion };
+    })
+  );
+
+  return res.json({ rows: enriched, total: enriched.length });
 });
 
 export default router;

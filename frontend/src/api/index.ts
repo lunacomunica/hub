@@ -226,7 +226,7 @@ export const updateProfile = (data: { name?: string; current_password?: string; 
   req('/auth/profile', { method: 'PUT', body: JSON.stringify(data) });
 
 // Import
-export async function previewImport(file: File, filter?: 'revenue' | 'expense'): Promise<{ rows: { date: string; description: string; amount: number }[]; total: number }> {
+export async function previewImport(file: File, filter?: 'revenue' | 'expense'): Promise<{ rows: { date: string; description: string; amount: number; category_id?: number; supplier?: string }[]; total: number }> {
   const token = localStorage.getItem('auth-token');
   const formData = new FormData();
   formData.append('file', file);
@@ -250,8 +250,8 @@ export async function previewImport(file: File, filter?: 'revenue' | 'expense'):
   }
 }
 
-export const bulkImportRevenues = (items: { description: string; date: string; amount: number; category_id?: number }[]): Promise<{ imported: number }> =>
+export const bulkImportRevenues = (items: { description: string; date: string; amount: number; category_id?: number; client_name?: string }[]): Promise<{ imported: number }> =>
   req('/revenues/bulk-import', { method: 'POST', body: JSON.stringify({ items }) });
 
-export const bulkImportExpenses = (items: { description: string; date: string; amount: number; category_id?: number }[]): Promise<{ imported: number }> =>
+export const bulkImportExpenses = (items: { description: string; date: string; amount: number; category_id?: number; supplier?: string }[]): Promise<{ imported: number }> =>
   req('/expenses/bulk-import', { method: 'POST', body: JSON.stringify({ items }) });

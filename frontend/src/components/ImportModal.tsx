@@ -13,12 +13,13 @@ interface ParsedRow {
 interface ImportRow extends ParsedRow {
   selected: boolean;
   category_id?: number;
+  supplier?: string;
 }
 
 interface Props {
   type: 'revenue' | 'expense';
   categories: Category[];
-  onImport: (items: { description: string; date: string; amount: number; category_id?: number }[]) => Promise<void>;
+  onImport: (items: { description: string; date: string; amount: number; category_id?: number; supplier?: string; client_name?: string }[]) => Promise<void>;
   onClose: () => void;
 }
 
@@ -39,7 +40,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
     setError('');
     try {
       const { rows: parsed, total } = await previewImport(file, type);
-      setRows(parsed.map(r => ({ ...r, selected: true })));
+      setRows(parsed.map(r => ({ ...r, selected: true, category_id: r.category_id, supplier: r.supplier })));
       setStep('preview');
       // If file was mixed and we filtered, show a notice (stored in error as info)
       if (total < parsed.length) setError('');
@@ -75,12 +76,21 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
     setRows(prev => prev.map(r => ({ ...r, category_id: catId })));
   };
 
+  const hasSuggestions = rows.some(r => r.category_id || r.supplier);
+
   const handleConfirm = async () => {
     const selected = rows.filter(r => r.selected);
     if (selected.length === 0) return;
     setStep('importing');
     try {
-      await onImport(selected.map(r => ({ description: r.description, date: r.date, amount: r.amount, category_id: r.category_id })));
+      await onImport(selected.map(r => ({
+        description: r.description,
+        date: r.date,
+        amount: r.amount,
+        category_id: r.category_id,
+        supplier: type === 'expense' ? r.supplier : undefined,
+        client_name: type === 'revenue' ? r.supplier : undefined,
+      })));
       setImportedCount(selected.length);
       setStep('done');
     } catch (e: unknown) {
@@ -155,6 +165,11 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                   <input type="checkbox" checked={rows.every(r => r.selected)} onChange={e => toggleAll(e.target.checked)} />
                   Selecionar todos ({selectedCount}/{rows.length})
                 </label>
+                {hasSuggestions && (
+                  <span style={{ fontSize: '0.75rem', color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '6px', padding: '2px 8px' }}>
+                    ✦ Categorias e fornecedores preenchidos automaticamente pelo histórico
+                  </span>
+                )}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Categoria para todos:</span>
                   <div style={{ minWidth: '200px' }}>
@@ -180,6 +195,7 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                       <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-label)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.75rem' }}>Descri&ccedil;&atilde;o</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-label)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.75rem' }}>Valor</th>
                       <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-label)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.75rem' }}>Categoria</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-label)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.75rem' }}>{type === 'expense' ? 'Fornecedor' : 'Cliente'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -207,6 +223,16 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
                             <option value="">&mdash;</option>
                             {localCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
+                        </td>
+                        <td style={{ padding: '7px 12px' }}>
+                          <input
+                            type="text"
+                            value={row.supplier || ''}
+                            onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, supplier: e.target.value || undefined } : r))}
+                            placeholder="—"
+                            className="input-dark"
+                            style={{ fontSize: '0.75rem', padding: '3px 6px', minWidth: '110px', width: '100%' }}
+                          />
                         </td>
                       </tr>
                     ))}
