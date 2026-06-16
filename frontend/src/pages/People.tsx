@@ -19,7 +19,7 @@ function authFetch(url: string, options?: RequestInit) {
   });
 }
 
-const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => (d ? d.split('-').reverse().join('/') : '—');
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -250,9 +250,9 @@ export default function People() {
 
   // ── stats aggregates ──────────────────────────────────────────────────────
   const activeEmployees = employees.filter(e => e.status === 'ativo');
-  const totalSalary = activeEmployees.reduce((s, e) => s + e.salary, 0);
-  const totalFerias = activeEmployees.reduce((s, e) => s + (e.salary * (4 / 3)) / 12, 0);
-  const totalDecimo = activeEmployees.reduce((s, e) => s + e.salary / 12, 0);
+  const totalSalary = activeEmployees.reduce((s, e) => s + Number(e.salary), 0);
+  const totalFerias = activeEmployees.reduce((s, e) => s + (Number(e.salary) * (4 / 3)) / 12, 0);
+  const totalDecimo = activeEmployees.reduce((s, e) => s + Number(e.salary) / 12, 0);
 
   const load = async () => {
     setLoading(true);
@@ -592,7 +592,7 @@ function TabFinanceiro({ employee }: { employee: Employee }) {
   });
   const [savingOT, setSavingOT] = useState(false);
 
-  const hourlyRate = employee.salary / 220;
+  const hourlyRate = Number(employee.salary) / 220;
 
   const loadHistory = async () => {
     setLoadingHistory(true);
@@ -658,8 +658,8 @@ function TabFinanceiro({ employee }: { employee: Employee }) {
   };
 
   // Provisions
-  const ferias = (employee.salary * (4 / 3)) / 12;
-  const decimo = employee.salary / 12;
+  const ferias = (Number(employee.salary) * (4 / 3)) / 12;
+  const decimo = Number(employee.salary) / 12;
   const total = ferias + decimo;
 
   return (
