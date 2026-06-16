@@ -186,7 +186,9 @@ pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo_path TEXT').cat
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { rows: employees } = await pool.query('SELECT * FROM employees ORDER BY name ASC');
+    const { rows: employees } = await pool.query(
+      'SELECT *, (photo_path IS NOT NULL) as has_photo FROM employees ORDER BY name ASC'
+    );
 
     const result = employees.map((emp: any) => ({
       ...emp,

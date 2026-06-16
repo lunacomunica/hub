@@ -37,6 +37,7 @@ interface Employee {
   status: 'ativo' | 'ferias' | 'licenca' | 'inativo';
   notes: string | null;
   avatar_color: string;
+  has_photo?: boolean;
   provision_ferias_monthly?: number;
   provision_decimo_monthly?: number;
   provision_total_monthly?: number;
@@ -152,6 +153,45 @@ function Avatar({ name, color, size = 40 }: { name: string; color: string; size?
       {initials}
     </div>
   );
+}
+
+// ─── SmallEmployeePhoto ───────────────────────────────────────────────────────
+// Shows employee photo if they have one, otherwise falls back to Avatar
+
+function SmallEmployeePhoto({ emp, size = 44 }: { emp: Employee; size?: number }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!emp.has_photo) return;
+    const token = localStorage.getItem('auth-token');
+    fetch(`/api/employees/${emp.id}/photo`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then(res => {
+      if (res.ok) return res.blob();
+      return null;
+    }).then(blob => {
+      if (blob) setPhotoUrl(URL.createObjectURL(blob));
+    }).catch(() => {});
+    return () => { if (photoUrl) URL.revokeObjectURL(photoUrl); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emp.id, emp.has_photo]);
+
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt={emp.name}
+        style={{
+          width: size, height: size,
+          borderRadius: '50%',
+          objectFit: 'cover',
+          flexShrink: 0,
+          border: '2px solid rgba(59,130,246,0.3)',
+        }}
+      />
+    );
+  }
+  return <Avatar name={emp.name} color={emp.avatar_color} size={size} />;
 }
 
 // ─── Star rating ──────────────────────────────────────────────────────────────
@@ -299,7 +339,7 @@ export default function People() {
               style={{ cursor: 'pointer' }}
             >
               <div className="flex items-start gap-3">
-                <Avatar name={emp.name} color={emp.avatar_color} size={44} />
+                <SmallEmployeePhoto emp={emp} size={44} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-slate-100 truncate">{emp.name}</p>
