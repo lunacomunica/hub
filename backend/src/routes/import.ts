@@ -9,12 +9,12 @@ interface ParsedRow {
   date: string;       // YYYY-MM-DD
   description: string;
   amount: number;     // always positive
+  credit: boolean;    // true = entrada (receita), false = saída (despesa)
 }
 
 // ── OFX Parser ─────────────────────────────────────────────────────────────
 function parseOFX(content: string): ParsedRow[] {
   const rows: ParsedRow[] = [];
-  // Split by STMTTRN blocks
   const trnRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;
   let match;
   while ((match = trnRegex.exec(content)) !== null) {
@@ -25,9 +25,9 @@ function parseOFX(content: string): ParsedRow[] {
 
     if (!dateRaw || !amtRaw) continue;
     const date = `${dateRaw.slice(0,4)}-${dateRaw.slice(4,6)}-${dateRaw.slice(6,8)}`;
-    const amount = Math.abs(parseFloat(amtRaw.replace(',', '.')));
-    if (!amount) continue;
-    rows.push({ date, description: memo.trim(), amount });
+    const raw = parseFloat(amtRaw.replace(',', '.'));
+    if (!raw) continue;
+    rows.push({ date, description: memo.trim(), amount: Math.abs(raw), credit: raw > 0 });
   }
   return rows;
 }
@@ -75,20 +75,24 @@ function parseCSV(content: string): ParsedRow[] {
       continue;
     }
 
-    const amount = Math.abs(parseFloat(rawAmt.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '')));
-    if (!amount || isNaN(amount)) continue;
+    const raw = parseFloat(rawAmt.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+    if (!raw || isNaN(raw)) continue;
 
-    rows.push({ date, description: rawDesc.trim(), amount });
+    rows.push({ date, description: rawDesc.trim(), amount: Math.abs(raw), credit: raw > 0 });
   }
   return rows;
 }
 
 // ── POST /api/import/preview ─────────────────────────────────────────────────
+// Query param: ?filter=revenue  → only positive (credits)
+//              ?filter=expense  → only negative (debits)
+//              (omitted)        → all transactions
 router.post('/preview', requireAuth, upload.single('file'), (req: AuthRequest, res: Response) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
   const content = req.file.buffer.toString('utf-8');
   const filename = req.file.originalname.toLowerCase();
+  const filter = (req.query.filter as string) || '';
 
   let rows: ParsedRow[];
   if (filename.endsWith('.ofx') || content.includes('<OFX>') || content.includes('<ofx>')) {
@@ -97,11 +101,17 @@ router.post('/preview', requireAuth, upload.single('file'), (req: AuthRequest, r
     rows = parseCSV(content);
   }
 
+  // Auto-filter by transaction direction when requested
+  if (filter === 'revenue') rows = rows.filter(r => r.credit);
+  if (filter === 'expense') rows = rows.filter(r => !r.credit);
+
   if (rows.length === 0) {
-    return res.status(422).json({ error: 'Nenhuma transação encontrada no arquivo. Verifique se o formato está correto.' });
+    return res.status(422).json({ error: 'Nenhuma transação encontrada. Se o arquivo mistura entradas e saídas, o sistema filtrou apenas as relevantes para esta página.' });
   }
 
-  return res.json({ rows, total: rows.length });
+  // Strip the `credit` field from the response (frontend doesn't need it)
+  const out = rows.map(({ credit: _c, ...r }) => r);
+  return res.json({ rows: out, total: out.length });
 });
 
 export default router;

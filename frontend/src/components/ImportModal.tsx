@@ -38,9 +38,11 @@ export default function ImportModal({ type, categories, onImport, onClose }: Pro
     setLoading(true);
     setError('');
     try {
-      const { rows: parsed } = await previewImport(file);
+      const { rows: parsed, total } = await previewImport(file, type);
       setRows(parsed.map(r => ({ ...r, selected: true })));
       setStep('preview');
+      // If file was mixed and we filtered, show a notice (stored in error as info)
+      if (total < parsed.length) setError('');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao processar arquivo');
     } finally {

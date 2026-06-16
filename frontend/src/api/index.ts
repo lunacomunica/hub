@@ -226,14 +226,15 @@ export const updateProfile = (data: { name?: string; current_password?: string; 
   req('/auth/profile', { method: 'PUT', body: JSON.stringify(data) });
 
 // Import
-export async function previewImport(file: File): Promise<{ rows: { date: string; description: string; amount: number }[]; total: number }> {
+export async function previewImport(file: File, filter?: 'revenue' | 'expense'): Promise<{ rows: { date: string; description: string; amount: number }[]; total: number }> {
   const token = localStorage.getItem('auth-token');
   const formData = new FormData();
   formData.append('file', file);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const url = filter ? `/api/import/preview?filter=${filter}` : '/api/import/preview';
   try {
-    const res = await fetch('/api/import/preview', {
+    const res = await fetch(url, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
