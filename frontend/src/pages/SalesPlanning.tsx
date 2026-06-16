@@ -68,7 +68,7 @@ export default function SalesPlanning() {
       setProducts(prods);
       setItems(gd.items.length > 0 ? gd.items : []);
       setNotes(gd.goal?.notes || '');
-      setTargetNewClients(gd.goal?.target_new_clients || 0);
+
 
       const monthStr = String(month).padStart(2, '0');
       const startDate = `${year}-${monthStr}-01`;
