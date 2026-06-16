@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import pool from '../db';
+import pool, { query as dbQuery } from '../db';
 import { requireAuth, generateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -18,7 +18,7 @@ function getClientIp(req: Request): string {
 
 async function isLockedOut(email: string, ip: string): Promise<boolean> {
   const since = new Date(Date.now() - LOCKOUT_WINDOW_MS).toISOString();
-  const { rows: [row] } = await pool.query<{ c: string }>(
+  const { rows: [row] } = await dbQuery<{ c: string }>(
     `SELECT COUNT(*) as c FROM login_attempts
      WHERE (email = $1 OR ip = $2) AND success = 0 AND created_at >= $3`,
     [email, ip, since]
@@ -27,14 +27,14 @@ async function isLockedOut(email: string, ip: string): Promise<boolean> {
 }
 
 async function recordAttempt(email: string, ip: string, success: boolean) {
-  await pool.query(
+  await dbQuery(
     'INSERT INTO login_attempts (email, ip, success) VALUES ($1, $2, $3)',
     [email, ip, success ? 1 : 0]
   );
 }
 
 async function writeAudit(userId: number | null, userEmail: string, action: string, resource: string, ip: string) {
-  await pool.query(
+  await dbQuery(
     'INSERT INTO audit_log (user_id, user_email, action, resource, ip) VALUES ($1, $2, $3, $4, $5)',
     [userId, userEmail, action, resource, ip]
   );
@@ -62,7 +62,7 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   }
 
-  const { rows: [user] } = await pool.query<{
+  const { rows: [user] } = await dbQuery<{
     id: number; name: string; email: string; password_hash: string; role: string;
   }>(
     'SELECT * FROM users WHERE email = $1 AND active = 1',
@@ -85,7 +85,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
 // ─── GET /api/auth/me ────────────────────────────────────────────────────────
 router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { rows: [user] } = await pool.query(
+  const { rows: [user] } = await dbQuery(
     'SELECT id, name, email, role, active, created_at FROM users WHERE id = $1',
     [req.user!.id]
   );
@@ -103,7 +103,7 @@ router.post('/logout', requireAuth, async (req: AuthRequest, res: Response) => {
 // ─── GET /api/auth/users — admin only ───────────────────────────────────────
 router.get('/users', requireAuth, async (req: AuthRequest, res: Response) => {
   if (req.user!.role !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
-  const { rows } = await pool.query('SELECT id, name, email, role, active, created_at, updated_at FROM users');
+  const { rows } = await dbQuery('SELECT id, name, email, role, active, created_at, updated_at FROM users');
   return res.json(rows);
 });
 
@@ -128,11 +128,11 @@ router.post('/users', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 
   const normalizedEmail = String(email).toLowerCase().trim();
-  const { rows: [existing] } = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+  const { rows: [existing] } = await dbQuery('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
   if (existing) return res.status(409).json({ error: 'Email já cadastrado' });
 
   const hash = bcrypt.hashSync(password, 10);
-  const { rows: [newUser] } = await pool.query(
+  const { rows: [newUser] } = await dbQuery(
     'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role, active, created_at',
     [name, normalizedEmail, hash, role]
   );
