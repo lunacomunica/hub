@@ -144,6 +144,18 @@ export const getClientPlanHistory = (id: number): Promise<PlanHistoryEntry[]> =>
 export const addClientPlanChange = (id: number, data: { new_fee: number; change_type?: string; notes?: string; changed_at?: string }): Promise<{ success: boolean; old_fee: number; new_fee: number }> =>
   req(`/clients/${id}/plan-change`, { method: 'POST', body: JSON.stringify(data) });
 
+export interface BreakevenData {
+  current_mrr: number;
+  client_count: number;
+  avg_ticket: number;
+  avg_fixed_costs: number;
+  total_direct_costs: number;
+  direct_cost_rate: number;
+  current_real_margin_pct: number;
+}
+export const getBreakeven = (): Promise<BreakevenData> =>
+  req('/clients/breakeven');
+
 // Sales Goals
 export const getSalesGoals = (filters?: { month?: number; year?: number }): Promise<SalesGoal[]> => {
   const params = new URLSearchParams();

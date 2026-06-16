@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, RefreshCw } from 'lucide-react';
-import { getScenarios, createScenario, updateScenario, deleteScenario } from '../api';
+import { X, RefreshCw, Target, TrendingUp, Info } from 'lucide-react';
+import { getScenarios, createScenario, updateScenario, deleteScenario, getBreakeven } from '../api';
+import type { BreakevenData } from '../api';
 import type { Scenario } from '../types';
 
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -35,6 +36,8 @@ export default function Scenarios() {
   const [modal, setModal] = useState<Scenario['type'] | null>(null);
   const [form, setForm] = useState<Partial<Scenario>>({});
   const [saving, setSaving] = useState(false);
+  const [breakeven, setBreakeven] = useState<BreakevenData | null>(null);
+  const [targetMargin, setTargetMargin] = useState(30);
 
   const load = async () => {
     setLoading(true);
@@ -42,6 +45,8 @@ export default function Scenarios() {
       const d = await getScenarios(month, year);
       setScenarios(d.scenarios);
       setActual(d.actual);
+      const be = await getBreakeven().catch(() => null);
+      setBreakeven(be);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -72,6 +77,26 @@ export default function Scenarios() {
     catch { alert('Erro ao deletar'); }
   };
 
+  // Break-even calculations
+  const beFixed = breakeven?.avg_fixed_costs ?? 0;
+  const beDirectRate = breakeven?.direct_cost_rate ?? 0;
+  const beMrr = breakeven?.current_mrr ?? 0;
+  const beClients = breakeven?.client_count ?? 0;
+  const beTicket = breakeven?.avg_ticket ?? 0;
+  const beCurrentMargin = breakeven?.current_real_margin_pct ?? 0;
+
+  // MRR needed for target: T = 1 - fixed/MRR - directRate  →  MRR = fixed / (1 - T - directRate)
+  const tRate = targetMargin / 100;
+  const denominator = 1 - tRate - beDirectRate;
+  const mrrNeeded = denominator > 0 ? beFixed / denominator : Infinity;
+  const mrrGap = Math.max(0, mrrNeeded - beMrr);
+  const clientsNeeded = beTicket > 0 ? Math.ceil(mrrGap / beTicket) : 0;
+
+  // Fixed cost reduction needed to hit target at current MRR (if mrrNeeded > beMrr)
+  // T = (MRR - fixed_needed - direct) / MRR  →  fixed_needed = MRR * (1 - T - directRate)
+  const fixedNeeded = beMrr * (1 - tRate - beDirectRate);
+  const fixedReduction = Math.max(0, beFixed - fixedNeeded);
+
   // Chart data
   const chartData = [
     { name: 'Receita', ...(actual ? { Atual: actual.revenue } : {}), ...Object.fromEntries(scenarios.map(s => [TYPES.find(t => t.key === s.type)?.label || s.type, s.revenue_projection])) },
@@ -93,6 +118,97 @@ export default function Scenarios() {
           <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400"><RefreshCw size={15} /></button>
         </div>
       </div>
+
+      {/* Break-even calculator */}
+      {breakeven && (
+        <div className="card p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Target size={15} className="text-indigo-400" />
+            <h2 className="font-semibold text-slate-300">Ponto de Equilíbrio — Margem Real</h2>
+            <span className="text-xs text-slate-500 ml-1">baseado nos últimos 3 meses de custos fixos</span>
+          </div>
+
+          {/* Current state */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="rounded-lg p-3 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="text-xs text-slate-500 mb-1">MRR atual</div>
+              <div className="font-semibold text-slate-200 text-sm">{brl(beMrr)}</div>
+            </div>
+            <div className="rounded-lg p-3 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="text-xs text-slate-500 mb-1">Custos fixos (média)</div>
+              <div className="font-semibold text-red-400 text-sm">{brl(beFixed)}</div>
+            </div>
+            <div className="rounded-lg p-3 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="text-xs text-slate-500 mb-1">Ticket médio</div>
+              <div className="font-semibold text-slate-200 text-sm">{brl(beTicket)}</div>
+            </div>
+            <div className={`rounded-lg p-3 text-center`} style={{ background: beCurrentMargin >= 30 ? 'rgba(16,185,129,0.08)' : beCurrentMargin >= 15 ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${beCurrentMargin >= 30 ? 'rgba(16,185,129,0.25)' : beCurrentMargin >= 15 ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
+              <div className="text-xs text-slate-500 mb-1">Margem real hoje</div>
+              <div className={`font-semibold text-sm ${beCurrentMargin >= 30 ? 'text-emerald-400' : beCurrentMargin >= 15 ? 'text-amber-400' : 'text-red-400'}`}>{beCurrentMargin.toFixed(1)}%</div>
+            </div>
+          </div>
+
+          {/* Target margin slider */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-300">Meta de margem real</label>
+              <span className="text-lg font-bold text-indigo-400">{targetMargin}%</span>
+            </div>
+            <input
+              type="range" min={5} max={60} step={5}
+              value={targetMargin}
+              onChange={e => setTargetMargin(Number(e.target.value))}
+              className="w-full accent-indigo-500"
+            />
+            <div className="flex justify-between text-xs text-slate-600 mt-1">
+              <span>5%</span><span>15%</span><span>25%</span><span>35%</span><span>45%</span><span>60%</span>
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-xl p-4" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+              <div className="text-xs text-slate-400 mb-1">MRR necessário</div>
+              <div className="text-xl font-bold text-indigo-400">{denominator > 0 ? brl(mrrNeeded) : '—'}</div>
+              {mrrGap > 0 && <div className="text-xs text-slate-500 mt-1">faltam {brl(mrrGap)} vs hoje</div>}
+              {mrrGap === 0 && <div className="text-xs text-emerald-400 mt-1">✓ já atingido com MRR atual</div>}
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+              <div className="text-xs text-slate-400 mb-1">Novos clientes necessários</div>
+              <div className="text-xl font-bold text-indigo-400">{mrrGap > 0 ? `+${clientsNeeded}` : '—'}</div>
+              <div className="text-xs text-slate-500 mt-1">ao ticket médio de {brl(beTicket)}</div>
+            </div>
+            <div className="rounded-xl p-4" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+              <div className="text-xs text-slate-400 mb-1">Ou: cortar custos fixos em</div>
+              <div className="text-xl font-bold text-indigo-400">{fixedReduction > 0 ? brl(fixedReduction) : '—'}</div>
+              <div className="text-xs text-slate-500 mt-1">mantendo o MRR atual</div>
+            </div>
+          </div>
+
+          {/* Quick targets table */}
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Metas rápidas</div>
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 20, 30, 40].map(t => {
+                const d = 1 - t / 100 - beDirectRate;
+                const mrr = d > 0 ? beFixed / d : Infinity;
+                const gap = Math.max(0, mrr - beMrr);
+                const cl = beTicket > 0 ? Math.ceil(gap / beTicket) : 0;
+                const reached = gap === 0;
+                return (
+                  <button key={t} onClick={() => setTargetMargin(t)}
+                    className="rounded-lg p-3 text-center transition-all"
+                    style={{ background: targetMargin === t ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.03)', border: `1px solid ${targetMargin === t ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.07)'}` }}>
+                    <div className={`text-sm font-bold mb-1 ${reached ? 'text-emerald-400' : 'text-slate-300'}`}>{t}%</div>
+                    <div className="text-xs text-slate-400">{d > 0 ? brl(mrr) : '—'}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{reached ? '✓ atingido' : `+${cl} clientes`}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 rounded-full border-b-2 border-blue-500"></div></div>
