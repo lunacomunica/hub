@@ -62,7 +62,12 @@ export default function Products() {
     if (!form.name.trim()) return alert('Nome é obrigatório');
     const method = editing ? 'PUT' : 'POST';
     const url = editing ? `${BASE}/${editing.id}` : BASE;
-    await authFetch(url, { method, body: JSON.stringify(form) });
+    const res = await authFetch(url, { method, body: JSON.stringify(form) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+      alert(err.error || 'Erro ao salvar produto');
+      return;
+    }
     setShowModal(false);
     load();
   };
