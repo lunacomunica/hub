@@ -95,8 +95,8 @@ export default function Expenses() {
   };
 
   useEffect(() => { load(); }, [viewMode, filterMonth, filterYear, filterStatus]);
-  useEffect(() => { setSelected(new Set()); }, [viewMode, filterMonth, filterYear, filterStatus, search]);
-  useEffect(() => { if (viewMode === 'annual') setProjections([]); }, [viewMode]);
+  useEffect(() => { setSelected(new Set()); setSelectedProj(new Set()); }, [viewMode, filterMonth, filterYear, filterStatus, search]);
+  useEffect(() => { if (viewMode === 'annual') { setProjections([]); setSelectedProj(new Set()); } }, [viewMode]);
 
   // Filtered list (frontend search)
   const filtered = items.filter(r => {
@@ -143,6 +143,8 @@ export default function Expenses() {
 
   const [confirmingProj, setConfirmingProj] = useState<string | null>(null);
   const [removingFixed, setRemovingFixed] = useState<string | null>(null);
+  const [selectedProj, setSelectedProj] = useState<Set<string>>(new Set());
+  const [bulkConfirming, setBulkConfirming] = useState(false);
 
   const confirmProjection = async (p: Expense & { is_projection: true }) => {
     setConfirmingProj(String(p.id));
@@ -173,10 +175,61 @@ export default function Expenses() {
     const originalId = Number(String(p.id).replace('proj_', ''));
     setRemovingFixed(String(p.id));
     try {
-      await updateExpense(originalId, { ...p, id: originalId, is_fixed: 0 });
+      await updateExpense(originalId, {
+        description: p.description,
+        category_id: p.category_id,
+        supplier: p.supplier,
+        client_name: p.client_name,
+        amount: p.amount,
+        date: p.date,
+        due_date: p.due_date,
+        status: 'pendente',
+        is_fixed: 0,
+        is_client_cost: p.is_client_cost,
+        notes: p.notes,
+        card_id: p.card_id,
+      });
       load();
     } catch { alert('Erro ao atualizar despesa'); }
     finally { setRemovingFixed(null); }
+  };
+
+  const toggleProj = (id: string) => setSelectedProj(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allProjSelected = filteredProjections.length > 0 && filteredProjections.every(p => selectedProj.has(String(p.id)));
+  const toggleAllProj = () => {
+    if (allProjSelected) setSelectedProj(new Set());
+    else setSelectedProj(new Set(filteredProjections.map(p => String(p.id))));
+  };
+
+  const bulkConfirmProjections = async () => {
+    const toConfirm = filteredProjections.filter(p => selectedProj.has(String(p.id)));
+    if (toConfirm.length === 0) return;
+    setBulkConfirming(true);
+    try {
+      const m = String(filterMonth).padStart(2, '0');
+      const day = new Date().getDate();
+      const dateStr = `${filterYear}-${m}-${String(day).padStart(2, '0')}`;
+      await Promise.all(toConfirm.map(p => createExpense({
+        description: p.description,
+        category_id: p.category_id,
+        supplier: p.supplier,
+        client_name: p.client_name,
+        amount: p.amount,
+        date: dateStr,
+        status: 'pendente',
+        is_fixed: 1,
+        is_client_cost: p.is_client_cost,
+        notes: p.notes,
+        card_id: p.card_id,
+      })));
+      setSelectedProj(new Set());
+      load();
+    } catch { alert('Erro ao confirmar despesas'); }
+    finally { setBulkConfirming(false); }
   };
 
   // Selection helpers
@@ -439,6 +492,22 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* Projection bulk action bar */}
+      {selectedProj.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)' }}>
+          <span className="font-medium" style={{ color: '#f59e0b' }}>{selectedProj.size} provisão{selectedProj.size !== 1 ? 'ões' : ''} selecionada{selectedProj.size !== 1 ? 's' : ''}</span>
+          <button
+            onClick={bulkConfirmProjections}
+            disabled={bulkConfirming}
+            className="text-xs px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-40 ml-2"
+            style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}
+          >
+            {bulkConfirming ? 'Confirmando...' : `✓ Confirmar ${selectedProj.size}`}
+          </button>
+          <button onClick={() => setSelectedProj(new Set())} className="ml-auto text-slate-400 hover:text-slate-200"><X size={16} /></button>
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)' }}>
@@ -497,7 +566,9 @@ export default function Expenses() {
             <tbody>
               {filteredProjections.map(p => (
                 <tr key={p.id} className="tr border-l-2 border-amber-500/60 opacity-70">
-                  <td className="td px-4 py-3 w-8"></td>
+                  <td className="td px-4 py-3 w-8">
+                    <input type="checkbox" checked={selectedProj.has(String(p.id))} onChange={() => toggleProj(String(p.id))} className="cursor-pointer" />
+                  </td>
                   <td className="td px-4 py-3 text-amber-400/80">{String(filterMonth).padStart(2,'0')}/{filterYear}</td>
                   <td className="td px-4 py-3 font-medium text-slate-300">{p.description}</td>
                   <td className="td px-4 py-3">
