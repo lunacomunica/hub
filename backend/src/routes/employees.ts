@@ -9,11 +9,10 @@ const router = Router();
 
 // ─── Multer setup ────────────────────────────────────────────────────────────
 
-const UPLOAD_DIR = '/tmp/uploads/payslips';
-const PHOTO_DIR = '/tmp/uploads/photos';
-const TEMP_DIR = '/tmp/uploads/temp';
+const UPLOAD_DIR = process.env.UPLOADS_DIR || '/tmp/uploads/payslips';
+const TEMP_DIR = process.env.TEMP_DIR || '/tmp/uploads/temp';
 
-[UPLOAD_DIR, PHOTO_DIR, TEMP_DIR].forEach(dir => {
+[UPLOAD_DIR, TEMP_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -23,12 +22,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
-const photoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, PHOTO_DIR),
-  filename: (req, _file, cb) => cb(null, `employee-${(req as AuthRequest).params?.id || Date.now()}.jpg`),
-});
+// Photos use memory storage → saved as base64 in DB (no file system dependency)
 const uploadPhoto = multer({
-  storage: photoStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
@@ -182,6 +178,9 @@ function calcProvisions(employee: {
 
   return { monthly_provision, ferias_accrued, decimo_accrued };
 }
+
+// ─── Ensure photo_path column exists (safe migration) ────────────────────────
+pool.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo_path TEXT').catch(() => {});
 
 // ─── GET / — list all employees ──────────────────────────────────────────────
 
@@ -694,24 +693,34 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ─── POST /:id/photo — upload employee photo ─────────────────────────────────
+// ─── POST /:id/photo — upload employee photo (stored as base64 in DB) ────────
 
 router.post('/:id/photo', uploadPhoto.single('photo'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { rows: [emp] } = await pool.query('SELECT id, photo_path FROM employees WHERE id = $1', [Number(id)]);
+    const { rows: [emp] } = await pool.query('SELECT id FROM employees WHERE id = $1', [Number(id)]);
     if (!emp) return res.status(404).json({ error: 'Funcionário não encontrado' });
-
-    // Remove old photo file if exists
-    if (emp.photo_path && fs.existsSync(emp.photo_path)) {
-      fs.unlinkSync(emp.photo_path);
-    }
-
     if (!req.file) return res.status(400).json({ error: 'Nenhuma imagem enviada' });
 
-    await pool.query('UPDATE employees SET photo_path = $1, updated_at = NOW() WHERE id = $2', [req.file.path, Number(id)]);
+    // Store as data URL so no file system is needed
+    const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    await pool.query(
+      'UPDATE employees SET photo_path = $1, updated_at = NOW() WHERE id = $2',
+      [dataUrl, Number(id)]
+    );
 
-    res.json({ success: true, filename: req.file.filename });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── DELETE /:id/photo — remove employee photo ────────────────────────────────
+
+router.delete('/:id/photo', async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query('UPDATE employees SET photo_path = NULL, updated_at = NOW() WHERE id = $1', [Number(req.params.id)]);
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -722,10 +731,18 @@ router.post('/:id/photo', uploadPhoto.single('photo'), async (req: AuthRequest, 
 router.get('/:id/photo', async (req: AuthRequest, res: Response) => {
   try {
     const { rows: [emp] } = await pool.query('SELECT photo_path FROM employees WHERE id = $1', [Number(req.params.id)]);
-    if (!emp || !emp.photo_path || !fs.existsSync(emp.photo_path)) {
+    if (!emp || !emp.photo_path) {
       return res.status(404).json({ error: 'Foto não encontrada' });
     }
-    res.sendFile(path.resolve(emp.photo_path));
+    // photo_path is stored as a data URL
+    const dataUrl: string = emp.photo_path;
+    const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) return res.status(404).json({ error: 'Formato inválido' });
+    const [, mime, b64] = matches;
+    const buf = Buffer.from(b64, 'base64');
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(buf);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

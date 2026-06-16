@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Camera, Star, Upload, Download, Trash2, Plus,
+  ArrowLeft, Camera, Star, Upload, Download, Trash2, Plus, X,
   Briefcase, DollarSign, Calendar, Clock, MessageSquare, FileText,
 } from 'lucide-react';
 
@@ -208,6 +208,7 @@ function EmployeePhoto({
 }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadPhoto = async () => {
@@ -215,6 +216,7 @@ function EmployeePhoto({
       const res = await authFetch(`${BASE}/${employeeId}/photo`);
       if (res.ok) {
         const blob = await res.blob();
+        if (photoUrl) URL.revokeObjectURL(photoUrl);
         setPhotoUrl(URL.createObjectURL(blob));
       } else {
         setPhotoUrl(null);
@@ -226,25 +228,39 @@ function EmployeePhoto({
 
   useEffect(() => {
     loadPhoto();
-    return () => {
-      if (photoUrl) URL.revokeObjectURL(photoUrl);
-    };
+    return () => { if (photoUrl) URL.revokeObjectURL(photoUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Client-side size guard (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Foto muito grande. Use uma imagem menor que 2MB.');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+    setUploading(true);
     const fd = new FormData();
     fd.append('photo', file);
     try {
       await authFetch(`${BASE}/${employeeId}/photo`, { method: 'POST', body: fd });
-      if (photoUrl) URL.revokeObjectURL(photoUrl);
       await loadPhoto();
     } catch {
       alert('Erro ao enviar foto');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
     }
-    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handleRemove = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Remover foto?')) return;
+    await authFetch(`${BASE}/${employeeId}/photo`, { method: 'DELETE' });
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhotoUrl(null);
   };
 
   return (
@@ -252,46 +268,63 @@ function EmployeePhoto({
       <div
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        onClick={() => fileRef.current?.click()}
+        onClick={() => !uploading && fileRef.current?.click()}
         style={{
           width: 120,
           height: 120,
           borderRadius: '50%',
           overflow: 'hidden',
-          cursor: 'pointer',
+          cursor: uploading ? 'wait' : 'pointer',
           position: 'relative',
-          border: '3px solid rgba(59,130,246,0.3)',
+          border: photoUrl ? '3px solid rgba(59,130,246,0.5)' : '3px solid rgba(59,130,246,0.2)',
+          transition: 'border-color 0.2s',
         }}
       >
         {photoUrl ? (
-          <img
-            src={photoUrl}
-            alt={name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          <img src={photoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <Avatar name={name} color={color} size={120} />
         )}
-        {hovering && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(0,0,0,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-            }}
-          >
-            <Camera size={28} color="#fff" />
+        {(hovering || uploading) && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 4,
+            borderRadius: '50%',
+          }}>
+            {uploading
+              ? <div style={{ width: 24, height: 24, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+              : <>
+                  <Camera size={24} color="#fff" />
+                  <span style={{ fontSize: 10, color: '#fff', fontWeight: 600, letterSpacing: '0.04em' }}>
+                    {photoUrl ? 'ALTERAR' : 'ADICIONAR'}
+                  </span>
+                </>
+            }
           </div>
         )}
       </div>
+      {/* Remove button — visible on hover when photo exists */}
+      {hovering && photoUrl && !uploading && (
+        <button
+          onClick={handleRemove}
+          title="Remover foto"
+          style={{
+            position: 'absolute', top: 2, right: 2,
+            width: 22, height: 22, borderRadius: '50%',
+            background: '#ef4444', border: '2px solid #0f172a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', zIndex: 10,
+          }}
+        >
+          <X size={11} color="#fff" />
+        </button>
+      )}
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
