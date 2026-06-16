@@ -1,4 +1,4 @@
-import type { Category, Revenue, Expense, AgencyClient, ClientCost, SalesGoal, Opportunity, OppActivity, PipelineStage, Scenario, DashboardData, User } from '../types';
+import type { Category, Revenue, Expense, AgencyClient, ClientCost, SalesGoal, Opportunity, OppActivity, PipelineStage, Scenario, DashboardData, User, TcvProject, TcvPayment } from '../types';
 
 const BASE = '/api';
 
@@ -323,3 +323,19 @@ export const getCompanySettings = (): Promise<CompanySettings> =>
   req('/settings');
 export const updateCompanySettings = (data: Partial<Record<string, number>>): Promise<{ success: boolean }> =>
   req('/settings', { method: 'PUT', body: JSON.stringify(data) });
+
+// TCV Projects
+export const getTcvProjects = (clientId?: number): Promise<TcvProject[]> =>
+  req(`/tcv/projects${clientId ? `?client_id=${clientId}` : ''}`);
+export const createTcvProject = (data: Partial<TcvProject>): Promise<TcvProject> =>
+  req('/tcv/projects', { method: 'POST', body: JSON.stringify(data) });
+export const updateTcvProject = (id: number, data: Partial<TcvProject>): Promise<TcvProject> =>
+  req(`/tcv/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteTcvProject = (id: number): Promise<{ success: boolean }> =>
+  req(`/tcv/projects/${id}`, { method: 'DELETE' });
+export const addTcvPayment = (projectId: number, data: Partial<TcvPayment>): Promise<TcvPayment> =>
+  req(`/tcv/projects/${projectId}/payments`, { method: 'POST', body: JSON.stringify(data) });
+export const updateTcvPayment = (projectId: number, paymentId: number, data: Partial<TcvPayment>): Promise<TcvPayment> =>
+  req(`/tcv/projects/${projectId}/payments/${paymentId}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteTcvPayment = (projectId: number, paymentId: number): Promise<{ success: boolean }> =>
+  req(`/tcv/projects/${projectId}/payments/${paymentId}`, { method: 'DELETE' });

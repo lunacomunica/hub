@@ -148,15 +148,15 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential } = req.body;
+    const { name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential, client_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
     const isActive = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [created] } = await pool.query(
-      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential, client_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao']
+      [name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao', client_type || 'mrr']
     );
 
     res.status(201).json(created);
@@ -168,15 +168,15 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { name, monthly_fee, margin_target, active, start_date, notes, service_type } = req.body;
+    const { name, monthly_fee, margin_target, active, start_date, notes, service_type, client_type } = req.body;
     const { rows: [existing] } = await pool.query('SELECT id FROM agency_clients WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
 
     await pool.query(
       `UPDATE agency_clients SET name = $1, monthly_fee = $2, margin_target = $3, active = $4,
-        start_date = $5, notes = $6, service_type = $7, updated_at = NOW()
-       WHERE id = $8`,
-      [name, monthly_fee || 0, margin_target || 30, active !== undefined ? (active ? 1 : 0) : 1, start_date || null, notes || null, service_type || null, req.params.id]
+        start_date = $5, notes = $6, service_type = $7, client_type = $8, updated_at = NOW()
+       WHERE id = $9`,
+      [name, monthly_fee || 0, margin_target || 30, active !== undefined ? (active ? 1 : 0) : 1, start_date || null, notes || null, service_type || null, client_type || 'mrr', req.params.id]
     );
 
     const { rows: [updated] } = await pool.query('SELECT * FROM agency_clients WHERE id = $1', [req.params.id]);

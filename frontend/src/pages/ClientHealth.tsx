@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert, Info } from 'lucide-react';
-import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient, setClientRisk } from '../api';
-import type { AgencyClient, ClientCost } from '../types';
+import { Plus, X, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, TrendingUp, ArrowRight, UserX, RefreshCw, ShieldAlert, Info, Briefcase } from 'lucide-react';
+import { getClients, createClient, updateClient, deleteClient, getClientCosts, addClientCost, deleteClientCost, getClientPlanHistory, addClientPlanChange, PlanHistoryEntry, registerChurn, reactivateClient, setClientRisk, getTcvProjects, createTcvProject, updateTcvProject, deleteTcvProject, addTcvPayment, updateTcvPayment, deleteTcvPayment } from '../api';
+import type { AgencyClient, ClientCost, TcvProject, TcvPayment } from '../types';
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const pct = (v: number | string) => `${Number(v).toFixed(1)}%`;
@@ -41,8 +41,16 @@ const HEALTH_CONFIG = {
   },
 };
 
-const EMPTY_CLIENT = { name: '', monthly_fee: 0, margin_target: 30, active: 1, start_date: '', notes: '' };
+const STATUS_LABELS: Record<string, string> = {
+  proposta: 'Proposta',
+  em_andamento: 'Em andamento',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado',
+};
+
+const EMPTY_CLIENT = { name: '', monthly_fee: 0, margin_target: 30, active: 1, start_date: '', notes: '', client_type: 'mrr' as const };
 const EMPTY_COST = { description: '', amount: 0, type: 'fixo' as const, month: new Date().getMonth() + 1, year: new Date().getFullYear() };
+const EMPTY_TCV_FORM: Partial<TcvProject> = { title: '', contract_value: 0, estimated_hours: 0, status: 'em_andamento', notes: '' };
 
 export default function ClientHealth() {
   const [clients, setClients] = useState<AgencyClient[]>([]);
@@ -82,9 +90,20 @@ export default function ClientHealth() {
   const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
   const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
 
+  // TCV
+  const [tcvProjects, setTcvProjects] = useState<TcvProject[]>([]);
+  const [tcvModal, setTcvModal] = useState<{ clientId: number; project?: TcvProject } | null>(null);
+  const [tcvForm, setTcvForm] = useState<Partial<TcvProject>>(EMPTY_TCV_FORM);
+  const [tcvSaving, setTcvSaving] = useState(false);
+  const [addPaymentForm, setAddPaymentForm] = useState<{ projectId: number; amount: string; description: string; due_date: string; status: 'pendente' | 'pago' | 'atrasado' } | null>(null);
+
   const load = async () => {
     setLoading(true); setError('');
-    try { setClients(await getClients()); }
+    try {
+      const [clientsData, projectsData] = await Promise.all([getClients(), getTcvProjects()]);
+      setClients(clientsData);
+      setTcvProjects(projectsData);
+    }
     catch (e: unknown) { setError(e instanceof Error ? e.message : 'Erro'); }
     finally { setLoading(false); }
   };
@@ -116,6 +135,7 @@ export default function ClientHealth() {
     if (expandedId === id) { setExpandedId(null); return; }
     setExpandedId(id);
     setShowCostForm(false);
+    setAddPaymentForm(null);
     setCostsLoading(true);
     setPlanHistoryLoading(true);
     try {
@@ -236,6 +256,75 @@ export default function ClientHealth() {
     } catch { alert('Erro ao deletar custo'); }
   };
 
+  // TCV handlers
+  const openTcvCreate = (clientId: number) => {
+    setTcvModal({ clientId });
+    setTcvForm({ ...EMPTY_TCV_FORM, client_id: clientId });
+  };
+
+  const openTcvEdit = (project: TcvProject) => {
+    setTcvModal({ clientId: project.client_id, project });
+    setTcvForm({ ...project });
+  };
+
+  const saveTcvProject = async () => {
+    if (!tcvModal || !tcvForm.title) return;
+    setTcvSaving(true);
+    try {
+      if (tcvModal.project) {
+        await updateTcvProject(tcvModal.project.id, tcvForm);
+      } else {
+        await createTcvProject({ ...tcvForm, client_id: tcvModal.clientId });
+      }
+      setTcvModal(null);
+      const projects = await getTcvProjects();
+      setTcvProjects(projects);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Erro ao salvar projeto');
+    } finally {
+      setTcvSaving(false);
+    }
+  };
+
+  const handleDeleteTcvProject = async (id: number) => {
+    if (!confirm('Deletar este projeto e todos os pagamentos?')) return;
+    try {
+      await deleteTcvProject(id);
+      setTcvProjects(await getTcvProjects());
+    } catch { alert('Erro ao deletar projeto'); }
+  };
+
+  const handleMarkPaymentPaid = async (projectId: number, paymentId: number) => {
+    try {
+      await updateTcvPayment(projectId, paymentId, {
+        status: 'pago',
+        paid_date: new Date().toISOString().slice(0, 10),
+      });
+      setTcvProjects(await getTcvProjects());
+    } catch { alert('Erro ao marcar pagamento'); }
+  };
+
+  const handleDeleteTcvPayment = async (projectId: number, paymentId: number) => {
+    try {
+      await deleteTcvPayment(projectId, paymentId);
+      setTcvProjects(await getTcvProjects());
+    } catch { alert('Erro ao deletar pagamento'); }
+  };
+
+  const handleAddPayment = async () => {
+    if (!addPaymentForm || !addPaymentForm.amount) return;
+    try {
+      await addTcvPayment(addPaymentForm.projectId, {
+        amount: parseFloat(addPaymentForm.amount),
+        description: addPaymentForm.description || undefined,
+        due_date: addPaymentForm.due_date || undefined,
+        status: addPaymentForm.status,
+      });
+      setAddPaymentForm(null);
+      setTcvProjects(await getTcvProjects());
+    } catch { alert('Erro ao adicionar parcela'); }
+  };
+
   const activeClients = clients.filter(c => c.active);
   // at-risk clients first, then alphabetical
   const sortedActiveClients = [...activeClients].sort((a, b) => {
@@ -245,9 +334,10 @@ export default function ClientHealth() {
     return a.name.localeCompare(b.name);
   });
   const atRiskCount = activeClients.filter(c => c.risk_alert).length;
-  const totalMRR = activeClients.reduce((s, c) => s + Number(c.monthly_fee), 0);
-  const avgMargin = activeClients.length > 0
-    ? activeClients.reduce((s, c) => s + (c.margin_percent || 0), 0) / activeClients.length
+  const mrrClients = activeClients.filter(c => !c.client_type || c.client_type === 'mrr' || c.client_type === 'ambos');
+  const totalMRR = mrrClients.reduce((s, c) => s + Number(c.monthly_fee), 0);
+  const avgMargin = mrrClients.length > 0
+    ? mrrClients.reduce((s, c) => s + (c.margin_percent || 0), 0) / mrrClients.length
     : 0;
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 rounded-full border-b-2 border-blue-500"></div></div>;
@@ -278,7 +368,7 @@ export default function ClientHealth() {
           <div className="metric text-emerald-400">{brl(totalMRR)}</div>
         </div>
         <div className="card p-4">
-          <div className="label-dark mb-1">Margem Média</div>
+          <div className="label-dark mb-1">Margem Média (MRR)</div>
           <div className={`metric ${avgMargin >= 30 ? 'text-emerald-400' : avgMargin >= 20 ? 'text-amber-400' : 'text-red-400'}`}>
             {pct(avgMargin)}
           </div>
@@ -316,6 +406,12 @@ export default function ClientHealth() {
             const h = HEALTH_CONFIG[c.health || 'critico'];
             const marginPct = Math.min((c.margin_percent || 0), 100);
             const isExpanded = expandedId === c.id;
+            const isTcv = c.client_type === 'tcv' || c.client_type === 'ambos';
+            const isMrr = !c.client_type || c.client_type === 'mrr' || c.client_type === 'ambos';
+            const clientProjects = tcvProjects.filter(p => p.client_id === c.id && p.status !== 'cancelado');
+            const tcvContractTotal = clientProjects.reduce((s, p) => s + Number(p.contract_value), 0);
+            const tcvPaidTotal = clientProjects.reduce((s, p) => s + Number(p.paid_amount), 0);
+
             return (
               <div key={c.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${h.cardBorder}` }}>
                 <div className="p-4" style={{ background: h.cardBg }}>
@@ -325,6 +421,12 @@ export default function ClientHealth() {
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold text-slate-100 truncate">{c.name}</h3>
                           {!c.active && <span className="badge badge-slate">Inativo</span>}
+                          {c.client_type === 'tcv' && (
+                            <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b' }}>TCV</span>
+                          )}
+                          {c.client_type === 'ambos' && (
+                            <span className="badge" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.35)', color: '#818cf8' }}>MRR+TCV</span>
+                          )}
                         </div>
                         {c.risk_alert ? (
                           <div className="flex items-center gap-1.5 text-xs text-orange-400 mb-1">
@@ -334,12 +436,23 @@ export default function ClientHealth() {
                             <button onClick={() => clearRisk(c)} className="ml-1 text-slate-500 hover:text-slate-300 underline">remover alerta</button>
                           </div>
                         ) : null}
-                        <div className="flex items-center gap-4 text-sm text-slate-400">
-                          <span>Mensalidade: <strong className="text-slate-200">{brl(c.monthly_fee)}</strong></span>
-                          <span>Custos diretos: <strong className="text-red-400">{brl(c.monthly_cost || 0)}</strong></span>
-                          <span>Rateio fixos: <strong className="text-amber-400">{brl(c.allocated_fixed || 0)}</strong></span>
-                          <span>Margem real: <strong className={c.margin && c.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}>{brl(c.margin || 0)}</strong></span>
-                        </div>
+                        {isMrr && (
+                          <div className="flex items-center gap-4 text-sm text-slate-400">
+                            <span>Mensalidade: <strong className="text-slate-200">{brl(c.monthly_fee)}</strong></span>
+                            <span>Custos diretos: <strong className="text-red-400">{brl(c.monthly_cost || 0)}</strong></span>
+                            <span>Rateio fixos: <strong className="text-amber-400">{brl(c.allocated_fixed || 0)}</strong></span>
+                            <span>Margem real: <strong className={c.margin && c.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}>{brl(c.margin || 0)}</strong></span>
+                          </div>
+                        )}
+                        {isTcv && (
+                          <div className="flex items-center gap-4 text-sm text-slate-400 mt-0.5">
+                            <span className="flex items-center gap-1.5"><Briefcase size={12} className="text-amber-400" />
+                              <strong className="text-slate-300">{clientProjects.length}</strong> {clientProjects.length === 1 ? 'projeto' : 'projetos'}
+                            </span>
+                            <span>Contrato: <strong className="text-amber-300">{brl(tcvContractTotal)}</strong></span>
+                            <span>Recebido: <strong className="text-emerald-400">{brl(tcvPaidTotal)}</strong></span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-4">
@@ -348,7 +461,9 @@ export default function ClientHealth() {
                       </span>
                       {c.active ? (
                         <>
-                          <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
+                          {isMrr && (
+                            <button onClick={() => openPlanModal(c)} title="Mudar plano" className="p-1.5 text-slate-500 hover:text-emerald-400 rounded"><TrendingUp size={14} /></button>
+                          )}
                           <button
                             onClick={() => c.risk_alert ? clearRisk(c) : openRiskModal(c)}
                             title={c.risk_alert ? 'Remover alerta de risco' : 'Marcar como em risco operacional'}
@@ -367,123 +482,247 @@ export default function ClientHealth() {
                     </div>
                   </div>
 
-                  {/* Margin progress bar */}
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-slate-400 mb-1">
-                      <span>Margem: {pct(c.margin_percent || 0)}</span>
-                      <span>Meta: {pct(c.margin_target)}</span>
+                  {/* Margin progress bar — only for MRR clients */}
+                  {isMrr && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>Margem: {pct(c.margin_percent || 0)}</span>
+                        <span>Meta: {pct(c.margin_target)}</span>
+                      </div>
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                        <div
+                          className={`h-full rounded-full transition-all ${h.bar}`}
+                          style={{ width: `${Math.max(0, Math.min(marginPct, 100))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
-                      <div
-                        className={`h-full rounded-full transition-all ${h.bar}`}
-                        style={{ width: `${Math.max(0, Math.min(marginPct, 100))}%` }}
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Expanded: plan history + cost breakdown */}
+                {/* Expanded section */}
                 {isExpanded && (
                   <div className="p-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
-                    {/* Plan history */}
-                    {(planHistoryLoading || planHistory.length > 0) && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold text-slate-300 mb-2">Histórico de plano</h4>
-                        {planHistoryLoading ? (
-                          <div className="text-xs text-slate-500 py-2">Carregando...</div>
+                    {/* MRR section: plan history + costs */}
+                    {isMrr && (
+                      <>
+                        {/* Plan history */}
+                        {(planHistoryLoading || planHistory.length > 0) && (
+                          <div className="mb-4">
+                            <h4 className="text-sm font-semibold text-slate-300 mb-2">Histórico de plano</h4>
+                            {planHistoryLoading ? (
+                              <div className="text-xs text-slate-500 py-2">Carregando...</div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {planHistory.map(h => {
+                                  const isUp = h.new_fee > h.old_fee;
+                                  const typeLabel: Record<string, string> = { upgrade: 'Upgrade', downgrade: 'Downgrade', ajuste: 'Ajuste' };
+                                  return (
+                                    <div key={h.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                      <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${isUp ? 'text-emerald-400 bg-emerald-400/10' : h.new_fee < h.old_fee ? 'text-red-400 bg-red-400/10' : 'text-slate-400 bg-slate-400/10'}`}>
+                                        {typeLabel[h.change_type] || h.change_type}
+                                      </span>
+                                      <span className="text-slate-400">{brl(h.old_fee)}</span>
+                                      <ArrowRight size={11} className="text-slate-600" />
+                                      <span className={`font-semibold ${isUp ? 'text-emerald-400' : h.new_fee < h.old_fee ? 'text-red-400' : 'text-slate-300'}`}>{brl(h.new_fee)}</span>
+                                      <span className="text-slate-600 ml-auto">{h.changed_at?.slice(0, 10).split('-').reverse().join('/')}</span>
+                                      {h.notes && <span className="text-slate-500 italic truncate max-w-[160px]">{h.notes}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-slate-300">Custos do cliente</h4>
+                          <button onClick={() => setShowCostForm(v => !v)} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
+                            <Plus size={13} /> Adicionar custo
+                          </button>
+                        </div>
+
+                        {showCostForm && (
+                          <div className="rounded-lg p-3 mb-3 space-y-3" style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2">
+                                <label className="label-dark mb-1 block">Descrição</label>
+                                <input value={costForm.description} onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))} className="input-dark w-full text-sm" placeholder="Ex: Ferramenta X" />
+                              </div>
+                              <div>
+                                <label className="label-dark mb-1 block">Valor (R$)</label>
+                                <input type="number" step="0.01" value={costForm.amount || ''} onChange={e => setCostForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} className="input-dark w-full text-sm" />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <select value={costForm.type} onChange={e => setCostForm(f => ({ ...f, type: e.target.value as 'fixo' | 'variavel' }))} className="input-dark flex-1 text-sm">
+                                <option value="fixo">Fixo</option>
+                                <option value="variavel">Variável</option>
+                              </select>
+                              <button onClick={handleAddCost} disabled={addingCost} className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+                                {addingCost ? '...' : 'Salvar'}
+                              </button>
+                              <button onClick={() => setShowCostForm(false)} className="btn-ghost text-xs px-3 py-1.5">Cancelar</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {costsLoading ? (
+                          <div className="py-4 text-center text-slate-500 text-sm">Carregando...</div>
+                        ) : clientCosts.length === 0 ? (
+                          <div className="py-4 text-center text-slate-500 text-sm">Nenhum custo cadastrado para este cliente.</div>
                         ) : (
-                          <div className="space-y-1.5">
-                            {planHistory.map(h => {
-                              const isUp = h.new_fee > h.old_fee;
-                              const typeLabel: Record<string, string> = { upgrade: 'Upgrade', downgrade: 'Downgrade', ajuste: 'Ajuste' };
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+                                <th className="th text-left py-1.5">Descrição</th>
+                                <th className="th text-center py-1.5">Tipo</th>
+                                <th className="th text-right py-1.5">Valor</th>
+                                <th className="py-1.5 w-8"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {clientCosts.map(cost => (
+                                <tr key={cost.id} className="tr">
+                                  <td className="td py-2">{cost.description}</td>
+                                  <td className="td py-2 text-center">
+                                    <span className={cost.type === 'fixo' ? 'badge badge-blue' : 'badge badge-amber'}>
+                                      {cost.type === 'fixo' ? 'Fixo' : 'Variável'}
+                                    </span>
+                                  </td>
+                                  <td className="td py-2 text-right font-medium text-slate-200">{brl(cost.amount)}</td>
+                                  <td className="td py-2 text-center">
+                                    <button onClick={() => handleDeleteCost(cost.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={13} /></button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+                                <td colSpan={2} className="py-2 text-xs font-semibold text-slate-400">Total</td>
+                                <td className="py-2 text-right font-bold text-red-400">{brl(clientCosts.reduce((s, c) => s + Number(c.amount), 0))}</td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        )}
+                      </>
+                    )}
+
+                    {/* TCV Projects section */}
+                    {isTcv && (
+                      <div className={isMrr ? 'mt-5 pt-4' : ''} style={isMrr ? { borderTop: '1px solid rgba(245,158,11,0.15)' } : {}}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                            <Briefcase size={14} className="text-amber-400" /> Projetos TCV
+                          </h4>
+                          <button onClick={() => openTcvCreate(c.id)} className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300">
+                            <Plus size={13} /> Novo Projeto
+                          </button>
+                        </div>
+
+                        {clientProjects.length === 0 ? (
+                          <div className="py-4 text-center text-slate-500 text-sm">Nenhum projeto ativo.</div>
+                        ) : (
+                          <div className="space-y-3">
+                            {clientProjects.map(proj => {
+                              const marginColor = proj.margin_pct >= 40 ? 'text-emerald-400' : proj.margin_pct >= 20 ? 'text-amber-400' : 'text-red-400';
                               return (
-                                <div key={h.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                  <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${isUp ? 'text-emerald-400 bg-emerald-400/10' : h.new_fee < h.old_fee ? 'text-red-400 bg-red-400/10' : 'text-slate-400 bg-slate-400/10'}`}>
-                                    {typeLabel[h.change_type] || h.change_type}
-                                  </span>
-                                  <span className="text-slate-400">{brl(h.old_fee)}</span>
-                                  <ArrowRight size={11} className="text-slate-600" />
-                                  <span className={`font-semibold ${isUp ? 'text-emerald-400' : h.new_fee < h.old_fee ? 'text-red-400' : 'text-slate-300'}`}>{brl(h.new_fee)}</span>
-                                  <span className="text-slate-600 ml-auto">{h.changed_at?.slice(0, 10).split('-').reverse().join('/')}</span>
-                                  {h.notes && <span className="text-slate-500 italic truncate max-w-[160px]">{h.notes}</span>}
+                                <div key={proj.id} className="rounded-lg p-3" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-slate-200 text-sm">{proj.title}</span>
+                                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.07)', color: '#94a3b8' }}>
+                                          {STATUS_LABELS[proj.status] || proj.status}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                                        <span>Valor: <strong className="text-amber-300">{brl(proj.contract_value)}</strong></span>
+                                        <span>{proj.estimated_hours}h × {brl(proj.hour_cost)}/h = <strong className="text-slate-300">{brl(proj.project_cost)}</strong> custo</span>
+                                        <span className={`font-semibold ${marginColor}`}>Margem: {pct(proj.margin_pct)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                                        <span>Pago: <strong className="text-emerald-400">{brl(proj.paid_amount)}</strong></span>
+                                        {proj.pending_amount > 0 && <span>Pendente: <strong className="text-slate-300">{brl(proj.pending_amount)}</strong></span>}
+                                        {proj.overdue_amount > 0 && <span>Atrasado: <strong className="text-red-400">{brl(proj.overdue_amount)}</strong></span>}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                      <button onClick={() => openTcvEdit(proj)} className="p-1 text-slate-500 hover:text-blue-400 rounded text-xs">Editar</button>
+                                      <button onClick={() => handleDeleteTcvProject(proj.id)} className="p-1 text-slate-500 hover:text-red-400 rounded"><Trash2 size={12} /></button>
+                                    </div>
+                                  </div>
+
+                                  {/* Payments */}
+                                  {proj.payments.length > 0 && (
+                                    <div className="mt-2 space-y-1.5">
+                                      {proj.payments.map((pay: TcvPayment) => (
+                                        <div key={pay.id} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                          <span className="text-slate-300 font-medium">{brl(pay.amount)}</span>
+                                          {pay.description && <span className="text-slate-500">{pay.description}</span>}
+                                          {pay.due_date && <span className="text-slate-500">venc {pay.due_date.slice(0, 10).split('-').reverse().join('/')}</span>}
+                                          <span className={`ml-auto px-1.5 py-0.5 rounded font-semibold ${
+                                            pay.status === 'pago' ? 'text-emerald-400 bg-emerald-400/10' :
+                                            pay.status === 'atrasado' ? 'text-red-400 bg-red-400/10' :
+                                            'text-slate-400 bg-slate-400/10'
+                                          }`}>
+                                            {pay.status === 'pago' ? 'Pago' : pay.status === 'atrasado' ? 'Atrasado' : 'Pendente'}
+                                          </span>
+                                          {pay.status !== 'pago' && (
+                                            <button
+                                              onClick={() => handleMarkPaymentPaid(proj.id, pay.id)}
+                                              className="text-emerald-500 hover:text-emerald-400 text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 hover:border-emerald-400/50"
+                                            >
+                                              Marcar pago
+                                            </button>
+                                          )}
+                                          <button onClick={() => handleDeleteTcvPayment(proj.id, pay.id)} className="text-slate-600 hover:text-red-400 ml-1"><Trash2 size={11} /></button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Add payment form */}
+                                  {addPaymentForm?.projectId === proj.id ? (
+                                    <div className="mt-2 rounded p-2 space-y-2" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        <div>
+                                          <label className="label-dark mb-1 block text-xs">Valor (R$) *</label>
+                                          <input type="number" step="0.01" value={addPaymentForm.amount} onChange={e => setAddPaymentForm(f => f ? { ...f, amount: e.target.value } : null)} className="input-dark w-full text-xs" />
+                                        </div>
+                                        <div>
+                                          <label className="label-dark mb-1 block text-xs">Descrição</label>
+                                          <input value={addPaymentForm.description} onChange={e => setAddPaymentForm(f => f ? { ...f, description: e.target.value } : null)} className="input-dark w-full text-xs" placeholder="Ex: Entrada" />
+                                        </div>
+                                        <div>
+                                          <label className="label-dark mb-1 block text-xs">Vencimento</label>
+                                          <input type="date" value={addPaymentForm.due_date} onChange={e => setAddPaymentForm(f => f ? { ...f, due_date: e.target.value } : null)} className="input-dark w-full text-xs" />
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <select value={addPaymentForm.status} onChange={e => setAddPaymentForm(f => f ? { ...f, status: e.target.value as 'pendente' | 'pago' | 'atrasado' } : null)} className="input-dark text-xs flex-1">
+                                          <option value="pendente">Pendente</option>
+                                          <option value="pago">Pago</option>
+                                          <option value="atrasado">Atrasado</option>
+                                        </select>
+                                        <button onClick={handleAddPayment} className="btn-primary text-xs px-3 py-1.5">Salvar</button>
+                                        <button onClick={() => setAddPaymentForm(null)} className="btn-ghost text-xs px-3 py-1.5">Cancelar</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setAddPaymentForm({ projectId: proj.id, amount: '', description: '', due_date: '', status: 'pendente' })}
+                                      className="mt-2 flex items-center gap-1 text-xs text-slate-500 hover:text-amber-400"
+                                    >
+                                      <Plus size={11} /> Adicionar parcela
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })}
                           </div>
                         )}
                       </div>
-                    )}
-
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-semibold text-slate-300">Custos do cliente</h4>
-                      <button onClick={() => setShowCostForm(v => !v)} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300">
-                        <Plus size={13} /> Adicionar custo
-                      </button>
-                    </div>
-
-                    {showCostForm && (
-                      <div className="rounded-lg p-3 mb-3 space-y-3" style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="col-span-2">
-                            <label className="label-dark mb-1 block">Descrição</label>
-                            <input value={costForm.description} onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))} className="input-dark w-full text-sm" placeholder="Ex: Ferramenta X" />
-                          </div>
-                          <div>
-                            <label className="label-dark mb-1 block">Valor (R$)</label>
-                            <input type="number" step="0.01" value={costForm.amount || ''} onChange={e => setCostForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} className="input-dark w-full text-sm" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <select value={costForm.type} onChange={e => setCostForm(f => ({ ...f, type: e.target.value as 'fixo' | 'variavel' }))} className="input-dark flex-1 text-sm">
-                            <option value="fixo">Fixo</option>
-                            <option value="variavel">Variável</option>
-                          </select>
-                          <button onClick={handleAddCost} disabled={addingCost} className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
-                            {addingCost ? '...' : 'Salvar'}
-                          </button>
-                          <button onClick={() => setShowCostForm(false)} className="btn-ghost text-xs px-3 py-1.5">Cancelar</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {costsLoading ? (
-                      <div className="py-4 text-center text-slate-500 text-sm">Carregando...</div>
-                    ) : clientCosts.length === 0 ? (
-                      <div className="py-4 text-center text-slate-500 text-sm">Nenhum custo cadastrado para este cliente.</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
-                            <th className="th text-left py-1.5">Descrição</th>
-                            <th className="th text-center py-1.5">Tipo</th>
-                            <th className="th text-right py-1.5">Valor</th>
-                            <th className="py-1.5 w-8"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {clientCosts.map(cost => (
-                            <tr key={cost.id} className="tr">
-                              <td className="td py-2">{cost.description}</td>
-                              <td className="td py-2 text-center">
-                                <span className={cost.type === 'fixo' ? 'badge badge-blue' : 'badge badge-amber'}>
-                                  {cost.type === 'fixo' ? 'Fixo' : 'Variável'}
-                                </span>
-                              </td>
-                              <td className="td py-2 text-right font-medium text-slate-200">{brl(cost.amount)}</td>
-                              <td className="td py-2 text-center">
-                                <button onClick={() => handleDeleteCost(cost.id)} className="text-slate-600 hover:text-red-400"><Trash2 size={13} /></button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
-                            <td colSpan={2} className="py-2 text-xs font-semibold text-slate-400">Total</td>
-                            <td className="py-2 text-right font-bold text-red-400">{brl(clientCosts.reduce((s, c) => s + Number(c.amount), 0))}</td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      </table>
                     )}
                   </div>
                 )}
@@ -680,6 +919,82 @@ export default function ClientHealth() {
         </div>
       )}
 
+      {/* TCV Project Modal */}
+      {tcvModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(245,158,11,0.15)' }}>
+              <h2 className="font-semibold text-white flex items-center gap-2">
+                <Briefcase size={16} className="text-amber-400" />
+                {tcvModal.project ? 'Editar Projeto' : 'Novo Projeto TCV'}
+              </h2>
+              <button onClick={() => setTcvModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <Field label="Título *">
+                <input value={tcvForm.title || ''} onChange={e => setTcvForm(f => ({ ...f, title: e.target.value }))} className="input-dark w-full" placeholder="Ex: Site Institucional" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Valor do contrato (R$)">
+                  <input type="number" step="0.01" value={tcvForm.contract_value || ''} onChange={e => setTcvForm(f => ({ ...f, contract_value: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
+                </Field>
+                <Field label="Horas estimadas">
+                  <input type="number" step="0.5" value={tcvForm.estimated_hours || ''} onChange={e => setTcvForm(f => ({ ...f, estimated_hours: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
+                </Field>
+              </div>
+              {tcvModal.project && tcvModal.project.hour_cost > 0 && (
+                <div className="rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <span className="text-slate-400">Custo estimado: </span>
+                  <strong className="text-slate-200">{brl((tcvForm.estimated_hours || 0) * tcvModal.project.hour_cost)}</strong>
+                  {(tcvForm.contract_value || 0) > 0 && (
+                    <>
+                      <span className="text-slate-500 mx-2">|</span>
+                      <span className="text-slate-400">Margem projetada: </span>
+                      <strong className={
+                        ((tcvForm.contract_value || 0) - (tcvForm.estimated_hours || 0) * tcvModal.project.hour_cost) / (tcvForm.contract_value || 1) * 100 >= 40
+                          ? 'text-emerald-400' : 'text-amber-400'
+                      }>
+                        {pct(((tcvForm.contract_value || 0) - (tcvForm.estimated_hours || 0) * tcvModal.project.hour_cost) / (tcvForm.contract_value || 1) * 100)}
+                      </strong>
+                    </>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Data de início">
+                  <input type="date" value={tcvForm.start_date || ''} onChange={e => setTcvForm(f => ({ ...f, start_date: e.target.value }))} className="input-dark w-full" />
+                </Field>
+                <Field label="Data de entrega">
+                  <input type="date" value={tcvForm.end_date || ''} onChange={e => setTcvForm(f => ({ ...f, end_date: e.target.value }))} className="input-dark w-full" />
+                </Field>
+              </div>
+              <Field label="Status">
+                <select value={tcvForm.status || 'em_andamento'} onChange={e => setTcvForm(f => ({ ...f, status: e.target.value as TcvProject['status'] }))} className="input-dark w-full">
+                  <option value="proposta">Proposta</option>
+                  <option value="em_andamento">Em andamento</option>
+                  <option value="concluido">Concluído</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </Field>
+              <Field label="Observações">
+                <textarea value={tcvForm.notes || ''} onChange={e => setTcvForm(f => ({ ...f, notes: e.target.value }))} className="input-dark w-full resize-none" rows={2} />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+              <button onClick={() => setTcvModal(null)} className="btn-ghost text-sm">Cancelar</button>
+              <button
+                onClick={saveTcvProject}
+                disabled={tcvSaving || !tcvForm.title}
+                className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-colors"
+                style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', color: '#f59e0b' }}
+              >
+                {tcvSaving ? 'Salvando...' : 'Salvar projeto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Client Modal */}
       {clientModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -692,14 +1007,33 @@ export default function ClientHealth() {
               <Field label="Nome *">
                 <input value={clientForm.name || ''} onChange={e => setClientForm(f => ({ ...f, name: e.target.value }))} className="input-dark w-full" />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Mensalidade (R$)">
-                  <input type="number" step="0.01" value={clientForm.monthly_fee || ''} onChange={e => setClientForm(f => ({ ...f, monthly_fee: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
-                </Field>
-                <Field label="Meta de margem (%)">
-                  <input type="number" value={clientForm.margin_target || 30} onChange={e => setClientForm(f => ({ ...f, margin_target: parseFloat(e.target.value) || 30 }))} className="input-dark w-full" />
-                </Field>
-              </div>
+              <Field label="Tipo de cliente">
+                <div className="flex gap-2">
+                  {([['mrr', 'MRR (Recorrente)'], ['tcv', 'TCV (Projeto)'], ['ambos', 'MRR + TCV']] as const).map(([v, l]) => (
+                    <button
+                      key={v}
+                      onClick={() => setClientForm(f => ({ ...f, client_type: v }))}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                        (clientForm.client_type || 'mrr') === v
+                          ? v === 'mrr' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                            : v === 'tcv' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                            : 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400'
+                          : 'border-white/10 text-slate-500 hover:border-white/20'
+                      }`}
+                    >{l}</button>
+                  ))}
+                </div>
+              </Field>
+              {((clientForm.client_type || 'mrr') === 'mrr' || clientForm.client_type === 'ambos') && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Mensalidade (R$)">
+                    <input type="number" step="0.01" value={clientForm.monthly_fee || ''} onChange={e => setClientForm(f => ({ ...f, monthly_fee: parseFloat(e.target.value) || 0 }))} className="input-dark w-full" />
+                  </Field>
+                  <Field label="Meta de margem (%)">
+                    <input type="number" value={clientForm.margin_target || 30} onChange={e => setClientForm(f => ({ ...f, margin_target: parseFloat(e.target.value) || 30 }))} className="input-dark w-full" />
+                  </Field>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Data de início">
                   <input type="date" value={clientForm.start_date || ''} onChange={e => setClientForm(f => ({ ...f, start_date: e.target.value }))} className="input-dark w-full" />

@@ -20,6 +20,7 @@ import employeesRouter from './routes/employees';
 import importRouter from './routes/import';
 import supplierRulesRouter from './routes/supplier-rules';
 import settingsRouter from './routes/settings';
+import tcvRouter from './routes/tcv';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -122,6 +123,46 @@ import pool from './db';
       ON CONFLICT (key) DO NOTHING
     `);
   } catch (e) { console.error('[migration] company_settings error:', e); }
+
+  // Add client_type to agency_clients
+  try {
+    await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS client_type VARCHAR(10) DEFAULT 'mrr'`);
+  } catch (e) { console.error('[migration] client_type column error:', e); }
+
+  // TCV projects table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tcv_projects (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES agency_clients(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        contract_value NUMERIC(10,2) NOT NULL DEFAULT 0,
+        estimated_hours NUMERIC(8,2) DEFAULT 0,
+        start_date DATE,
+        end_date DATE,
+        status VARCHAR(20) DEFAULT 'em_andamento',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (e) { console.error('[migration] tcv_projects error:', e); }
+
+  // TCV payments table
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tcv_payments (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES tcv_projects(id) ON DELETE CASCADE,
+        description TEXT,
+        amount NUMERIC(10,2) NOT NULL,
+        due_date DATE,
+        paid_date DATE,
+        status VARCHAR(20) DEFAULT 'pendente',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (e) { console.error('[migration] tcv_payments error:', e); }
 })();
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
@@ -143,6 +184,7 @@ app.use('/api/employees',     requireAuth, employeesRouter);
 app.use('/api/import',          requireAuth, importRouter);
 app.use('/api/supplier-rules',  requireAuth, supplierRulesRouter);
 app.use('/api/settings',        requireAuth, settingsRouter);
+app.use('/api/tcv',             requireAuth, tcvRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

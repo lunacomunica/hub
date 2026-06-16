@@ -65,6 +65,7 @@ export interface AgencyClient {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  client_type?: 'mrr' | 'tcv' | 'ambos';
   // risk alert (manual override)
   risk_alert?: number;
   risk_reason?: string | null;
@@ -77,6 +78,41 @@ export interface AgencyClient {
   margin_percent?: number;
   health?: 'saudavel' | 'atencao' | 'critico' | 'em_risco';
   costs?: ClientCost[];
+}
+
+export interface TcvPayment {
+  id: number;
+  project_id: number;
+  description: string | null;
+  amount: number;
+  due_date: string | null;
+  paid_date: string | null;
+  status: 'pendente' | 'pago' | 'atrasado';
+  created_at: string;
+}
+
+export interface TcvProject {
+  id: number;
+  client_id: number;
+  client_name: string;
+  title: string;
+  contract_value: number;
+  estimated_hours: number;
+  start_date: string | null;
+  end_date: string | null;
+  status: 'proposta' | 'em_andamento' | 'concluido' | 'cancelado';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // computed
+  hour_cost: number;
+  project_cost: number;
+  margin: number;
+  margin_pct: number;
+  paid_amount: number;
+  pending_amount: number;
+  overdue_amount: number;
+  payments: TcvPayment[];
 }
 
 export interface ClientCost {
