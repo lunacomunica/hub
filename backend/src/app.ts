@@ -158,6 +158,24 @@ export async function runMigrations() {
   } catch (e) { console.error('[migration] opportunities referral_name error:', e); }
 
   try {
+    const NEW_SOURCES = ['Meta Ads', 'Turbinar Instagram', 'Instagram @vanessaraeski', 'TikTok @vanessaraeski'];
+    const { rows: [row] } = await pool.query(`SELECT value FROM company_settings WHERE key = 'lead_sources'`);
+    if (row) {
+      const existing: string[] = JSON.parse(row.value);
+      const merged = [...existing];
+      for (const s of NEW_SOURCES) {
+        if (!merged.includes(s)) {
+          // Insert before 'Outro' if it exists, otherwise append
+          const outroIdx = merged.indexOf('Outro');
+          if (outroIdx >= 0) merged.splice(outroIdx, 0, s);
+          else merged.push(s);
+        }
+      }
+      await pool.query(`UPDATE company_settings SET value = $1, updated_at = NOW() WHERE key = 'lead_sources'`, [JSON.stringify(merged)]);
+    }
+  } catch (e) { console.error('[migration] lead_sources new entries error:', e); }
+
+  try {
     const { rows: [cnt] } = await pool.query<{ c: string }>(`SELECT COUNT(*) as c FROM pipeline_stages`);
     if (Number(cnt.c) === 0) {
       await pool.query(`
