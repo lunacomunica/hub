@@ -154,6 +154,10 @@ export async function runMigrations() {
   } catch (e) { console.error('[migration] opportunities negotiation fields error:', e); }
 
   try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_name TEXT`);
+  } catch (e) { console.error('[migration] opportunities referral_name error:', e); }
+
+  try {
     const { rows: [cnt] } = await pool.query<{ c: string }>(`SELECT COUNT(*) as c FROM pipeline_stages`);
     if (Number(cnt.c) === 0) {
       await pool.query(`

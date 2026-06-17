@@ -73,6 +73,7 @@ const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   temperature: 'morno', next_followup: '', owner_id: null, source: '',
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
   original_price: null, payment_method: null, installments: 1, payment_notes: null,
+  referral_name: null,
 };
 
 const STAGE_COLORS = [
@@ -158,7 +159,16 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
 
       {/* Client */}
       {opp.client_name && (
-        <div className="text-xs text-slate-500 mb-2 truncate">{opp.client_name}</div>
+        <div className="text-xs text-slate-500 mb-1 truncate">{opp.client_name}</div>
+      )}
+
+      {/* Referral badge */}
+      {opp.source === 'Indicação' && opp.referral_name && (
+        <div className="text-xs mb-2 truncate flex items-center gap-1"
+          style={{ color: '#a78bfa' }}>
+          <Users size={9} />
+          <span>Indicado por {opp.referral_name}</span>
+        </div>
       )}
 
       {/* Value + temp */}
@@ -1226,12 +1236,24 @@ export default function Opportunities() {
                     </Field>
 
                     <Field label="Origem do lead">
-                      <select value={form.source || ''} onChange={e => setForm(f => ({...f, source: e.target.value || null}))}
+                      <select value={form.source || ''} onChange={e => setForm(f => ({...f, source: e.target.value || null, referral_name: e.target.value !== 'Indicação' ? null : f.referral_name}))}
                         className="input-dark w-full">
                         <option value="">Não informado</option>
                         {sources.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </Field>
+
+                    {form.source === 'Indicação' && (
+                      <Field label="Indicado por">
+                        <input
+                          type="text"
+                          placeholder="Nome do cliente que indicou"
+                          value={form.referral_name || ''}
+                          onChange={e => setForm(f => ({...f, referral_name: e.target.value || null}))}
+                          className="input-dark w-full"
+                        />
+                      </Field>
+                    )}
 
                     <Field label="Próximo follow-up">
                       <input type="date" value={form.next_followup || ''} onChange={e => setForm(f => ({...f, next_followup: e.target.value || null}))}

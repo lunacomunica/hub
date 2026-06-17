@@ -163,6 +163,8 @@ export interface Opportunity {
   payment_method: string | null;
   installments: number | null;
   payment_notes: string | null;
+  // Referral
+  referral_name: string | null;
   created_at: string;
   updated_at: string;
 }
