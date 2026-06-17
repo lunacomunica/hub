@@ -12,10 +12,22 @@ router.get('/', async (_req: Request, res: Response) => {
     const monthly_billable_hours = Number(raw.monthly_billable_hours || 160);
 
     // Lead sources
-    const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','WhatsApp','Outro'];
+    const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','Meta Ads','Turbinar Instagram','Instagram @vanessaraeski','TikTok @vanessaraeski','WhatsApp','Outro'];
     let lead_sources: string[] = DEFAULT_SOURCES;
     try {
-      if (raw.lead_sources) lead_sources = JSON.parse(raw.lead_sources);
+      if (raw.lead_sources) {
+        const saved: string[] = JSON.parse(raw.lead_sources);
+        // Merge: keep saved order, append any new defaults not yet present
+        const merged = [...saved];
+        for (const s of DEFAULT_SOURCES) {
+          if (!merged.includes(s)) {
+            const outroIdx = merged.indexOf('Outro');
+            if (outroIdx >= 0) merged.splice(outroIdx, 0, s);
+            else merged.push(s);
+          }
+        }
+        lead_sources = merged;
+      }
     } catch { /* keep defaults */ }
 
     // Average fixed costs from last 3 complete months
