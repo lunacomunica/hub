@@ -162,12 +162,18 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
         <div className="text-xs text-slate-500 mb-1 truncate">{opp.client_name}</div>
       )}
 
-      {/* Referral badge */}
-      {opp.source === 'Indicação' && opp.referral_name && (
-        <div className="text-xs mb-2 truncate flex items-center gap-1"
-          style={{ color: '#a78bfa' }}>
-          <Users size={9} />
-          <span>Indicado por {opp.referral_name}</span>
+      {/* Source + referral */}
+      {opp.source && (
+        <div className="flex items-center gap-1 mb-2 flex-wrap">
+          <span className="text-xs px-1.5 py-0.5 rounded-full truncate max-w-full"
+            style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>
+            {opp.source}
+          </span>
+          {opp.source === 'Indicação' && opp.referral_name && (
+            <span className="text-xs truncate flex items-center gap-0.5" style={{ color: '#a78bfa' }}>
+              <Users size={9} />{opp.referral_name}
+            </span>
+          )}
         </div>
       )}
 
