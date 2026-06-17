@@ -156,68 +156,73 @@ router.get('/', async (req: Request, res: Response) => {
     if (stage) { query += ` AND o.stage = $${paramIdx++}`; params.push(stage as string); }
     query += ' ORDER BY o.created_at DESC';
 
+    // ── Main items query (critical — if this fails, return 500) ──────────────
     const { rows } = await pool.query(query, params);
 
-    const { rows: [summary] } = await pool.query<{ total_count: string; total_value: string; weighted_value: string }>(
-      `SELECT
-         COUNT(*) as total_count,
-         COALESCE(SUM(value), 0) as total_value,
-         COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
-       FROM opportunities WHERE stage NOT IN ('fechado','perdido')`
-    );
+    // ── Summary queries (non-critical — each fails gracefully) ────────────────
+    const safeQuery = async <T>(sql: string, fallback: T): Promise<T> => {
+      try { const { rows: r } = await pool.query(sql); return (r[0] ?? fallback) as T; }
+      catch (e) { console.error('[opp summary]', e); return fallback; }
+    };
+    const safeQueryRows = async <T>(sql: string): Promise<T[]> => {
+      try { const { rows: r } = await pool.query(sql); return r as T[]; }
+      catch (e) { console.error('[opp summary]', e); return []; }
+    };
 
-    const { rows: [negRow] } = await pool.query<{ v: string }>(
-      `SELECT COALESCE(SUM(value),0) as v FROM opportunities WHERE stage = 'negociacao'`
-    );
-    const negValue = Number(negRow.v);
+    const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow] = await Promise.all([
+      safeQuery(
+        `SELECT COUNT(*) as total_count, COALESCE(SUM(value), 0) as total_value,
+                COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
+         FROM opportunities WHERE stage NOT IN ('fechado','perdido')`,
+        { total_count: '0', total_value: '0', weighted_value: '0' }
+      ),
+      safeQuery(
+        `SELECT COALESCE(SUM(value),0) as v FROM opportunities WHERE stage = 'negociacao'`,
+        { v: '0' }
+      ),
+      safeQueryRows(
+        `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
+         FROM opportunities GROUP BY stage`
+      ),
+      safeQuery(
+        `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage='fechado'`,
+        { count: '0', total: '0' }
+      ),
+      safeQuery(
+        `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total
+         FROM opportunities
+         WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')`,
+        { count: '0', total: '0' }
+      ),
+      safeQueryRows(
+        `SELECT COALESCE(lost_reason, 'Não informado') as reason,
+                COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
+         FROM opportunities
+         WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')
+         GROUP BY lost_reason ORDER BY count DESC`
+      ),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
+    ]);
 
-    const { rows: byStage } = await pool.query(
-      `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
-       FROM opportunities GROUP BY stage`
-    );
-
-    const { rows: [won] } = await pool.query<{ count: string; total: string }>(
-      `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage='fechado'`
-    );
-    const { rows: [lost] } = await pool.query<{ count: string; total: string }>(
-      `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')`
-    );
-    const totalClosed = Number(won.count) + Number(lost.count);
-    const win_rate = totalClosed > 0 ? (Number(won.count) / totalClosed) * 100 : 0;
-
-    const { rows: lostReasons } = await pool.query<{ reason: string; count: string; total_value: string }>(
-      `SELECT COALESCE(lost_reason, 'Não informado') as reason,
-              COUNT(*) as count,
-              COALESCE(SUM(value), 0) as total_value
-       FROM opportunities
-       WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')
-       GROUP BY lost_reason ORDER BY count DESC`
-    );
-
-    const { rows: [overdueRow] } = await pool.query<{ c: string }>(
-      `SELECT COUNT(*) as c FROM opportunities WHERE next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`
-    );
-    const { rows: [todayRow] } = await pool.query<{ c: string }>(
-      `SELECT COUNT(*) as c FROM opportunities WHERE next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`
-    );
-    const { rows: [soonRow] } = await pool.query<{ c: string }>(
-      `SELECT COUNT(*) as c FROM opportunities WHERE next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`
-    );
+    const totalClosed = Number((won as any).count) + Number((lost as any).count);
+    const win_rate = totalClosed > 0 ? (Number((won as any).count) / totalClosed) * 100 : 0;
 
     res.json({
       items: rows,
       summary: {
-        total_count: Number(summary.total_count),
-        total_value: Number(summary.total_value),
-        weighted_value: Number(summary.weighted_value),
+        total_count: Number((summary as any).total_count),
+        total_value: Number((summary as any).total_value),
+        weighted_value: Number((summary as any).weighted_value),
         by_stage: byStage,
         win_rate,
-        won_value: Number(won.total),
-        negotiation_value: negValue,
-        overdue_followups: Number(overdueRow.c),
-        today_followups: Number(todayRow.c),
-        soon_followups: Number(soonRow.c),
-        lost_value: Number(lost.total),
+        won_value: Number((won as any).total),
+        negotiation_value: Number((negRow as any).v),
+        overdue_followups: Number((overdueRow as any).c),
+        today_followups: Number((todayRow as any).c),
+        soon_followups: Number((soonRow as any).c),
+        lost_value: Number((lost as any).total),
         lost_reasons: lostReasons,
       },
     });
