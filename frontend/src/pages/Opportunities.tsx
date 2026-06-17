@@ -666,10 +666,14 @@ export default function Opportunities() {
   const wonStage  = stages.find(s => s.key === 'fechado');
   const lostStage = stages.find(s => s.key === 'perdido');
 
-  const allKnownKeys = new Set(stages.map(s => s.key));
-  // Orphaned = not in any known stage (stage key was deleted or never existed)
+  // Orphaned = in kanban view but not showing in any pipeline column
+  // (stage deleted, stage became terminal, or key mismatch)
   const orphanedItems = view === 'kanban'
-    ? items.filter(i => !allKnownKeys.has(i.stage))
+    ? items.filter(i => {
+        const inPipeline = pipelineStages.some(s => s.key === i.stage);
+        const isTerminal = stages.find(s => s.key === i.stage)?.is_terminal;
+        return !inPipeline && !isTerminal;
+      })
     : [];
 
   const displayItems =
@@ -775,6 +779,12 @@ export default function Opportunities() {
         </div>
       ) : view === 'kanban' ? (
         <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '60vh', alignItems: 'flex-start' }}>
+          {pipelineStages.length === 0 && orphanedItems.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-slate-400 text-sm mb-2">Nenhum estágio de pipeline encontrado.</p>
+              <p className="text-slate-600 text-xs">Clique em <strong className="text-slate-400">+ Adicionar estágio</strong> para configurar o pipeline.</p>
+            </div>
+          )}
           {pipelineStages.map((stage, idx) => {
             const stageItems = displayItems.filter(i => i.stage === stage.key);
             const isOver = dropStage === stage.key && dragId !== null;
