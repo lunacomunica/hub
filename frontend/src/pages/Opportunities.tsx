@@ -418,6 +418,7 @@ export default function Opportunities() {
   const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
   const [form, setForm] = useState<Partial<Opportunity & { product_id?: number | null }>>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [view, setView] = useState<'kanban' | 'won' | 'lost'>('kanban');
 
   // DnD
@@ -446,23 +447,29 @@ export default function Opportunities() {
   const [newStageColorIdx, setNewStageColorIdx] = useState(0);
   const newStageRef = useRef<HTMLInputElement>(null);
 
+  const showToast = (type: 'success' | 'error', msg: string) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const load = async () => {
     setLoading(true);
-    // Each request is independent — one failure won't block the others
-    const [opps, allProds, stgs, usrs, settings] = await Promise.all([
-      getOpportunities().catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
-      getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
-      getPipelineStages().catch(e => { console.error('stages', e); return [] as any[]; }),
-      getUsers().catch(e => { console.error('users', e); return [] as any[]; }),
-      getCompanySettings().catch(() => ({} as any)),
-    ]);
-    const prods = Array.isArray(allProds) ? allProds.filter(p => p.active) : [];
-    setData(opps);
-    setProducts(prods);
-    setStages(stgs);
-    setUsers(usrs);
-    if (settings?.lead_sources?.length) setSources(settings.lead_sources);
-    setLoading(false);
+    try {
+      const [opps, allProds, stgs, usrs, settings] = await Promise.all([
+        getOpportunities().catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
+        getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
+        getPipelineStages().catch(e => { console.error('stages', e); return [] as any[]; }),
+        getUsers().catch(e => { console.error('users', e); return [] as any[]; }),
+        getCompanySettings().catch(() => ({} as any)),
+      ]);
+      const prods = Array.isArray(allProds) ? allProds.filter(p => p.active) : [];
+      setData(opps);
+      setProducts(prods);
+      setStages(stgs);
+      setUsers(usrs);
+      if (settings?.lead_sources?.length) setSources(settings.lead_sources);
+    } catch (e) { console.error('load error', e); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
@@ -483,13 +490,21 @@ export default function Opportunities() {
   const closeModal = () => { setModal(false); setForm(EMPTY); };
 
   const save = async () => {
-    if (!form.title) return;
+    if (!form.title) {
+      showToast('error', 'Preencha o título da oportunidade');
+      return;
+    }
     setSaving(true);
     try {
       if (form.id) await updateOpportunity(form.id, form);
       else await createOpportunity(form);
-      closeModal(); load();
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Erro'); }
+      closeModal();
+      showToast('success', `"${form.title}" salva no pipeline!`);
+      load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Erro ao salvar';
+      showToast('error', msg);
+    }
     finally { setSaving(false); }
   };
 
@@ -651,6 +666,12 @@ export default function Opportunities() {
   const wonStage  = stages.find(s => s.key === 'fechado');
   const lostStage = stages.find(s => s.key === 'perdido');
 
+  const allKnownKeys = new Set(stages.map(s => s.key));
+  // Orphaned = not in any known stage (stage key was deleted or never existed)
+  const orphanedItems = view === 'kanban'
+    ? items.filter(i => !allKnownKeys.has(i.stage))
+    : [];
+
   const displayItems =
     view === 'won'  ? items.filter(i => i.stage === (wonStage?.key  ?? 'fechado')) :
     view === 'lost' ? items.filter(i => i.stage === (lostStage?.key ?? 'perdido')) :
@@ -662,6 +683,19 @@ export default function Opportunities() {
 
   return (
     <div className="space-y-5">
+      {/* ── Toast notification ── */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium transition-all"
+          style={{
+            background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+            border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+            color: toast.type === 'success' ? '#34d399' : '#f87171',
+          }}>
+          {toast.type === 'success' ? <Check size={15} /> : <AlertCircle size={15} />}
+          {toast.msg}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
@@ -780,6 +814,30 @@ export default function Opportunities() {
               </div>
             );
           })}
+
+          {/* Orphaned opportunities — stage key was deleted */}
+          {orphanedItems.length > 0 && (
+            <div style={{ minWidth: 240, width: 240, flexShrink: 0 }}>
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg mb-2"
+                style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                  <AlertCircle size={11} /> Sem estágio
+                </span>
+                <span className="text-xs text-amber-400">{orphanedItems.length}</span>
+              </div>
+              <div className="space-y-2 rounded-xl p-1 min-h-[80px]"
+                style={{ background: 'rgba(245,158,11,0.04)', border: '2px dashed rgba(245,158,11,0.2)' }}>
+                {orphanedItems.map(o => (
+                  <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
+                    onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
+                    isDragging={dragId === o.id} />
+                ))}
+              </div>
+              <p className="text-xs text-amber-600 mt-1.5 px-1">
+                Edite cada card e selecione um estágio.
+              </p>
+            </div>
+          )}
 
           {/* Add stage */}
           <div style={{ minWidth: 200, flexShrink: 0 }}>
