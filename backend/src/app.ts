@@ -195,7 +195,7 @@ export async function runMigrations() {
       CREATE TABLE IF NOT EXISTS opportunity_items (
         id SERIAL PRIMARY KEY,
         opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
-        description TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
         product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
         value NUMERIC(10,2) NOT NULL DEFAULT 0,
         position INTEGER DEFAULT 0,
@@ -203,6 +203,10 @@ export async function runMigrations() {
       )
     `);
   } catch (e) { console.error('[migration] opportunity_items error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE opportunity_items ALTER COLUMN description SET DEFAULT ''`);
+  } catch (e) { /* ignore if table doesn't exist yet */ }
 
   console.log('✅ Migrations concluídas');
 }
