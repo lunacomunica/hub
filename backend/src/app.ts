@@ -158,6 +158,10 @@ export async function runMigrations() {
   } catch (e) { console.error('[migration] opportunities referral_name error:', e); }
 
   try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opp_items JSONB DEFAULT '[]'`);
+  } catch (e) { console.error('[migration] opportunities opp_items column error:', e); }
+
+  try {
     const NEW_SOURCES = ['Meta Ads', 'Turbinar Instagram', 'Instagram @vanessaraeski', 'TikTok @vanessaraeski'];
     const { rows: [row] } = await pool.query(`SELECT value FROM company_settings WHERE key = 'lead_sources'`);
     if (row) {
