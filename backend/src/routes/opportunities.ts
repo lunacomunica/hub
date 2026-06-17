@@ -360,17 +360,19 @@ router.put('/:id', async (req: Request, res: Response) => {
       ]
     );
 
-    if (Array.isArray(req.body.opp_items)) {
-      await pool.query('DELETE FROM opportunity_items WHERE opportunity_id = $1', [req.params.id]);
-      for (let i = 0; i < req.body.opp_items.length; i++) {
-        const item = req.body.opp_items[i];
-        if (!item.description?.trim() && !item.value) continue;
-        await pool.query(
-          'INSERT INTO opportunity_items (opportunity_id, description, product_id, value, position) VALUES ($1, $2, $3, $4, $5)',
-          [req.params.id, item.description || '', item.product_id || null, item.value || 0, i]
-        );
+    try {
+      if (Array.isArray(req.body.opp_items)) {
+        await pool.query('DELETE FROM opportunity_items WHERE opportunity_id = $1', [req.params.id]);
+        for (let i = 0; i < req.body.opp_items.length; i++) {
+          const item = req.body.opp_items[i];
+          if (!item.description?.trim() && !item.value) continue;
+          await pool.query(
+            'INSERT INTO opportunity_items (opportunity_id, description, product_id, value, position) VALUES ($1, $2, $3, $4, $5)',
+            [req.params.id, item.description || '', item.product_id || null, Number(item.value) || 0, i]
+          );
+        }
       }
-    }
+    } catch (e) { console.error('[opp_items upsert]', e); }
 
     const { rows: [updated] } = await pool.query(
       `SELECT o.*, u.name as owner_name,

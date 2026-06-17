@@ -508,7 +508,12 @@ export default function Opportunities() {
   };
   const openEdit = (opp: Opportunity) => {
     setForm({ ...opp });
-    setOppItems((opp as any).opp_items?.length ? (opp as any).opp_items : [{ description: opp.service_type || '', product_id: opp.product_id, value: opp.value || 0 }]);
+    const existingItems = (opp as any).opp_items;
+    if (existingItems?.length) {
+      setOppItems(existingItems.map((it: any) => ({ ...it, value: Number(it.value) || 0 })));
+    } else {
+      setOppItems([{ description: opp.service_type || '', product_id: opp.product_id, value: Number(opp.value) || 0 }]);
+    }
     setModalTab('dados');
     setModal(true);
   };
@@ -521,8 +526,8 @@ export default function Opportunities() {
     }
     setSaving(true);
     try {
-      const itemsToSave = oppItems.filter(i => i.description.trim() || i.value > 0);
-      const totalValue = itemsToSave.reduce((s, i) => s + (i.value || 0), 0);
+      const itemsToSave = oppItems.filter(i => i.description.trim() || Number(i.value) > 0);
+      const totalValue = itemsToSave.reduce((s, i) => s + (Number(i.value) || 0), 0);
       const payload = { ...form, value: totalValue || form.value || 0, opp_items: itemsToSave };
       if (form.id) await updateOpportunity(form.id, payload);
       else await createOpportunity(payload);
@@ -1268,7 +1273,7 @@ export default function Opportunities() {
                       {/* Total */}
                       {oppItems.length > 1 && (
                         <div className="mt-2 text-right text-sm font-bold text-emerald-400">
-                          Total: {brl(oppItems.reduce((s, i) => s + (i.value || 0), 0))}
+                          Total: {brl(oppItems.reduce((s, i) => s + (Number(i.value) || 0), 0))}
                         </div>
                       )}
                     </div>
