@@ -1209,11 +1209,11 @@ export default function Opportunities() {
                     </Field>
 
                     <Field label="Estágio">
-                      <select value={form.stage || 'prospeccao'} onChange={e => {
+                      <select value={form.stage || pipelineStages[0]?.key || ''} onChange={e => {
                         const s = e.target.value;
                         setForm(f => ({...f, stage: s, probability: PROB_DEFAULT[s] ?? f.probability}));
                       }} className="input-dark w-full">
-                        {stages.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                        {pipelineStages.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
                       </select>
                     </Field>
 
