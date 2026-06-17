@@ -45,7 +45,7 @@ const ACTIVITY_CONFIG = {
   proposta: { label: 'Proposta', icon: FileText,       color: '#fbbf24' },
 } as const;
 
-const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','WhatsApp','Outro'];
+const DEFAULT_SOURCES = ['Indicação','Instagram','LinkedIn','Site','Evento','Google Ads','Meta Ads','Turbinar Instagram','Instagram @vanessaraeski','TikTok @vanessaraeski','WhatsApp','Outro'];
 
 const LOST_REASONS = [
   'Preço muito alto',
