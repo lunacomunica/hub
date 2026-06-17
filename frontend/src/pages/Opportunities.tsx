@@ -16,6 +16,7 @@ import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface Product { id: number; name: string; price: number; category: string | null; billing_type?: 'mrr' | 'tcv' | 'ambos' }
+interface OppItem { id?: number; description: string; product_id?: number | null; value: number; }
 
 const brl = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? d.split('-').reverse().join('/') : '—';
@@ -179,7 +180,12 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
 
       {/* Value + temp */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-bold text-emerald-400">{brl(opp.value)}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-emerald-400">{brl(opp.value)}</span>
+          {(opp as any).opp_items?.length > 1 && (
+            <span className="text-xs text-slate-600">{(opp as any).opp_items.length} serviços</span>
+          )}
+        </div>
         {opp.temperature && TEMP_CONFIG[opp.temperature] && (
           <span className="text-xs" title={TEMP_CONFIG[opp.temperature].label}>
             {TEMP_CONFIG[opp.temperature].icon}
@@ -433,6 +439,7 @@ export default function Opportunities() {
   const [modal, setModal] = useState(false);
   const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
   const [form, setForm] = useState<Partial<Opportunity & { product_id?: number | null }>>(EMPTY);
+  const [oppItems, setOppItems] = useState<OppItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [view, setView] = useState<'kanban' | 'won' | 'lost'>('kanban');
@@ -495,15 +502,17 @@ export default function Opportunities() {
     const firstPipelineStage = stages.filter(s => !s.is_terminal)[0]?.key ?? 'prospeccao';
     const s = stage || firstPipelineStage;
     setForm({ ...EMPTY, stage: s, probability: PROB_DEFAULT[s] ?? 20 });
+    setOppItems([{ description: '', product_id: undefined, value: 0 }]);
     setModalTab('dados');
     setModal(true);
   };
-  const openEdit = (o: Opportunity) => {
-    setForm({ ...o });
+  const openEdit = (opp: Opportunity) => {
+    setForm({ ...opp });
+    setOppItems((opp as any).opp_items?.length ? (opp as any).opp_items : [{ description: opp.service_type || '', product_id: opp.product_id, value: opp.value || 0 }]);
     setModalTab('dados');
     setModal(true);
   };
-  const closeModal = () => { setModal(false); setForm(EMPTY); };
+  const closeModal = () => { setModal(false); setForm(EMPTY); setOppItems([]); };
 
   const save = async () => {
     if (!form.title) {
@@ -512,8 +521,11 @@ export default function Opportunities() {
     }
     setSaving(true);
     try {
-      if (form.id) await updateOpportunity(form.id, form);
-      else await createOpportunity(form);
+      const itemsToSave = oppItems.filter(i => i.description.trim() || i.value > 0);
+      const totalValue = itemsToSave.reduce((s, i) => s + (i.value || 0), 0);
+      const payload = { ...form, value: totalValue || form.value || 0, opp_items: itemsToSave };
+      if (form.id) await updateOpportunity(form.id, payload);
+      else await createOpportunity(payload);
       closeModal();
       showToast('success', `"${form.title}" salva no pipeline!`);
       load();
@@ -1196,27 +1208,70 @@ export default function Opportunities() {
                         className="input-dark w-full" />
                     </Field>
 
-                    <Field label="Produto / Serviço">
-                      <select value={form.product_id ?? ''} onChange={e => {
-                        const pid = e.target.value ? Number(e.target.value) : undefined;
-                        const prod = products.find(p => p.id === pid);
-                        setForm(f => ({
-                          ...f,
-                          product_id: pid,
-                          value: prod ? prod.price : f.value,
-                          original_price: prod ? prod.price : f.original_price,
-                        }));
-                      }} className="input-dark w-full">
-                        <option value="">Nenhum</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name}{p.category ? ` — ${p.category}` : ''}</option>)}
-                      </select>
-                    </Field>
-
-                    <Field label="Valor (R$)">
-                      <input type="number" step="0.01" value={form.value || ''}
-                        onChange={e => setForm(f => ({...f, value: parseFloat(e.target.value)||0}))}
-                        className="input-dark w-full" />
-                    </Field>
+                    {/* Serviços / Itens */}
+                    <div className="col-span-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Serviços</label>
+                        <button type="button" onClick={() => setOppItems(p => [...p, { description: '', product_id: undefined, value: 0 }])}
+                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                          <Plus size={12} /> Adicionar serviço
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {oppItems.map((item, idx) => (
+                          <div key={idx} className="flex gap-2 items-start">
+                            {/* Description / product select combo */}
+                            <div className="flex-1 min-w-0">
+                              <input
+                                value={item.description}
+                                onChange={e => setOppItems(p => p.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))}
+                                className="input-dark w-full text-sm"
+                                placeholder="Descrição do serviço"
+                              />
+                              {/* Optional product link */}
+                              <select
+                                value={item.product_id ?? ''}
+                                onChange={e => {
+                                  const pid = e.target.value ? Number(e.target.value) : undefined;
+                                  const prod = products.find(p => p.id === pid);
+                                  setOppItems(p => p.map((x, i) => i === idx ? {
+                                    ...x,
+                                    product_id: pid,
+                                    description: prod ? (x.description || prod.name) : x.description,
+                                    value: prod ? prod.price : x.value,
+                                  } : x));
+                                }}
+                                className="input-dark w-full text-xs mt-1 text-slate-400"
+                              >
+                                <option value="">Produto do catálogo (opcional)</option>
+                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                            </div>
+                            {/* Value */}
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={item.value || ''}
+                              onChange={e => setOppItems(p => p.map((x, i) => i === idx ? { ...x, value: parseFloat(e.target.value) || 0 } : x))}
+                              className="input-dark w-28 text-sm"
+                              placeholder="R$ 0,00"
+                            />
+                            {/* Remove */}
+                            {oppItems.length > 1 && (
+                              <button type="button" onClick={() => setOppItems(p => p.filter((_, i) => i !== idx))}
+                                className="text-slate-600 hover:text-red-400 mt-2">
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Total */}
+                      {oppItems.length > 1 && (
+                        <div className="mt-2 text-right text-sm font-bold text-emerald-400">
+                          Total: {brl(oppItems.reduce((s, i) => s + (i.value || 0), 0))}
+                        </div>
+                      )}
+                    </div>
 
                     <Field label="Probabilidade (%)">
                       <input type="number" min={0} max={100} value={form.probability || 0}

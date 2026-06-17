@@ -159,6 +159,25 @@ router.get('/', async (req: Request, res: Response) => {
     // ── Main items query (critical — if this fails, return 500) ──────────────
     const { rows } = await pool.query(query, params);
 
+    // ── Attach opp_items to each opportunity ──────────────────────────────────
+    if (rows.length > 0) {
+      try {
+        const oppIds = rows.map((r: any) => r.id);
+        const { rows: allItems } = await pool.query(
+          'SELECT * FROM opportunity_items WHERE opportunity_id = ANY($1) ORDER BY position ASC, id ASC',
+          [oppIds]
+        );
+        const itemsByOpp: Record<number, any[]> = {};
+        for (const item of allItems) {
+          if (!itemsByOpp[item.opportunity_id]) itemsByOpp[item.opportunity_id] = [];
+          itemsByOpp[item.opportunity_id].push(item);
+        }
+        for (const row of rows) {
+          (row as any).opp_items = itemsByOpp[row.id] || [];
+        }
+      } catch (e) { console.error('[opp_items fetch]', e); }
+    }
+
     // ── Summary queries (non-critical — each fails gracefully) ────────────────
     const safeQuery = async <T>(sql: string, fallback: T): Promise<T> => {
       try { const { rows: r } = await pool.query(sql); return (r[0] ?? fallback) as T; }
@@ -278,6 +297,17 @@ router.post('/', async (req: Request, res: Response) => {
       ]
     );
 
+    if (Array.isArray(req.body.opp_items)) {
+      for (let i = 0; i < req.body.opp_items.length; i++) {
+        const item = req.body.opp_items[i];
+        if (!item.description?.trim() && !item.value) continue;
+        await pool.query(
+          'INSERT INTO opportunity_items (opportunity_id, description, product_id, value, position) VALUES ($1, $2, $3, $4, $5)',
+          [created.id, item.description || '', item.product_id || null, item.value || 0, i]
+        );
+      }
+    }
+
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -329,6 +359,18 @@ router.put('/:id', async (req: Request, res: Response) => {
         req.params.id,
       ]
     );
+
+    if (Array.isArray(req.body.opp_items)) {
+      await pool.query('DELETE FROM opportunity_items WHERE opportunity_id = $1', [req.params.id]);
+      for (let i = 0; i < req.body.opp_items.length; i++) {
+        const item = req.body.opp_items[i];
+        if (!item.description?.trim() && !item.value) continue;
+        await pool.query(
+          'INSERT INTO opportunity_items (opportunity_id, description, product_id, value, position) VALUES ($1, $2, $3, $4, $5)',
+          [req.params.id, item.description || '', item.product_id || null, item.value || 0, i]
+        );
+      }
+    }
 
     const { rows: [updated] } = await pool.query(
       `SELECT o.*, u.name as owner_name,

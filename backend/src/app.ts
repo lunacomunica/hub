@@ -190,6 +190,20 @@ export async function runMigrations() {
     }
   } catch (e) { console.error('[migration] default pipeline stages error:', e); }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_items (
+        id SERIAL PRIMARY KEY,
+        opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        value NUMERIC(10,2) NOT NULL DEFAULT 0,
+        position INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (e) { console.error('[migration] opportunity_items error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
