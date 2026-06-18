@@ -263,7 +263,6 @@ router.post('/', async (req: Request, res: Response) => {
 
     const closedAt = stage === 'fechado' ? new Date().toISOString().split('T')[0] : null;
     const temp = ['frio','morno','quente'].includes(temperature) ? temperature : 'morno';
-    const itemsJson = JSON.stringify(Array.isArray(opp_items) ? opp_items : []);
 
     const { rows: [created] } = await pool.query(
       `INSERT INTO opportunities
@@ -271,8 +270,8 @@ router.post('/', async (req: Request, res: Response) => {
           service_type, product_id, notes, closed_at, temperature,
           next_followup, owner_id, source, lost_reason,
           original_price, payment_method, installments, payment_notes,
-          referral_name, opp_items, stage_entered_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW())
+          referral_name, stage_entered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -280,9 +279,18 @@ router.post('/', async (req: Request, res: Response) => {
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
-        referral_name || null, itemsJson,
+        referral_name || null,
       ]
     );
+
+    if (Array.isArray(opp_items)) {
+      try {
+        await pool.query(
+          `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
+          [JSON.stringify(opp_items), created.id]
+        );
+      } catch (e) { console.error('[opp_items save]', e); }
+    }
 
     res.status(201).json(created);
   } catch (err) {
@@ -312,10 +320,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const temp = ['frio','morno','quente'].includes(temperature) ? temperature : 'morno';
-    const itemsJson = Array.isArray(opp_items) ? JSON.stringify(opp_items) : null;
     const stageEnteredClause = stageChanged ? ', stage_entered_at = NOW()' : '';
-    const itemsClause = itemsJson !== null ? `, opp_items = $22` : '';
 
+    // ── Main update (always succeeds regardless of opp_items column) ───────────
     await pool.query(
       `UPDATE opportunities SET
          title = $1, client_name = $2, value = $3, stage = $4, probability = $5,
@@ -324,7 +331,7 @@ router.put('/:id', async (req: Request, res: Response) => {
          source = $14, lost_reason = $15,
          original_price = $16, payment_method = $17, installments = $18, payment_notes = $19,
          referral_name = $20,
-         updated_at = NOW()${stageEnteredClause}${itemsClause}
+         updated_at = NOW()${stageEnteredClause}
        WHERE id = $21`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -334,9 +341,18 @@ router.put('/:id', async (req: Request, res: Response) => {
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
         referral_name || null,
         req.params.id,
-        ...(itemsJson !== null ? [itemsJson] : []),
       ]
     );
+
+    // ── Save opp_items separately (column may not exist yet on first deploy) ───
+    if (Array.isArray(opp_items)) {
+      try {
+        await pool.query(
+          `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
+          [JSON.stringify(opp_items), req.params.id]
+        );
+      } catch (e) { console.error('[opp_items save]', e); }
+    }
 
     const { rows: [updated] } = await pool.query(
       `SELECT o.*, u.name as owner_name,
