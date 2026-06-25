@@ -1289,7 +1289,11 @@ export default function Opportunities() {
                         const s = e.target.value;
                         setForm(f => ({...f, stage: s, probability: PROB_DEFAULT[s] ?? f.probability}));
                       }} className="input-dark w-full">
-                        {pipelineStages.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                        {stages.map(s => (
+                          <option key={s.key} value={s.key}>
+                            {s.is_terminal ? (s.key === (wonStage?.key ?? 'fechado') ? '✅ ' : '❌ ') : ''}{s.label}
+                          </option>
+                        ))}
                       </select>
                     </Field>
 

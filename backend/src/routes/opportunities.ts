@@ -284,12 +284,10 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     if (Array.isArray(opp_items)) {
-      try {
-        await pool.query(
-          `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
-          [JSON.stringify(opp_items), created.id]
-        );
-      } catch (e) { console.error('[opp_items save]', e); }
+      await pool.query(
+        `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
+        [JSON.stringify(opp_items), created.id]
+      );
     }
 
     res.status(201).json(created);
@@ -344,14 +342,12 @@ router.put('/:id', async (req: Request, res: Response) => {
       ]
     );
 
-    // ── Save opp_items separately (column may not exist yet on first deploy) ───
+    // ── Save opp_items separately ────────────────────────────────────────────
     if (Array.isArray(opp_items)) {
-      try {
-        await pool.query(
-          `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
-          [JSON.stringify(opp_items), req.params.id]
-        );
-      } catch (e) { console.error('[opp_items save]', e); }
+      await pool.query(
+        `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
+        [JSON.stringify(opp_items), req.params.id]
+      );
     }
 
     const { rows: [updated] } = await pool.query(
