@@ -563,16 +563,33 @@ export default function Opportunities() {
   };
 
   const openConvertModal = (opp: Opportunity, pendingStage?: string) => {
-    // Try to infer billing_type from the linked product
+    const oppItems: OppItem[] = ((opp as any).opp_items || []).filter((i: OppItem) => i.description?.trim() || Number(i.value) > 0);
+    // Infer billing_type from products in opp_items
+    const itemProducts = oppItems
+      .filter(i => i.product_id)
+      .map(i => products.find(p => p.id === i.product_id))
+      .filter(Boolean);
+    const hasMrr = itemProducts.some(p => p?.billing_type === 'mrr' || p?.billing_type === 'ambos');
+    const hasTcv = itemProducts.some(p => p?.billing_type === 'tcv' || p?.billing_type === 'ambos');
+    const inferredBilling: 'mrr' | 'tcv' | 'ambos' = hasMrr && hasTcv ? 'ambos' : hasTcv ? 'tcv' : 'mrr';
+    // Fallback to old single-product logic if no opp_items
     const linkedProduct = opp.product_id ? products.find(p => p.id === opp.product_id) : null;
-    const billingType: 'mrr' | 'tcv' | 'ambos' = linkedProduct?.billing_type || 'mrr';
+    const billingType: 'mrr' | 'tcv' | 'ambos' = oppItems.length > 0 ? inferredBilling : (linkedProduct?.billing_type || 'mrr');
+    // service_type from item descriptions
+    const serviceType = oppItems.length > 0
+      ? oppItems.filter(i => i.description?.trim()).map(i => i.description).join(', ')
+      : (opp.service_type || linkedProduct?.category || '');
+    // total value from items
+    const totalValue = oppItems.length > 0
+      ? oppItems.reduce((s, i) => s + (Number(i.value) || 0), 0)
+      : Number(opp.value || 0);
     setConvertForm({
       client_type: billingType,
-      monthly_fee: Number(opp.value || 0),
+      monthly_fee: totalValue,
       margin_target: 30,
       project_title: opp.title,
-      contract_value: Number(opp.value || 0),
-      service_type: opp.service_type || (linkedProduct?.category || ''),
+      contract_value: totalValue,
+      service_type: serviceType,
       start_date: new Date().toISOString().split('T')[0],
     });
     setConvertModal({ opp, pendingStage });
@@ -1304,6 +1321,28 @@ export default function Opportunities() {
             </div>
 
             <div className="p-6 space-y-4">
+              {/* Services summary from opp_items */}
+              {(() => {
+                const items: OppItem[] = ((convertModal.opp as any).opp_items || []).filter((i: OppItem) => i.description?.trim() || Number(i.value) > 0);
+                if (items.length === 0) return null;
+                const total = items.reduce((s, i) => s + (Number(i.value) || 0), 0);
+                return (
+                  <div className="rounded-xl p-3 space-y-2" style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <p className="text-xs font-semibold text-indigo-300 mb-2">Serviços do negócio fechado</p>
+                    {items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <span className="text-xs text-slate-300">{item.description || '—'}</span>
+                        <span className="text-xs font-semibold text-emerald-400">{brl(Number(item.value) || 0)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid rgba(99,102,241,0.2)' }}>
+                      <span className="text-xs font-semibold text-slate-400">Total</span>
+                      <span className="text-sm font-bold text-emerald-400">{brl(total)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Client type */}
               <div>
                 <label className="label-dark mb-2 block">Tipo de cliente</label>
