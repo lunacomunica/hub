@@ -46,7 +46,14 @@ router.get('/', async (_req: Request, res: Response) => {
     const avg_fixed_costs = Number(fixedRow.avg_fixed);
     const hour_cost = monthly_billable_hours > 0 ? avg_fixed_costs / monthly_billable_hours : 0;
 
-    res.json({ monthly_billable_hours, avg_fixed_costs, hour_cost, lead_sources });
+    const stale_threshold = Number(raw.stale_threshold || 7);
+
+    let source_monthly_goals: Record<string, number> = {};
+    try {
+      if (raw.source_monthly_goals) source_monthly_goals = JSON.parse(raw.source_monthly_goals);
+    } catch { /* keep empty */ }
+
+    res.json({ monthly_billable_hours, avg_fixed_costs, hour_cost, lead_sources, stale_threshold, source_monthly_goals });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar configurações' });

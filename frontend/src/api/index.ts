@@ -178,7 +178,7 @@ export interface OppSummary {
   overdue_followups: number; today_followups: number; soon_followups: number;
   lost_value: number;
   lost_reasons: { reason: string; count: number; total_value: number }[];
-  source_performance: { source: string; total: number; won: number; lost: number; active: number; won_value: number }[];
+  source_performance: { source: string; total: number; won: number; lost: number; active: number; won_value: number; won_value_month: number }[];
   active_clients_count: number;
   referral_leads_count: number;
   referral_ranking: { referral_name: string; referral_type: string; referral_client_id: number | null; referral_employee_id: number | null; total_leads: number; won: number; won_value: number }[];
@@ -333,6 +333,8 @@ export interface CompanySettings {
   avg_fixed_costs: number;
   hour_cost: number;
   lead_sources: string[];
+  stale_threshold: number;
+  source_monthly_goals: Record<string, number>;
 }
 export const getCompanySettings = (): Promise<CompanySettings> =>
   req('/settings');

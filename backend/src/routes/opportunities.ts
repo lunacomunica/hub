@@ -250,14 +250,15 @@ router.get('/', async (req: Request, res: Response) => {
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
-      safeQueryRows<{ source: string; total: number; won: number; lost: number; active: number; won_value: number }>(
+      safeQueryRows<{ source: string; total: number; won: number; lost: number; active: number; won_value: number; won_value_month: number }>(
         `SELECT
            COALESCE(NULLIF(source,''), 'Não informado') as source,
            COUNT(*)::int as total,
            COUNT(*) FILTER (WHERE stage = 'fechado')::int as won,
            COUNT(*) FILTER (WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado'))::int as lost,
            COUNT(*) FILTER (WHERE stage NOT IN (SELECT key FROM pipeline_stages WHERE is_terminal=1))::int as active,
-           COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value
+           COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value,
+           COALESCE(SUM(value) FILTER (WHERE stage = 'fechado' AND updated_at >= DATE_TRUNC('month', CURRENT_DATE)), 0) as won_value_month
          FROM opportunities
          GROUP BY COALESCE(NULLIF(source,''), 'Não informado')
          ORDER BY won DESC, total DESC`

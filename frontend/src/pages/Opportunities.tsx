@@ -10,7 +10,7 @@ import {
   convertOpportunityToClient,
   getProducts, getPipelineStages, createPipelineStage, updatePipelineStage, deletePipelineStage,
   getOppActivities, addOppActivity, deleteOppActivity,
-  getUsers, getCompanySettings, type OppSummary,
+  getUsers, getCompanySettings, updateCompanySettings, type OppSummary,
 } from '../api';
 import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -128,9 +128,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Opportunity card ─────────────────────────────────────────────────────────
 
-function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: {
+function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, staleThreshold }: {
   opp: Opportunity; onEdit: (o: Opportunity) => void; onDelete: (id: number) => void;
   onDragStart: (id: number) => void; onDragEnd: () => void; isDragging: boolean;
+  staleThreshold: number;
 }) {
   const fuStatus = followupStatus(opp.next_followup);
   const fuColors = {
@@ -140,6 +141,12 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
     future:  { bg: 'transparent', text: '#64748b', border: 'transparent' },
   };
 
+  const lastContact = opp.last_activity_at
+    ? new Date(opp.last_activity_at)
+    : new Date(opp.created_at);
+  const daysWithoutContact = Math.floor((Date.now() - lastContact.getTime()) / 86400000);
+  const isStale = daysWithoutContact >= staleThreshold;
+
   return (
     <div
       draggable
@@ -148,14 +155,14 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
       onClick={() => onEdit(opp)}
       style={{
         background: '#0c0c26', borderRadius: 10, padding: '10px 12px',
-        border: '1px solid rgba(59,130,246,0.15)',
+        border: isStale ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(59,130,246,0.15)',
         cursor: isDragging ? 'grabbing' : 'pointer',
         opacity: isDragging ? 0.4 : 1,
         transition: 'opacity 0.15s, box-shadow 0.15s, border-color 0.15s',
-        boxShadow: isDragging ? 'none' : '0 1px 4px rgba(0,0,0,0.25)',
+        boxShadow: isDragging ? 'none' : isStale ? '0 0 0 1px rgba(249,115,22,0.15), 0 1px 4px rgba(0,0,0,0.25)' : '0 1px 4px rgba(0,0,0,0.25)',
         userSelect: 'none',
       }}
-      className="group hover:border-blue-500/40"
+      className={`group ${isStale ? 'hover:border-orange-400/60' : 'hover:border-blue-500/40'}`}
     >
       {/* Row 1: title + delete */}
       <div className="flex items-start justify-between gap-2 mb-1">
@@ -167,6 +174,16 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
           <Trash2 size={11} />
         </button>
       </div>
+
+      {/* Stale alert */}
+      {isStale && (
+        <div className="flex items-center gap-1 mb-1">
+          <span className="text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1"
+            style={{ background: 'rgba(249,115,22,0.12)', color: '#fb923c', border: '1px solid rgba(249,115,22,0.25)' }}>
+            <Clock size={9} />sem contato há {daysWithoutContact}d
+          </span>
+        </div>
+      )}
 
       {/* Client */}
       {opp.client_name && (
@@ -474,6 +491,10 @@ export default function Opportunities() {
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
   const [sources, setSources] = useState<string[]>(DEFAULT_SOURCES);
+  const [staleThreshold, setStaleThreshold] = useState(7);
+  const [sourceGoals, setSourceGoals] = useState<Record<string, number>>({});
+  const [editingGoals, setEditingGoals] = useState(false);
+  const [savingGoals, setSavingGoals] = useState(false);
   const [clients, setClients] = useState<{ id: number; name: string; active: number }[]>([]);
   const [employees, setEmployees] = useState<{ id: number; name: string; role?: string }[]>([]);
   const [referralSearch, setReferralSearch] = useState('');
@@ -547,6 +568,8 @@ export default function Opportunities() {
       setStages(stgs);
       setUsers(usrs);
       if (settings?.lead_sources?.length) setSources(settings.lead_sources);
+      if (settings?.stale_threshold) setStaleThreshold(settings.stale_threshold);
+      if (settings?.source_monthly_goals) setSourceGoals(settings.source_monthly_goals);
       fetch('/api/clients', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
         .then(data => setClients(Array.isArray(data) ? data : []))
@@ -835,7 +858,11 @@ export default function Opportunities() {
       if (filters.source !== null && opp.source !== filters.source) return false;
 
       // Stale (+7 days in stage)
-      if (filters.stale && (opp.days_in_stage ?? 0) < 7) return false;
+      if (filters.stale) {
+        const lastContact = opp.last_activity_at ? new Date(opp.last_activity_at) : new Date(opp.created_at);
+        const daysWithout = Math.floor((Date.now() - lastContact.getTime()) / 86400000);
+        if (daysWithout < staleThreshold) return false;
+      }
 
       // Value range
       if (filters.value_range !== null) {
@@ -1193,7 +1220,7 @@ export default function Opportunities() {
                   {stageItems.map(o => (
                     <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
                       onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
-                      isDragging={dragId === o.id} />
+                      isDragging={dragId === o.id} staleThreshold={staleThreshold} />
                   ))}
                   <button onClick={() => openCreate(stage.key)}
                     className="w-full text-xs text-slate-700 hover:text-slate-500 py-2 rounded-lg flex items-center justify-center gap-1 transition-colors"
@@ -1220,7 +1247,7 @@ export default function Opportunities() {
                 {orphanedItems.map(o => (
                   <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
                     onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
-                    isDragging={dragId === o.id} />
+                    isDragging={dragId === o.id} staleThreshold={staleThreshold} />
                 ))}
               </div>
               <p className="text-xs text-amber-600 mt-1.5 px-1">
@@ -1412,12 +1439,31 @@ export default function Opportunities() {
               <div className="card p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-semibold text-slate-300">Performance por Origem</h3>
-                  {bestSource && bestSource.won > 0 && (
-                    <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-                      style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}>
-                      Melhor origem: {bestSource.source}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {bestSource && bestSource.won > 0 && (
+                      <span className="text-xs px-2.5 py-1 rounded-full font-medium"
+                        style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}>
+                        Melhor origem: {bestSource.source}
+                      </span>
+                    )}
+                    {editingGoals ? (
+                      <button onClick={async () => {
+                        setSavingGoals(true);
+                        try {
+                          await updateCompanySettings({ source_monthly_goals: JSON.stringify(sourceGoals) });
+                          setEditingGoals(false);
+                        } finally { setSavingGoals(false); }
+                      }} disabled={savingGoals}
+                        className="btn-primary text-xs px-3 py-1 flex items-center gap-1">
+                        <Check size={11} />{savingGoals ? '...' : 'Salvar metas'}
+                      </button>
+                    ) : (
+                      <button onClick={() => setEditingGoals(true)}
+                        className="btn-ghost text-xs px-3 py-1 flex items-center gap-1">
+                        <Pencil size={11} />Editar metas
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="card overflow-hidden">
                   <table className="w-full text-sm">
@@ -1429,7 +1475,9 @@ export default function Opportunities() {
                         <th className="th text-right px-4 py-2.5">Fechados</th>
                         <th className="th text-right px-4 py-2.5">Perdidos</th>
                         <th className="th text-right px-4 py-2.5">Conversão</th>
-                        <th className="th text-right px-4 py-2.5">Valor fechado</th>
+                        <th className="th text-right px-4 py-2.5">Fechado este mês</th>
+                        <th className="th text-right px-4 py-2.5">Meta do mês</th>
+                        <th className="th text-right px-4 py-2.5">Progresso</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1437,6 +1485,10 @@ export default function Opportunities() {
                         const convRate = s.total > 0 ? (s.won / s.total) * 100 : 0;
                         const convColor = convRate >= 40 ? '#34d399' : convRate >= 20 ? '#fbbf24' : '#f87171';
                         const convBg = convRate >= 40 ? 'rgba(16,185,129,0.1)' : convRate >= 20 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)';
+                        const goal = sourceGoals[s.source] ?? 0;
+                        const monthVal = s.won_value_month ?? 0;
+                        const pct = goal > 0 ? Math.min((monthVal / goal) * 100, 100) : 0;
+                        const progColor = pct >= 100 ? '#34d399' : pct >= 60 ? '#fbbf24' : '#f87171';
                         return (
                           <tr key={s.source} className="tr">
                             <td className="td px-4 py-2.5 font-medium text-slate-200">{s.source}</td>
@@ -1450,7 +1502,29 @@ export default function Opportunities() {
                                 {convRate.toFixed(0)}%
                               </span>
                             </td>
-                            <td className="td px-4 py-2.5 text-right font-semibold text-emerald-400">{brl(s.won_value)}</td>
+                            <td className="td px-4 py-2.5 text-right font-semibold text-emerald-400">{brl(monthVal)}</td>
+                            <td className="td px-4 py-2.5 text-right">
+                              {editingGoals ? (
+                                <input type="number" min="0"
+                                  className="input-dark text-xs text-right w-28"
+                                  value={sourceGoals[s.source] ?? ''}
+                                  placeholder="R$ meta"
+                                  onChange={e => setSourceGoals(prev => ({ ...prev, [s.source]: Number(e.target.value) || 0 }))}
+                                />
+                              ) : (
+                                <span className="text-xs text-slate-400">{goal > 0 ? brl(goal) : '—'}</span>
+                              )}
+                            </td>
+                            <td className="td px-4 py-2.5 text-right min-w-[110px]">
+                              {goal > 0 ? (
+                                <div className="flex items-center gap-2 justify-end">
+                                  <div className="h-1.5 w-16 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: progColor }} />
+                                  </div>
+                                  <span className="text-xs font-semibold w-9 text-right" style={{ color: progColor }}>{pct.toFixed(0)}%</span>
+                                </div>
+                              ) : <span className="text-xs text-slate-700">—</span>}
+                            </td>
                           </tr>
                         );
                       })}
