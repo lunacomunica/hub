@@ -1206,7 +1206,7 @@ export default function Opportunities() {
           </div>
         </div>
       ) : view === 'funil' ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* ── Funil por Etapa ── */}
           {summary && (() => {
             const activeStages = stages.filter(s => !s.is_terminal).sort((a, b) => a.position - b.position);
@@ -1214,70 +1214,88 @@ export default function Opportunities() {
               const found = summary.by_stage.find((b: any) => b.stage === s.key);
               return { stage: s, count: found ? Number(found.count) : 0, total_value: found ? Number(found.total_value) : 0 };
             });
-            const maxCount = counts.length > 0 ? Math.max(...counts.map(c => c.count), 1) : 1;
-
+            const totalActive = counts.reduce((s, c) => s + c.count, 0);
             const wonEntry = summary.by_stage.find((b: any) => b.stage === (wonStage?.key ?? 'fechado'));
-            const lostEntry = summary.by_stage.find((b: any) => {
-              const lostTerminals = stages.filter(s => s.is_terminal && s.key !== (wonStage?.key ?? 'fechado')).map(s => s.key);
-              return lostTerminals.includes(b.stage);
-            });
             const wonCount = wonEntry ? Number(wonEntry.count) : 0;
-            const lostCount = Number((summary as any).lost_value !== undefined ? 0 : 0);
-            const _ = lostCount;
+            const lostCount = items.filter(i => stages.find(s => s.key === i.stage)?.is_terminal && i.stage !== (wonStage?.key ?? 'fechado')).length;
 
             return (
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-slate-300 mb-5">Funil por Etapa</h3>
-                <div className="space-y-1">
-                  {counts.map((c, idx) => {
-                    const pct = maxCount > 0 ? (c.count / maxCount) * 100 : 0;
-                    const nextCount = counts[idx + 1]?.count ?? 0;
-                    const convPct = c.count > 0 ? (nextCount / c.count) * 100 : null;
-                    return (
-                      <div key={c.stage.key}>
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="text-xs text-slate-400 w-28 shrink-0 truncate">{c.stage.label}</span>
-                          <div className="flex-1 relative h-8 rounded-lg overflow-hidden" style={{ background: 'rgba(15,23,42,0.6)' }}>
-                            <div className="h-full rounded-lg transition-all flex items-center px-3"
-                              style={{ width: `${Math.max(pct, 2)}%`, background: c.stage.bg_color, border: `1px solid ${c.stage.color}44` }}>
+              <div className="grid grid-cols-3 gap-5">
+                {/* Left: stage steps */}
+                <div className="col-span-2 card p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-sm font-semibold text-slate-300">Funil por Etapa</h3>
+                    <span className="text-xs text-slate-500">{totalActive} leads ativos</span>
+                  </div>
+                  <div className="space-y-2">
+                    {counts.map((c, idx) => {
+                      const pct = totalActive > 0 ? (c.count / totalActive) * 100 : 0;
+                      const nextCount = counts[idx + 1]?.count ?? null;
+                      const convPct = nextCount !== null && c.count > 0 ? (nextCount / c.count) * 100 : null;
+                      return (
+                        <div key={c.stage.key}>
+                          <div className="rounded-xl px-4 py-3 flex items-center gap-4 transition-all"
+                            style={{ background: c.stage.bg_color, border: `1px solid ${c.stage.color}55` }}>
+                            {/* color dot */}
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.stage.color }} />
+                            {/* label */}
+                            <span className="text-sm font-medium text-slate-200 w-28 shrink-0">{c.stage.label}</span>
+                            {/* progress track */}
+                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                              <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 0)}%`, background: c.stage.color, opacity: 0.7 }} />
                             </div>
+                            {/* count */}
+                            <span className="text-xl font-bold text-white w-8 text-right shrink-0">{c.count}</span>
+                            {/* value */}
+                            <span className="text-xs font-medium w-28 text-right shrink-0" style={{ color: c.stage.color }}>{brl(c.total_value)}</span>
                           </div>
-                          <span className="text-sm font-semibold text-slate-200 w-8 text-right">{c.count}</span>
-                          <span className="text-xs text-slate-500 w-24 text-right">{brl(c.total_value)}</span>
+                          {/* conversion connector */}
+                          {idx < counts.length - 1 && (
+                            <div className="flex items-center gap-2 my-1 pl-6">
+                              <div className="w-px h-4 ml-0.5" style={{ background: `${c.stage.color}40` }} />
+                              {convPct !== null ? (
+                                <span className="text-xs ml-1" style={{
+                                  color: convPct >= 50 ? '#34d399' : convPct >= 25 ? '#fbbf24' : '#f87171'
+                                }}>
+                                  {convPct.toFixed(0)}% avançam
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-700 ml-1">—</span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {idx < counts.length - 1 && convPct !== null && (
-                          <div className="flex items-center gap-3 my-0.5 pl-28">
-                            <div className="flex-1 flex items-center gap-2">
-                              <div className="h-px flex-1" style={{ background: 'rgba(59,130,246,0.1)' }} />
-                              <span className="text-xs text-slate-600">
-                                ↓ {convPct.toFixed(0)}%
-                              </span>
-                              <div className="h-px flex-1" style={{ background: 'rgba(59,130,246,0.1)' }} />
-                            </div>
-                            <span className="w-8" />
-                            <span className="w-24" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Terminal outcomes */}
-                <div className="mt-6 pt-4 grid grid-cols-2 gap-4" style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}>
-                  <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                    <div className="text-xs text-slate-500 mb-1">{wonStage?.label ?? 'Fechados'}</div>
-                    <div className="text-2xl font-bold text-emerald-400">{wonCount}</div>
-                    <div className="text-xs text-emerald-600 mt-1">{brl(summary.won_value)}</div>
-                  </div>
-                  <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <div className="text-xs text-slate-500 mb-1">{lostStage?.label ?? 'Perdidos'}</div>
-                    <div className="text-2xl font-bold text-red-400">{items.filter(i => stages.find(s => s.key === i.stage)?.is_terminal && i.stage !== (wonStage?.key ?? 'fechado')).length}</div>
-                    <div className="text-xs text-red-700 mt-1">{brl(summary.lost_value)}</div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div className="mt-3 text-center">
-                  <span className="text-xs text-slate-500">Taxa de conversão geral: </span>
-                  <span className="text-sm font-semibold text-emerald-400">{summary.win_rate.toFixed(1)}%</span>
+
+                {/* Right: outcome + win rate */}
+                <div className="flex flex-col gap-4">
+                  {/* Win rate */}
+                  <div className="card p-5 flex flex-col items-center justify-center text-center flex-1">
+                    <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Taxa de conversão</div>
+                    <div className="text-4xl font-bold text-emerald-400 my-2">{summary.win_rate.toFixed(0)}%</div>
+                    <div className="text-xs text-slate-500">{wonCount} fechados de {wonCount + lostCount} finalizados</div>
+                  </div>
+                  {/* Fechado */}
+                  <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    <div className="w-2 h-10 rounded-full" style={{ background: '#10b981' }} />
+                    <div>
+                      <div className="text-xs text-slate-500">{wonStage?.label ?? 'Fechado'}</div>
+                      <div className="text-2xl font-bold text-emerald-400">{wonCount}</div>
+                      <div className="text-xs text-emerald-700">{brl(summary.won_value)}</div>
+                    </div>
+                  </div>
+                  {/* Perdido */}
+                  <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                    <div className="w-2 h-10 rounded-full" style={{ background: '#ef4444' }} />
+                    <div>
+                      <div className="text-xs text-slate-500">{lostStage?.label ?? 'Perdido'}</div>
+                      <div className="text-2xl font-bold text-red-400">{lostCount}</div>
+                      <div className="text-xs text-red-800">{brl(summary.lost_value)}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
