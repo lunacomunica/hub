@@ -549,7 +549,11 @@ export default function Opportunities() {
     try {
       const itemsToSave = oppItems.filter(i => i.description.trim() || Number(i.value) > 0);
       const totalValue = itemsToSave.reduce((s, i) => s + (Number(i.value) || 0), 0);
-      const payload = { ...form, value: totalValue || form.value || 0, opp_items: itemsToSave };
+      // If original_price is set, the user explicitly negotiated a discount — respect form.value.
+      // Otherwise derive value from the sum of items (or fall back to whatever was in the form).
+      const hasDiscount = form.original_price != null && Number(form.original_price) > 0;
+      const finalValue = hasDiscount ? (form.value || 0) : (totalValue || form.value || 0);
+      const payload = { ...form, value: finalValue, opp_items: itemsToSave };
       if (form.id) await updateOpportunity(form.id, payload);
       else await createOpportunity(payload);
       closeModal();
