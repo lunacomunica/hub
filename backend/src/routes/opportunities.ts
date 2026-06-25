@@ -174,7 +174,7 @@ router.get('/', async (req: Request, res: Response) => {
       catch (e) { console.error('[opp summary]', e); return []; }
     };
 
-    const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow] = await Promise.all([
+    const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow, sourcePerf] = await Promise.all([
       safeQuery(
         `SELECT COUNT(*) as total_count, COALESCE(SUM(value), 0) as total_value,
                 COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
@@ -209,6 +209,18 @@ router.get('/', async (req: Request, res: Response) => {
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
       safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
+      safeQueryRows<{ source: string; total: number; won: number; lost: number; active: number; won_value: number }>(
+        `SELECT
+           COALESCE(NULLIF(source,''), 'Não informado') as source,
+           COUNT(*)::int as total,
+           COUNT(*) FILTER (WHERE stage = 'fechado')::int as won,
+           COUNT(*) FILTER (WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado'))::int as lost,
+           COUNT(*) FILTER (WHERE stage NOT IN (SELECT key FROM pipeline_stages WHERE is_terminal=1))::int as active,
+           COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value
+         FROM opportunities
+         GROUP BY COALESCE(NULLIF(source,''), 'Não informado')
+         ORDER BY won DESC, total DESC`
+      ),
     ]);
 
     const totalClosed = Number((won as any).count) + Number((lost as any).count);
@@ -229,6 +241,7 @@ router.get('/', async (req: Request, res: Response) => {
         soon_followups: Number((soonRow as any).c),
         lost_value: Number((lost as any).total),
         lost_reasons: lostReasons,
+        source_performance: sourcePerf,
       },
     });
   } catch (err) {

@@ -178,6 +178,7 @@ export interface OppSummary {
   overdue_followups: number; today_followups: number; soon_followups: number;
   lost_value: number;
   lost_reasons: { reason: string; count: number; total_value: number }[];
+  source_performance: { source: string; total: number; won: number; lost: number; active: number; won_value: number }[];
 }
 export const getOpportunities = (filters?: { stage?: string }): Promise<{ items: Opportunity[]; summary: OppSummary }> => {
   const params = filters?.stage ? `?stage=${filters.stage}` : '';
