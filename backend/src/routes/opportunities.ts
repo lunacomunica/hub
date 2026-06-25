@@ -102,16 +102,46 @@ router.get('/:id/activities', async (req: Request, res: Response) => {
 
 router.post('/:id/activities', async (req: Request, res: Response) => {
   try {
-    const { type = 'nota', content, author } = req.body;
+    const { type = 'nota', content, author, scheduled_at } = req.body;
     if (!content?.trim()) return res.status(400).json({ error: 'Conteúdo é obrigatório' });
 
     const { rows: [opp] } = await pool.query('SELECT id FROM opportunities WHERE id = $1', [Number(req.params.id)]);
     if (!opp) return res.status(404).json({ error: 'Oportunidade não encontrada' });
 
-    const { rows: [created] } = await pool.query(
-      'INSERT INTO opportunity_activities (opportunity_id, type, content, author) VALUES ($1,$2,$3,$4) RETURNING *',
-      [Number(req.params.id), type, content.trim(), author || null]
-    );
+    let created: any;
+    try {
+      const r = await pool.query(
+        'INSERT INTO opportunity_activities (opportunity_id, type, content, author, scheduled_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+        [Number(req.params.id), type, content.trim(), author || null, scheduled_at || null]
+      );
+      created = r.rows[0];
+    } catch (e: any) {
+      if (e.message?.includes('scheduled_at')) {
+        await pool.query(`ALTER TABLE opportunity_activities ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP DEFAULT NULL`);
+        const r = await pool.query(
+          'INSERT INTO opportunity_activities (opportunity_id, type, content, author, scheduled_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+          [Number(req.params.id), type, content.trim(), author || null, scheduled_at || null]
+        );
+        created = r.rows[0];
+      } else throw e;
+    }
+
+    // Update denormalized last_activity fields on the opportunity
+    try {
+      await pool.query(
+        `UPDATE opportunities SET last_activity_at = $1, last_activity_type = $2, updated_at = NOW() WHERE id = $3`,
+        [created.created_at, type, Number(req.params.id)]
+      );
+    } catch (e: any) {
+      if (e.message?.includes('last_activity')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP DEFAULT NULL`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20) DEFAULT NULL`);
+        await pool.query(
+          `UPDATE opportunities SET last_activity_at = $1, last_activity_type = $2 WHERE id = $3`,
+          [created.created_at, type, Number(req.params.id)]
+        );
+      }
+    }
 
     res.status(201).json(created);
   } catch (err: any) {
@@ -127,6 +157,17 @@ router.delete('/:id/activities/:aid', async (req: Request, res: Response) => {
     );
     if (!row) return res.status(404).json({ error: 'Atividade não encontrada' });
     await pool.query('DELETE FROM opportunity_activities WHERE id = $1', [Number(req.params.aid)]);
+
+    // Recalculate denormalized last_activity fields
+    try {
+      await pool.query(`
+        UPDATE opportunities o
+        SET last_activity_at   = (SELECT created_at FROM opportunity_activities WHERE opportunity_id = o.id ORDER BY created_at DESC LIMIT 1),
+            last_activity_type = (SELECT type       FROM opportunity_activities WHERE opportunity_id = o.id ORDER BY created_at DESC LIMIT 1)
+        WHERE o.id = $1
+      `, [Number(req.params.id)]);
+    } catch (_) { /* column may not exist yet, ignore */ }
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

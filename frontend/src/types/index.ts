@@ -168,6 +168,9 @@ export interface Opportunity {
   referral_type?: string | null;
   referral_client_id?: number | null;
   referral_employee_id?: number | null;
+  // Activity denormalized
+  last_activity_at: string | null;
+  last_activity_type: 'nota' | 'ligacao' | 'email' | 'reuniao' | 'whatsapp' | 'proposta' | null;
   created_at: string;
   updated_at: string;
 }
@@ -180,6 +183,7 @@ export interface OppActivity {
   type: 'nota' | 'ligacao' | 'email' | 'reuniao' | 'whatsapp' | 'proposta';
   content: string;
   author: string | null;
+  scheduled_at: string | null;
   created_at: string;
 }
 

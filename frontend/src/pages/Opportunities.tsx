@@ -222,11 +222,22 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging }: 
             </span>
           ) : null}
 
-          {opp.activity_count > 0 && (
+          {opp.last_activity_at && opp.last_activity_type ? (() => {
+            const cfg = ACTIVITY_CONFIG[opp.last_activity_type as keyof typeof ACTIVITY_CONFIG];
+            if (!cfg) return null;
+            const Icon = cfg.icon;
+            const daysAgo = Math.floor((Date.now() - new Date(opp.last_activity_at).getTime()) / 86400000);
+            const label = daysAgo === 0 ? 'hoje' : daysAgo === 1 ? 'ontem' : `${daysAgo}d`;
+            return (
+              <span className="text-xs flex items-center gap-0.5 font-medium" style={{ color: cfg.color }} title={`${cfg.label} · ${new Date(opp.last_activity_at).toLocaleDateString('pt-BR')}`}>
+                <Icon size={9} />{label}
+              </span>
+            );
+          })() : opp.activity_count > 0 ? (
             <span className="text-xs text-slate-600 flex items-center gap-0.5">
               <StickyNote size={9} />{opp.activity_count}
             </span>
-          )}
+          ) : null}
         </div>
 
         {(opp.days_in_stage ?? 0) > 0 && (
@@ -318,7 +329,7 @@ function StageHeader({ stage, count, isOver, onRename, onDelete, canDelete, onMo
 function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault: string }) {
   const [activities, setActivities] = useState<OppActivity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ type: 'nota' as OppActivity['type'], content: '', author: authorDefault });
+  const [form, setForm] = useState({ type: 'nota' as OppActivity['type'], content: '', author: authorDefault, scheduled_at: '' });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -333,8 +344,8 @@ function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault:
     if (!form.content.trim()) return;
     setSaving(true);
     try {
-      await addOppActivity(oppId, form);
-      setForm(f => ({ ...f, content: '' }));
+      await addOppActivity(oppId, { ...form, scheduled_at: form.scheduled_at || undefined });
+      setForm(f => ({ ...f, content: '', scheduled_at: '' }));
       load();
     } finally { setSaving(false); }
   };
@@ -388,6 +399,16 @@ function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault:
             placeholder="Autor"
             className="input-dark text-xs flex-1"
           />
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs text-slate-600">Agendar</label>
+            <input
+              type="date"
+              value={form.scheduled_at}
+              onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))}
+              className="input-dark text-xs"
+              style={{ minWidth: 120 }}
+            />
+          </div>
           <button onClick={add} disabled={saving || !form.content.trim()}
             className="btn-primary text-xs flex items-center gap-1 shrink-0 disabled:opacity-40">
             <Plus size={12} /> {saving ? '...' : 'Registrar'}
@@ -426,7 +447,15 @@ function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault:
                   </div>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">{act.content}</p>
-                {act.author && <p className="text-xs text-slate-600 mt-1">por {act.author}</p>}
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                  {act.author && <p className="text-xs text-slate-600">por {act.author}</p>}
+                  {act.scheduled_at && (
+                    <span className="text-xs flex items-center gap-1 font-medium" style={{ color: '#60a5fa' }}>
+                      <Calendar size={9} />
+                      Agendado: {new Date(act.scheduled_at + 'T00:00:00').toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -566,6 +595,14 @@ export default function Opportunities() {
   const save = async () => {
     if (!form.title) {
       showToast('error', 'Preencha o título da oportunidade');
+      return;
+    }
+    // If moving to a lost terminal stage, require a reason
+    const targetStage = stages.find(s => s.key === form.stage);
+    const wonStageKey = stages.find(s => s.is_terminal === 1 && (s.key === 'fechado' || s.position === Math.min(...stages.filter(x => x.is_terminal === 1).map(x => x.position))))?.key ?? 'fechado';
+    const isLostTerminal = targetStage?.is_terminal === 1 && form.stage !== wonStageKey;
+    if (isLostTerminal && !form.lost_reason) {
+      showToast('error', 'Selecione o motivo da perda antes de salvar');
       return;
     }
     setSaving(true);
@@ -1419,6 +1456,48 @@ export default function Opportunities() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Top Motivos de Perda (Funil) ── */}
+          {summary && summary.lost_reasons?.length > 0 && (() => {
+            const total = summary.lost_reasons.reduce((a: number, r: any) => a + Number(r.count), 0);
+            const top5 = summary.lost_reasons.slice(0, 5);
+            return (
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-slate-300">Top Motivos de Perda</h3>
+                  <span className="text-xs text-slate-500">
+                    {total} lead{total !== 1 ? 's' : ''} perdido{total !== 1 ? 's' : ''} · {brl(summary.lost_value ?? 0)} em valor
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {top5.map((r: any, idx: number) => {
+                    const pct = total > 0 ? (Number(r.count) / total) * 100 : 0;
+                    return (
+                      <div key={r.reason}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold w-4 text-slate-600">{idx + 1}</span>
+                            <span className="text-xs text-slate-300">{r.reason}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-slate-500">{brl(r.total_value)}</span>
+                            <span className="text-xs font-semibold" style={{ color: pct > 30 ? '#f87171' : pct > 15 ? '#fbbf24' : '#94a3b8' }}>
+                              {pct.toFixed(0)}%
+                            </span>
+                            <span className="text-xs text-slate-600">{r.count}x</span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(239,68,68,0.1)' }}>
+                          <div className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: pct > 30 ? 'rgba(239,68,68,0.7)' : 'rgba(239,68,68,0.45)' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

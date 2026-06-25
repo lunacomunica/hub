@@ -207,7 +207,7 @@ export const convertOpportunityToClient = (id: number, data: {
 // Opportunity activities
 export const getOppActivities = (oppId: number): Promise<OppActivity[]> =>
   req(`/opportunities/${oppId}/activities`);
-export const addOppActivity = (oppId: number, data: { type: string; content: string; author?: string }): Promise<OppActivity> =>
+export const addOppActivity = (oppId: number, data: { type: string; content: string; author?: string; scheduled_at?: string }): Promise<OppActivity> =>
   req(`/opportunities/${oppId}/activities`, { method: 'POST', body: JSON.stringify(data) });
 export const deleteOppActivity = (oppId: number, actId: number): Promise<{ success: boolean }> =>
   req(`/opportunities/${oppId}/activities/${actId}`, { method: 'DELETE' });

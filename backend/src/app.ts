@@ -239,6 +239,15 @@ export async function runMigrations() {
     `);
   } catch (e) { console.error('[migration] referral_prizes error:', e); }
 
+  try {
+    await pool.query(`ALTER TABLE opportunity_activities ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP DEFAULT NULL`);
+  } catch (e) { console.error('[migration] opportunity_activities scheduled_at error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP DEFAULT NULL`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20) DEFAULT NULL`);
+  } catch (e) { console.error('[migration] opportunities last_activity fields error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
