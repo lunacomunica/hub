@@ -1465,19 +1465,22 @@ export default function Opportunities() {
                     )}
                   </div>
                 </div>
-                <div className="card overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="card overflow-x-auto">
+                  <table className="text-sm" style={{ minWidth: 640, width: '100%' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
                         <th className="th text-left px-4 py-2.5">Origem</th>
                         <th className="th text-right px-4 py-2.5">Total</th>
                         <th className="th text-right px-4 py-2.5">Ativos</th>
                         <th className="th text-right px-4 py-2.5">Fechados</th>
-                        <th className="th text-right px-4 py-2.5">Perdidos</th>
                         <th className="th text-right px-4 py-2.5">Conversão</th>
-                        <th className="th text-right px-4 py-2.5">Fechado este mês</th>
-                        <th className="th text-right px-4 py-2.5">Meta do mês</th>
-                        <th className="th text-right px-4 py-2.5">Progresso</th>
+                        <th className="th text-right px-4 py-2.5">
+                          <div>Fechado este mês</div>
+                          {editingGoals && <div className="text-slate-600 font-normal normal-case text-xs">↳ Meta do mês</div>}
+                        </th>
+                        <th className="th text-right px-4 py-2.5" style={{ minWidth: 140 }}>
+                          {editingGoals ? 'Meta mensal (R$)' : 'vs Meta'}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1495,35 +1498,36 @@ export default function Opportunities() {
                             <td className="td px-4 py-2.5 text-right text-slate-400">{s.total}</td>
                             <td className="td px-4 py-2.5 text-right text-amber-400">{s.active}</td>
                             <td className="td px-4 py-2.5 text-right text-emerald-400">{s.won}</td>
-                            <td className="td px-4 py-2.5 text-right text-red-400">{s.lost}</td>
                             <td className="td px-4 py-2.5 text-right">
                               <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
                                 style={{ background: convBg, color: convColor, border: `1px solid ${convColor}33` }}>
                                 {convRate.toFixed(0)}%
                               </span>
                             </td>
-                            <td className="td px-4 py-2.5 text-right font-semibold text-emerald-400">{brl(monthVal)}</td>
+                            <td className="td px-4 py-2.5 text-right">
+                              <span className="font-semibold text-emerald-400">{brl(monthVal)}</span>
+                              {goal > 0 && !editingGoals && (
+                                <div className="text-xs text-slate-600 mt-0.5">meta: {brl(goal)}</div>
+                              )}
+                            </td>
                             <td className="td px-4 py-2.5 text-right">
                               {editingGoals ? (
                                 <input type="number" min="0"
-                                  className="input-dark text-xs text-right w-28"
+                                  className="input-dark text-sm text-right w-full"
                                   value={sourceGoals[s.source] ?? ''}
-                                  placeholder="R$ meta"
+                                  placeholder="0"
                                   onChange={e => setSourceGoals(prev => ({ ...prev, [s.source]: Number(e.target.value) || 0 }))}
                                 />
-                              ) : (
-                                <span className="text-xs text-slate-400">{goal > 0 ? brl(goal) : '—'}</span>
-                              )}
-                            </td>
-                            <td className="td px-4 py-2.5 text-right min-w-[110px]">
-                              {goal > 0 ? (
+                              ) : goal > 0 ? (
                                 <div className="flex items-center gap-2 justify-end">
-                                  <div className="h-1.5 w-16 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                  <div className="h-1.5 rounded-full overflow-hidden flex-1 max-w-[80px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
                                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: progColor }} />
                                   </div>
-                                  <span className="text-xs font-semibold w-9 text-right" style={{ color: progColor }}>{pct.toFixed(0)}%</span>
+                                  <span className="text-xs font-bold w-9 text-right shrink-0" style={{ color: progColor }}>{pct.toFixed(0)}%</span>
                                 </div>
-                              ) : <span className="text-xs text-slate-700">—</span>}
+                              ) : (
+                                <span className="text-xs text-slate-700">sem meta</span>
+                              )}
                             </td>
                           </tr>
                         );
