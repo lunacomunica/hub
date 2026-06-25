@@ -1406,11 +1406,19 @@ export default function EmployeeDetail() {
           {activeTab === 'feedbacks' && <TabFeedbacks employee={employee} />}
 
           {/* Referrals section — shown on all tabs below content */}
-          {employeeReferrals.length > 0 && (
-            <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
-              <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
-                🤝 Indicações deste colaborador
-              </h4>
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+            <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
+              🤝 Indicações deste colaborador
+              {employeeReferrals.length > 0 && (
+                <span className="text-xs font-normal px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(245,158,11,0.12)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.25)' }}>
+                  {employeeReferrals.length}
+                </span>
+              )}
+            </h4>
+            {employeeReferrals.length === 0 ? (
+              <p className="text-xs text-slate-600 py-2">Nenhuma indicação registrada ainda.</p>
+            ) : (
               <div className="space-y-1.5">
                 {employeeReferrals.map((ref: any) => (
                   <div key={ref.id} className="flex items-center gap-3 text-xs px-3 py-2 rounded-lg"
@@ -1423,8 +1431,8 @@ export default function EmployeeDetail() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
