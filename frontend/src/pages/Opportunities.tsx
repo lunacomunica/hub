@@ -27,6 +27,16 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function isThisWeek(date: string): boolean {
+  const t = localToday();
+  const [ty, tm, td] = t.split('-').map(Number);
+  const [fy, fm, fd] = date.split('-').map(Number);
+  const todayMs = new Date(ty, tm - 1, td).getTime();
+  const dateMs  = new Date(fy, fm - 1, fd).getTime();
+  const diff = Math.round((dateMs - todayMs) / 86400000);
+  return diff >= 0 && diff <= 7;
+}
+
 const PROB_DEFAULT: Record<string, number> = {
   prospeccao: 10, contato: 25, proposta: 50, negociacao: 75, fechado: 100, perdido: 0,
 };
@@ -464,6 +474,17 @@ export default function Opportunities() {
   }>({ client_type: 'mrr', monthly_fee: 0, margin_target: 30, project_title: '', contract_value: 0, service_type: '', start_date: '' });
   const [converting, setConverting] = useState(false);
 
+  // Smart filters
+  const [filters, setFilters] = useState({
+    temperatures: [] as string[],
+    followup: null as 'overdue' | 'today' | 'week' | 'none' | null,
+    owner_id: null as number | null,
+    source: null as string | null,
+    stale: false,
+    value_range: null as 'low' | 'mid' | 'high' | null,
+    category: null as string | null,
+  });
+
   // Add stage
   const [addingStage, setAddingStage] = useState(false);
   const [newStageName, setNewStageName] = useState('');
@@ -699,6 +720,73 @@ export default function Opportunities() {
   const wonStage  = stages.find(s => s.key === 'fechado');
   const lostStage = stages.find(s => s.key === 'perdido');
 
+  // Derived filter helpers
+  const categories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[];
+
+  const activeFilterCount = [
+    filters.temperatures.length > 0,
+    filters.followup !== null,
+    filters.owner_id !== null,
+    filters.source !== null,
+    filters.stale,
+    filters.value_range !== null,
+    filters.category !== null,
+  ].filter(Boolean).length;
+
+  function applyFilters(list: Opportunity[]): Opportunity[] {
+    return list.filter(opp => {
+      // Temperature (multi-select)
+      if (filters.temperatures.length > 0 && !filters.temperatures.includes(opp.temperature ?? '')) return false;
+
+      // Follow-up
+      if (filters.followup !== null) {
+        const fuSt = followupStatus(opp.next_followup ?? null);
+        if (filters.followup === 'overdue' && fuSt !== 'overdue') return false;
+        if (filters.followup === 'today'   && fuSt !== 'today')   return false;
+        if (filters.followup === 'week'    && (!opp.next_followup || !isThisWeek(opp.next_followup))) return false;
+        if (filters.followup === 'none'    && opp.next_followup)  return false;
+      }
+
+      // Owner
+      if (filters.owner_id !== null && opp.owner_id !== filters.owner_id) return false;
+
+      // Source
+      if (filters.source !== null && opp.source !== filters.source) return false;
+
+      // Stale (+7 days in stage)
+      if (filters.stale && (opp.days_in_stage ?? 0) < 7) return false;
+
+      // Value range
+      if (filters.value_range !== null) {
+        const v = Number(opp.value);
+        if (filters.value_range === 'low'  && v >= 2000) return false;
+        if (filters.value_range === 'mid'  && (v < 2000 || v > 5000)) return false;
+        if (filters.value_range === 'high' && v <= 5000) return false;
+      }
+
+      // Category — match against opp_items product categories
+      if (filters.category !== null) {
+        const oppItemsArr = (opp as any).opp_items as Array<{ product_id?: number | null }> | undefined;
+        let matched = false;
+        if (oppItemsArr?.length) {
+          matched = oppItemsArr.some(it => {
+            if (!it.product_id) return false;
+            const prod = products.find(p => p.id === it.product_id);
+            return prod?.category === filters.category;
+          });
+        }
+        // Also check via direct product_id
+        if (!matched && opp.product_id) {
+          const prod = products.find(p => p.id === opp.product_id);
+          if (prod?.category === filters.category) matched = true;
+        }
+        if (!matched) return false;
+      }
+
+      return true;
+    });
+  }
+
   // Orphaned = in kanban view but not showing in any pipeline column
   // (stage deleted, stage became terminal, or key mismatch)
   const orphanedItems = view === 'kanban'
@@ -709,10 +797,12 @@ export default function Opportunities() {
       })
     : [];
 
-  const displayItems =
+  const baseItems =
     view === 'won'  ? items.filter(i => i.stage === (wonStage?.key  ?? 'fechado')) :
     view === 'lost' ? items.filter(i => i.stage === (lostStage?.key ?? 'perdido')) :
     items.filter(i => pipelineStages.some(s => s.key === i.stage));
+
+  const displayItems = applyFilters(baseItems);
 
   const overdueCount = summary?.overdue_followups ?? 0;
   const todayCount   = summary?.today_followups   ?? 0;
@@ -804,6 +894,178 @@ export default function Opportunities() {
           </button>
         ))}
       </div>
+
+      {/* ── Smart filter bar (kanban view only) ── */}
+      {view === 'kanban' && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5 rounded-xl"
+          style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(59,130,246,0.1)' }}>
+
+          {/* Temperatura */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Temp</span>
+            {(['frio','morno','quente'] as const).map(t => {
+              const cfg = TEMP_CONFIG[t];
+              const active = filters.temperatures.includes(t);
+              return (
+                <button key={t} onClick={() => setFilters(f => ({
+                  ...f,
+                  temperatures: active ? f.temperatures.filter(x => x !== t) : [...f.temperatures, t],
+                }))}
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                  style={{
+                    background: active ? cfg.bg : 'rgba(15,23,42,0.5)',
+                    border: `1px solid ${active ? cfg.color + '80' : 'rgba(59,130,246,0.1)'}`,
+                    color: active ? cfg.color : '#64748b',
+                  }}>
+                  {cfg.icon} {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="w-px h-5 bg-slate-800 shrink-0" />
+
+          {/* Follow-up */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Follow-up</span>
+            {([
+              ['overdue', 'Atrasado'],
+              ['today',   'Hoje'],
+              ['week',    'Esta semana'],
+              ['none',    'Sem data'],
+            ] as const).map(([key, label]) => {
+              const active = filters.followup === key;
+              return (
+                <button key={key} onClick={() => setFilters(f => ({ ...f, followup: active ? null : key }))}
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                  style={{
+                    background: active ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                    border: `1px solid ${active ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
+                    color: active ? '#93c5fd' : '#64748b',
+                  }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="w-px h-5 bg-slate-800 shrink-0" />
+
+          {/* Responsável */}
+          {users.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Resp.</span>
+              <select
+                value={filters.owner_id ?? ''}
+                onChange={e => setFilters(f => ({ ...f, owner_id: e.target.value ? Number(e.target.value) : null }))}
+                className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
+                style={{
+                  background: filters.owner_id !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                  border: `1px solid ${filters.owner_id !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
+                  color: filters.owner_id !== null ? '#93c5fd' : '#64748b',
+                  outline: 'none',
+                }}>
+                <option value="">Todos</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Origem */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Origem</span>
+            <select
+              value={filters.source ?? ''}
+              onChange={e => setFilters(f => ({ ...f, source: e.target.value || null }))}
+              className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
+              style={{
+                background: filters.source !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                border: `1px solid ${filters.source !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
+                color: filters.source !== null ? '#93c5fd' : '#64748b',
+                outline: 'none',
+              }}>
+              <option value="">Todas</option>
+              {sources.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div className="w-px h-5 bg-slate-800 shrink-0" />
+
+          {/* Parado +7 dias */}
+          <button onClick={() => setFilters(f => ({ ...f, stale: !f.stale }))}
+            className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+            style={{
+              background: filters.stale ? 'rgba(245,158,11,0.15)' : 'rgba(15,23,42,0.5)',
+              border: `1px solid ${filters.stale ? 'rgba(245,158,11,0.5)' : 'rgba(59,130,246,0.1)'}`,
+              color: filters.stale ? '#fcd34d' : '#64748b',
+            }}>
+            ⏳ Parado +7d
+          </button>
+
+          <div className="w-px h-5 bg-slate-800 shrink-0" />
+
+          {/* Valor */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Valor</span>
+            {([
+              ['low',  '< R$2k'],
+              ['mid',  'R$2k–5k'],
+              ['high', '> R$5k'],
+            ] as const).map(([key, label]) => {
+              const active = filters.value_range === key;
+              return (
+                <button key={key} onClick={() => setFilters(f => ({ ...f, value_range: active ? null : key }))}
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                  style={{
+                    background: active ? 'rgba(52,211,153,0.15)' : 'rgba(15,23,42,0.5)',
+                    border: `1px solid ${active ? 'rgba(52,211,153,0.45)' : 'rgba(59,130,246,0.1)'}`,
+                    color: active ? '#34d399' : '#64748b',
+                  }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Serviço (category) */}
+          {categories.length > 0 && (
+            <>
+              <div className="w-px h-5 bg-slate-800 shrink-0" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Serviço</span>
+                <select
+                  value={filters.category ?? ''}
+                  onChange={e => setFilters(f => ({ ...f, category: e.target.value || null }))}
+                  className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
+                  style={{
+                    background: filters.category !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                    border: `1px solid ${filters.category !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
+                    color: filters.category !== null ? '#93c5fd' : '#64748b',
+                    outline: 'none',
+                  }}>
+                  <option value="">Todos</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Active count + clear */}
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                style={{ background: 'rgba(59,130,246,0.2)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.4)' }}>
+                {activeFilterCount} ativo{activeFilterCount > 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => setFilters({ temperatures: [], followup: null, owner_id: null, source: null, stale: false, value_range: null, category: null })}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium">
+                Limpar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
