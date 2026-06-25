@@ -284,8 +284,8 @@ router.post('/', async (req: Request, res: Response) => {
           service_type, product_id, notes, closed_at, temperature,
           next_followup, owner_id, source, lost_reason,
           original_price, payment_method, installments, payment_notes,
-          referral_name, referral_type, referral_client_id, referral_employee_id, stage_entered_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW())
+          referral_name, stage_entered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -293,9 +293,27 @@ router.post('/', async (req: Request, res: Response) => {
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
-        referral_name || null, referral_type || 'external', referral_client_id || null, referral_employee_id || null,
+        referral_name || null,
       ]
     );
+
+    // ── Referral linking — self-healing ─────────────────────────────────────────
+    try {
+      await pool.query(
+        `UPDATE opportunities SET referral_type = $1, referral_client_id = $2, referral_employee_id = $3 WHERE id = $4`,
+        [referral_type || 'external', referral_client_id || null, referral_employee_id || null, created.id]
+      );
+    } catch (e: any) {
+      if (e.message?.includes('referral')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_type VARCHAR(10) DEFAULT 'external'`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL`);
+        await pool.query(
+          `UPDATE opportunities SET referral_type = $1, referral_client_id = $2, referral_employee_id = $3 WHERE id = $4`,
+          [referral_type || 'external', referral_client_id || null, referral_employee_id || null, created.id]
+        );
+      }
+    }
 
     if (Array.isArray(opp_items)) {
       try {
@@ -342,7 +360,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const temp = ['frio','morno','quente'].includes(temperature) ? temperature : 'morno';
     const stageEnteredClause = stageChanged ? ', stage_entered_at = NOW()' : '';
 
-    // ── Main update (always succeeds regardless of opp_items column) ───────────
+    // ── Main update — core fields only (always succeeds) ────────────────────────
     await pool.query(
       `UPDATE opportunities SET
          title = $1, client_name = $2, value = $3, stage = $4, probability = $5,
@@ -350,19 +368,37 @@ router.put('/:id', async (req: Request, res: Response) => {
          closed_at = $10, temperature = $11, next_followup = $12, owner_id = $13,
          source = $14, lost_reason = $15,
          original_price = $16, payment_method = $17, installments = $18, payment_notes = $19,
-         referral_name = $20, referral_type = $21, referral_client_id = $22, referral_employee_id = $23,
+         referral_name = $20,
          updated_at = NOW()${stageEnteredClause}
-       WHERE id = $24`,
+       WHERE id = $21`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
-        referral_name || null, referral_type || 'external', referral_client_id || null, referral_employee_id || null,
+        referral_name || null,
         req.params.id,
       ]
     );
+
+    // ── Referral linking — self-healing (colunas podem não existir ainda) ───────
+    try {
+      await pool.query(
+        `UPDATE opportunities SET referral_type = $1, referral_client_id = $2, referral_employee_id = $3 WHERE id = $4`,
+        [referral_type || 'external', referral_client_id || null, referral_employee_id || null, req.params.id]
+      );
+    } catch (e: any) {
+      if (e.message?.includes('referral')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_type VARCHAR(10) DEFAULT 'external'`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL`);
+        await pool.query(
+          `UPDATE opportunities SET referral_type = $1, referral_client_id = $2, referral_employee_id = $3 WHERE id = $4`,
+          [referral_type || 'external', referral_client_id || null, referral_employee_id || null, req.params.id]
+        );
+      }
+    }
 
     // ── Save opp_items separately ────────────────────────────────────────────
     if (Array.isArray(opp_items)) {
