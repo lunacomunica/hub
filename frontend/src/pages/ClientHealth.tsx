@@ -90,6 +90,9 @@ export default function ClientHealth() {
   const [planHistory, setPlanHistory] = useState<PlanHistoryEntry[]>([]);
   const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
 
+  // Filter
+  const [typeFilter, setTypeFilter] = useState<'all' | 'mrr' | 'tcv'>('all');
+
   // TCV
   const [tcvProjects, setTcvProjects] = useState<TcvProject[]>([]);
   const [tcvModal, setTcvModal] = useState<{ clientId: number; project?: TcvProject } | null>(null);
@@ -327,12 +330,18 @@ export default function ClientHealth() {
 
   const activeClients = clients.filter(c => c.active);
   // at-risk clients first, then alphabetical
-  const sortedActiveClients = [...activeClients].sort((a, b) => {
-    const aRisk = a.risk_alert ? 1 : 0;
-    const bRisk = b.risk_alert ? 1 : 0;
-    if (bRisk !== aRisk) return bRisk - aRisk;
-    return a.name.localeCompare(b.name);
-  });
+  const sortedActiveClients = [...activeClients]
+    .filter(c => {
+      if (typeFilter === 'mrr') return !c.client_type || c.client_type === 'mrr' || c.client_type === 'ambos';
+      if (typeFilter === 'tcv') return c.client_type === 'tcv' || c.client_type === 'ambos';
+      return true;
+    })
+    .sort((a, b) => {
+      const aRisk = a.risk_alert ? 1 : 0;
+      const bRisk = b.risk_alert ? 1 : 0;
+      if (bRisk !== aRisk) return bRisk - aRisk;
+      return a.name.localeCompare(b.name);
+    });
   const atRiskCount = activeClients.filter(c => c.risk_alert).length;
   const mrrClients = activeClients.filter(c => !c.client_type || c.client_type === 'mrr' || c.client_type === 'ambos');
   const totalMRR = mrrClients.reduce((s, c) => s + Number(c.monthly_fee), 0);
@@ -377,6 +386,30 @@ export default function ClientHealth() {
           <div className="label-dark mb-1">Em risco</div>
           <div className={`metric ${atRiskCount > 0 ? 'text-orange-400' : 'text-slate-500'}`}>{atRiskCount}</div>
         </div>
+      </div>
+
+      {/* Type filter */}
+      <div className="flex items-center gap-2">
+        {([
+          ['all', 'Todos', activeClients.length],
+          ['mrr', 'MRR', activeClients.filter(c => !c.client_type || c.client_type === 'mrr' || c.client_type === 'ambos').length],
+          ['tcv', 'TCV', activeClients.filter(c => c.client_type === 'tcv' || c.client_type === 'ambos').length],
+        ] as const).map(([v, l, count]) => (
+          <button
+            key={v}
+            onClick={() => setTypeFilter(v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              typeFilter === v
+                ? v === 'mrr' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                  : v === 'tcv' ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                  : 'bg-white/10 border-white/20 text-slate-200'
+                : 'border-white/8 text-slate-500 hover:border-white/15 hover:text-slate-400'
+            }`}
+          >
+            {l}
+            <span className={`px-1.5 py-0.5 rounded-full text-xs ${typeFilter === v ? 'bg-white/15' : 'bg-white/5'}`}>{count}</span>
+          </button>
+        ))}
       </div>
 
       {/* Margin calculation info box */}
