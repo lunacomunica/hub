@@ -212,6 +212,12 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunity_items ALTER COLUMN description SET DEFAULT ''`);
   } catch (e) { /* ignore if table doesn't exist yet */ }
 
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_type VARCHAR(10) DEFAULT 'external'`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL`);
+  } catch (e) { console.error('[migration] referral columns error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 

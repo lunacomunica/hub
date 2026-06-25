@@ -84,7 +84,7 @@ const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   temperature: 'morno', next_followup: '', owner_id: null, source: '',
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
   original_price: null, payment_method: null, installments: 1, payment_notes: null,
-  referral_name: null,
+  referral_name: null, referral_type: null, referral_client_id: null, referral_employee_id: null,
 };
 
 const STAGE_COLORS = [
@@ -445,6 +445,10 @@ export default function Opportunities() {
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
   const [sources, setSources] = useState<string[]>(DEFAULT_SOURCES);
+  const [clients, setClients] = useState<{ id: number; name: string; active: number }[]>([]);
+  const [employees, setEmployees] = useState<{ id: number; name: string; role?: string }[]>([]);
+  const [referralSearch, setReferralSearch] = useState('');
+  const [showReferralDropdown, setShowReferralDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
@@ -499,6 +503,7 @@ export default function Opportunities() {
   const load = async () => {
     setLoading(true);
     try {
+      const token = localStorage.getItem('auth-token');
       const [opps, allProds, stgs, usrs, settings] = await Promise.all([
         getOpportunities().catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
         getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
@@ -512,6 +517,14 @@ export default function Opportunities() {
       setStages(stgs);
       setUsers(usrs);
       if (settings?.lead_sources?.length) setSources(settings.lead_sources);
+      fetch('/api/clients', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => setClients(Array.isArray(data) ? data : []))
+        .catch(() => {});
+      fetch('/api/employees', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => setEmployees(Array.isArray(data) ? data : []))
+        .catch(() => {});
     } catch (e) { console.error('load error', e); }
     finally { setLoading(false); }
   };
@@ -529,6 +542,7 @@ export default function Opportunities() {
   };
   const openEdit = (opp: Opportunity) => {
     setForm({ ...opp });
+    setReferralSearch(opp.referral_name || '');
     const existingItems = (opp as any).opp_items;
     if (existingItems?.length) {
       setOppItems(existingItems.map((it: any) => ({ ...it, value: Number(it.value) || 0 })));
@@ -538,7 +552,7 @@ export default function Opportunities() {
     setModalTab('dados');
     setModal(true);
   };
-  const closeModal = () => { setModal(false); setForm(EMPTY); setOppItems([]); };
+  const closeModal = () => { setModal(false); setForm(EMPTY); setOppItems([]); setReferralSearch(''); };
 
   const save = async () => {
     if (!form.title) {
@@ -1777,13 +1791,73 @@ export default function Opportunities() {
 
                     {form.source === 'Indicação' && (
                       <Field label="Indicado por">
-                        <input
-                          type="text"
-                          placeholder="Nome do cliente que indicou"
-                          value={form.referral_name || ''}
-                          onChange={e => setForm(f => ({...f, referral_name: e.target.value || null}))}
-                          className="input-dark w-full"
-                        />
+                        <div className="relative">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Buscar cliente, funcionário ou digitar nome..."
+                              value={referralSearch}
+                              onChange={e => {
+                                setReferralSearch(e.target.value);
+                                setShowReferralDropdown(true);
+                                setForm(f => ({ ...f, referral_name: e.target.value || null, referral_type: 'external', referral_client_id: null, referral_employee_id: null }));
+                              }}
+                              onFocus={() => setShowReferralDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowReferralDropdown(false), 150)}
+                              className="input-dark w-full pr-20"
+                            />
+                            {form.referral_type && form.referral_name && (
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded-full font-medium"
+                                style={{
+                                  background: form.referral_type === 'client' ? 'rgba(59,130,246,0.15)' : form.referral_type === 'employee' ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)',
+                                  color: form.referral_type === 'client' ? '#93c5fd' : form.referral_type === 'employee' ? '#34d399' : '#94a3b8',
+                                  border: `1px solid ${form.referral_type === 'client' ? 'rgba(59,130,246,0.3)' : form.referral_type === 'employee' ? 'rgba(16,185,129,0.3)' : 'rgba(100,116,139,0.2)'}`,
+                                }}>
+                                {form.referral_type === 'client' ? '🏢 Cliente' : form.referral_type === 'employee' ? '👷 Func.' : '👤 Externo'}
+                              </span>
+                            )}
+                          </div>
+                          {showReferralDropdown && referralSearch.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-xl" style={{ background: '#0f172a', border: '1px solid rgba(59,130,246,0.2)' }}>
+                              {clients.filter(c => c.active && c.name.toLowerCase().includes(referralSearch.toLowerCase())).slice(0, 4).map(c => (
+                                <button key={`c-${c.id}`} type="button"
+                                  className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-blue-500/10 transition-colors"
+                                  onMouseDown={() => {
+                                    setForm(f => ({ ...f, referral_name: c.name, referral_type: 'client', referral_client_id: c.id, referral_employee_id: null }));
+                                    setReferralSearch(c.name);
+                                    setShowReferralDropdown(false);
+                                  }}>
+                                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(59,130,246,0.15)', color: '#93c5fd' }}>Cliente</span>
+                                  <span className="text-slate-200">{c.name}</span>
+                                </button>
+                              ))}
+                              {employees.filter(e => e.name.toLowerCase().includes(referralSearch.toLowerCase())).slice(0, 4).map(e => (
+                                <button key={`e-${e.id}`} type="button"
+                                  className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-emerald-500/10 transition-colors"
+                                  onMouseDown={() => {
+                                    setForm(f => ({ ...f, referral_name: e.name, referral_type: 'employee', referral_employee_id: e.id, referral_client_id: null }));
+                                    setReferralSearch(e.name);
+                                    setShowReferralDropdown(false);
+                                  }}>
+                                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>Func.</span>
+                                  <span className="text-slate-200">{e.name}</span>
+                                </button>
+                              ))}
+                              {referralSearch.trim() && (
+                                <button type="button"
+                                  className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-slate-500/10 transition-colors"
+                                  style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}
+                                  onMouseDown={() => {
+                                    setForm(f => ({ ...f, referral_name: referralSearch, referral_type: 'external', referral_client_id: null, referral_employee_id: null }));
+                                    setShowReferralDropdown(false);
+                                  }}>
+                                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(100,116,139,0.15)', color: '#94a3b8' }}>Externo</span>
+                                  <span className="text-slate-400">"{referralSearch}"</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </Field>
                     )}
 

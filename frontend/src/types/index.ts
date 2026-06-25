@@ -165,9 +165,14 @@ export interface Opportunity {
   payment_notes: string | null;
   // Referral
   referral_name: string | null;
+  referral_type?: string | null;
+  referral_client_id?: number | null;
+  referral_employee_id?: number | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface SimpleEmployee { id: number; name: string; role?: string; }
 
 export interface OppActivity {
   id: number;
