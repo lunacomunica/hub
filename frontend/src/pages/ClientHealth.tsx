@@ -93,6 +93,9 @@ export default function ClientHealth() {
   // Filter
   const [typeFilter, setTypeFilter] = useState<'all' | 'mrr' | 'tcv'>('all');
 
+  // Referrals
+  const [clientReferrals, setClientReferrals] = useState<any[]>([]);
+
   // TCV
   const [tcvProjects, setTcvProjects] = useState<TcvProject[]>([]);
   const [tcvModal, setTcvModal] = useState<{ clientId: number; project?: TcvProject } | null>(null);
@@ -135,7 +138,7 @@ export default function ClientHealth() {
   };
 
   const toggleExpand = async (id: number) => {
-    if (expandedId === id) { setExpandedId(null); return; }
+    if (expandedId === id) { setExpandedId(null); setClientReferrals([]); return; }
     setExpandedId(id);
     setShowCostForm(false);
     setAddPaymentForm(null);
@@ -147,6 +150,14 @@ export default function ClientHealth() {
       setPlanHistory(history);
     } catch { setClientCosts([]); setPlanHistory([]); }
     finally { setCostsLoading(false); setPlanHistoryLoading(false); }
+    // Fetch leads this client referred
+    const token = localStorage.getItem('auth-token');
+    fetch(`/api/opportunities/referrals/client/${id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => setClientReferrals(Array.isArray(data) ? data : []))
+      .catch(() => setClientReferrals([]));
   };
 
   const openChurnModal = (client: AgencyClient) => {
@@ -639,6 +650,27 @@ export default function ClientHealth() {
                           </table>
                         )}
                       </>
+                    )}
+
+                    {/* Referrals section */}
+                    {isExpanded && clientReferrals.length > 0 && (
+                      <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+                        <h4 className="text-sm font-semibold text-amber-300 mb-2 flex items-center gap-2">
+                          🤝 Indicações deste cliente
+                        </h4>
+                        <div className="space-y-1.5">
+                          {clientReferrals.map((ref: any) => (
+                            <div key={ref.id} className="flex items-center gap-3 text-xs px-3 py-2 rounded-lg"
+                              style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.1)' }}>
+                              <span className="text-slate-300 flex-1">{ref.title}</span>
+                              <span className={ref.stage === 'fechado' ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
+                                {ref.stage === 'fechado' ? '✅ Fechado' : ref.stage}
+                              </span>
+                              <span className="text-emerald-400 font-semibold">{brl(Number(ref.value))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* TCV Projects section */}

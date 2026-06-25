@@ -179,6 +179,9 @@ export interface OppSummary {
   lost_value: number;
   lost_reasons: { reason: string; count: number; total_value: number }[];
   source_performance: { source: string; total: number; won: number; lost: number; active: number; won_value: number }[];
+  active_clients_count: number;
+  referral_leads_count: number;
+  referral_ranking: { referral_name: string; referral_type: string; referral_client_id: number | null; referral_employee_id: number | null; total_leads: number; won: number; won_value: number }[];
 }
 export const getOpportunities = (filters?: { stage?: string }): Promise<{ items: Opportunity[]; summary: OppSummary }> => {
   const params = filters?.stage ? `?stage=${filters.stage}` : '';

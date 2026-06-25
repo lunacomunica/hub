@@ -1221,95 +1221,98 @@ export default function Opportunities() {
         </div>
       ) : view === 'funil' ? (
         <div className="space-y-5">
-          {/* ── Funil por Etapa ── */}
+          {/* ── Ciclo Comercial ── */}
           {summary && (() => {
             const activeStages = stages.filter(s => !s.is_terminal).sort((a, b) => a.position - b.position);
-            const counts = activeStages.map(s => {
+            const stageData = activeStages.map(s => {
               const found = summary.by_stage.find((b: any) => b.stage === s.key);
-              return { stage: s, count: found ? Number(found.count) : 0, total_value: found ? Number(found.total_value) : 0 };
+              return { ...s, count: found ? Number(found.count) : 0, value: found ? Number(found.total_value) : 0 };
             });
-            const totalActive = counts.reduce((s, c) => s + c.count, 0);
-            const wonEntry = summary.by_stage.find((b: any) => b.stage === (wonStage?.key ?? 'fechado'));
-            const wonCount = wonEntry ? Number(wonEntry.count) : 0;
-            const lostCount = items.filter(i => stages.find(s => s.key === i.stage)?.is_terminal && i.stage !== (wonStage?.key ?? 'fechado')).length;
+
+            const wonCount = (() => { const e = summary.by_stage.find((b: any) => b.stage === (wonStage?.key ?? 'fechado')); return e ? Number(e.count) : 0; })();
+            const postSaleNodes = [
+              { key: 'fechado_node', label: wonStage?.label ?? 'Fechado', count: wonCount, value: summary.won_value, color: '#10b981', bg: 'rgba(16,185,129,0.12)', isPostSale: true },
+              { key: 'cliente_ativo', label: 'Cliente Ativo', count: (summary as any).active_clients_count ?? 0, value: 0, color: '#6366f1', bg: 'rgba(99,102,241,0.12)', isPostSale: true },
+              { key: 'indicacao_node', label: 'Indicação', count: (summary as any).referral_leads_count ?? 0, value: 0, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', isPostSale: true },
+            ];
+
+            const allNodes = [...stageData.map(s => ({ key: s.key, label: s.label, count: s.count, value: s.value, color: s.color, bg: s.bg_color, isPostSale: false })), ...postSaleNodes];
+            const total = allNodes.length;
+            const cx = 220, cy = 220, r = 155;
 
             return (
-              <div className="grid grid-cols-3 gap-5">
-                {/* Left: stage steps */}
-                <div className="col-span-2 card p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-sm font-semibold text-slate-300">Funil por Etapa</h3>
-                    <span className="text-xs text-slate-500">{totalActive} leads ativos</span>
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-300">Ciclo Comercial</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Do lead ao cliente — e de volta ao início</p>
                   </div>
-                  <div className="space-y-2">
-                    {counts.map((c, idx) => {
-                      const pct = totalActive > 0 ? (c.count / totalActive) * 100 : 0;
-                      const nextCount = counts[idx + 1]?.count ?? null;
-                      const convPct = nextCount !== null && c.count > 0 ? (nextCount / c.count) * 100 : null;
-                      return (
-                        <div key={c.stage.key}>
-                          <div className="rounded-xl px-4 py-3 flex items-center gap-4 transition-all"
-                            style={{ background: c.stage.bg_color, border: `1px solid ${c.stage.color}55` }}>
-                            {/* color dot */}
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.stage.color }} />
-                            {/* label */}
-                            <span className="text-sm font-medium text-slate-200 w-28 shrink-0">{c.stage.label}</span>
-                            {/* progress track */}
-                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)' }}>
-                              <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 0)}%`, background: c.stage.color, opacity: 0.7 }} />
-                            </div>
-                            {/* count */}
-                            <span className="text-xl font-bold text-white w-8 text-right shrink-0">{c.count}</span>
-                            {/* value */}
-                            <span className="text-xs font-medium w-28 text-right shrink-0" style={{ color: c.stage.color }}>{brl(c.total_value)}</span>
-                          </div>
-                          {/* conversion connector */}
-                          {idx < counts.length - 1 && (
-                            <div className="flex items-center gap-2 my-1 pl-6">
-                              <div className="w-px h-4 ml-0.5" style={{ background: `${c.stage.color}40` }} />
-                              {convPct !== null ? (
-                                <span className="text-xs ml-1" style={{
-                                  color: convPct >= 50 ? '#34d399' : convPct >= 25 ? '#fbbf24' : '#f87171'
-                                }}>
-                                  {convPct.toFixed(0)}% avançam
-                                </span>
-                              ) : (
-                                <span className="text-xs text-slate-700 ml-1">—</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Pipeline ativo</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Pós-venda</span>
                   </div>
                 </div>
-
-                {/* Right: outcome + win rate */}
-                <div className="flex flex-col gap-4">
-                  {/* Win rate */}
-                  <div className="card p-5 flex flex-col items-center justify-center text-center flex-1">
-                    <div className="text-xs text-slate-500 mb-1 uppercase tracking-wide">Taxa de conversão</div>
-                    <div className="text-4xl font-bold text-emerald-400 my-2">{summary.win_rate.toFixed(0)}%</div>
-                    <div className="text-xs text-slate-500">{wonCount} fechados de {wonCount + lostCount} finalizados</div>
-                  </div>
-                  {/* Fechado */}
-                  <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                    <div className="w-2 h-10 rounded-full" style={{ background: '#10b981' }} />
-                    <div>
-                      <div className="text-xs text-slate-500">{wonStage?.label ?? 'Fechado'}</div>
-                      <div className="text-2xl font-bold text-emerald-400">{wonCount}</div>
-                      <div className="text-xs text-emerald-700">{brl(summary.won_value)}</div>
-                    </div>
-                  </div>
-                  {/* Perdido */}
-                  <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                    <div className="w-2 h-10 rounded-full" style={{ background: '#ef4444' }} />
-                    <div>
-                      <div className="text-xs text-slate-500">{lostStage?.label ?? 'Perdido'}</div>
-                      <div className="text-2xl font-bold text-red-400">{lostCount}</div>
-                      <div className="text-xs text-red-800">{brl(summary.lost_value)}</div>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-center">
+                  <svg width="440" height="440" viewBox="0 0 440 440">
+                    <defs>
+                      <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L6,3 z" fill="rgba(99,130,246,0.5)" />
+                      </marker>
+                    </defs>
+                    {/* Connection arrows */}
+                    {allNodes.map((node, idx) => {
+                      const nextIdx = (idx + 1) % total;
+                      const angle1 = (idx / total) * 2 * Math.PI - Math.PI / 2;
+                      const angle2 = (nextIdx / total) * 2 * Math.PI - Math.PI / 2;
+                      const nodeR = 38;
+                      const x1 = cx + r * Math.cos(angle1);
+                      const y1 = cy + r * Math.sin(angle1);
+                      const x2 = cx + r * Math.cos(angle2);
+                      const y2 = cy + r * Math.sin(angle2);
+                      const dx = x2 - x1, dy = y2 - y1, dist = Math.sqrt(dx*dx + dy*dy);
+                      const sx = x1 + (dx/dist) * (nodeR + 2);
+                      const sy = y1 + (dy/dist) * (nodeR + 2);
+                      const ex = x2 - (dx/dist) * (nodeR + 8);
+                      const ey = y2 - (dy/dist) * (nodeR + 8);
+                      const isPostSaleEdge = node.isPostSale;
+                      return (
+                        <line key={`edge-${idx}`} x1={sx} y1={sy} x2={ex} y2={ey}
+                          stroke={isPostSaleEdge ? 'rgba(16,185,129,0.4)' : 'rgba(59,130,246,0.3)'}
+                          strokeWidth="1.5" strokeDasharray={isPostSaleEdge ? "4,3" : "none"}
+                          markerEnd="url(#arrow)" />
+                      );
+                    })}
+                    {/* Center label */}
+                    <text x={cx} y={cy - 10} textAnchor="middle" fill="#475569" fontSize="11" fontWeight="600">CICLO</text>
+                    <text x={cx} y={cy + 8} textAnchor="middle" fill="#475569" fontSize="11" fontWeight="600">COMERCIAL</text>
+                    <text x={cx} y={cy + 26} textAnchor="middle" fill="#334155" fontSize="10">Luna Comunica</text>
+                    {/* Nodes */}
+                    {allNodes.map((node, idx) => {
+                      const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
+                      const x = cx + r * Math.cos(angle);
+                      const y = cy + r * Math.sin(angle);
+                      const nodeR = 38;
+                      return (
+                        <g key={node.key} transform={`translate(${x},${y})`}>
+                          {/* Outer glow ring */}
+                          <circle r={nodeR + 4} fill="none" stroke={node.color} strokeWidth="1" opacity="0.2" />
+                          {/* Node circle */}
+                          <circle r={nodeR} fill={node.bg} stroke={node.color} strokeWidth="1.5" />
+                          {/* Count */}
+                          <text textAnchor="middle" y="-4" fill="white" fontSize="16" fontWeight="700">{node.count}</text>
+                          {/* Label — handle long labels with 2 lines */}
+                          {node.label.includes(' ') ? (
+                            <>
+                              <text textAnchor="middle" y="12" fill={node.color} fontSize="8.5" fontWeight="600">{node.label.split(' ')[0]}</text>
+                              <text textAnchor="middle" y="22" fill={node.color} fontSize="8.5" fontWeight="600">{node.label.split(' ').slice(1).join(' ')}</text>
+                            </>
+                          ) : (
+                            <text textAnchor="middle" y="16" fill={node.color} fontSize="9" fontWeight="600">{node.label}</text>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </svg>
                 </div>
               </div>
             );
@@ -1371,6 +1374,40 @@ export default function Opportunities() {
               </div>
             );
           })()}
+
+          {/* ── Ranking de Indicadores ── */}
+          {summary && (summary as any).referral_ranking && (summary as any).referral_ranking.length > 0 && (
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-4">🏆 Ranking de Indicadores</h3>
+              <div className="space-y-2">
+                {(summary as any).referral_ranking.map((r: any, idx: number) => {
+                  const typeColor = r.referral_type === 'client' ? '#93c5fd' : r.referral_type === 'employee' ? '#34d399' : '#94a3b8';
+                  const typeBg = r.referral_type === 'client' ? 'rgba(59,130,246,0.12)' : r.referral_type === 'employee' ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)';
+                  const typeLabel = r.referral_type === 'client' ? '🏢 Cliente' : r.referral_type === 'employee' ? '👷 Func.' : '👤 Externo';
+                  const convRate = r.total_leads > 0 ? (r.won / r.total_leads * 100) : 0;
+                  return (
+                    <div key={`${r.referral_name}-${idx}`} className="flex items-center gap-3 px-4 py-3 rounded-xl"
+                      style={{ background: idx === 0 ? 'rgba(245,158,11,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${idx === 0 ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.08)'}` }}>
+                      <span className="text-sm font-bold w-5 text-center" style={{ color: idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#b45309' : '#475569' }}>
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: typeBg, color: typeColor, border: `1px solid ${typeColor}33` }}>
+                        {typeLabel}
+                      </span>
+                      <span className="font-medium text-slate-200 flex-1 text-sm">{r.referral_name}</span>
+                      <span className="text-xs text-slate-500">{r.total_leads} lead{r.total_leads !== 1 ? 's' : ''}</span>
+                      <span className="text-xs font-semibold text-emerald-400 w-16 text-right">{r.won} fechado{r.won !== 1 ? 's' : ''}</span>
+                      <span className="text-xs font-semibold text-emerald-300 w-24 text-right">{brl(r.won_value)}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-14 text-center" style={{
+                        background: convRate >= 40 ? 'rgba(16,185,129,0.12)' : convRate >= 20 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.1)',
+                        color: convRate >= 40 ? '#34d399' : convRate >= 20 ? '#fbbf24' : '#f87171',
+                      }}>{convRate.toFixed(0)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">

@@ -1242,6 +1242,7 @@ export default function EmployeeDetail() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'dados' | 'financeiro' | 'holerites' | 'feedbacks'>('dados');
+  const [employeeReferrals, setEmployeeReferrals] = useState<any[]>([]);
 
   const loadEmployee = async () => {
     if (!id) return;
@@ -1261,8 +1262,22 @@ export default function EmployeeDetail() {
     }
   };
 
+  const loadReferrals = async () => {
+    if (!id) return;
+    try {
+      const res = await authFetch(`/api/opportunities/referrals/employee/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEmployeeReferrals(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setEmployeeReferrals([]);
+    }
+  };
+
   useEffect(() => {
     loadEmployee();
+    loadReferrals();
   }, [id]);
 
   if (loading) {
@@ -1389,6 +1404,27 @@ export default function EmployeeDetail() {
           {activeTab === 'financeiro' && <TabFinanceiro employee={employee} />}
           {activeTab === 'holerites' && <TabHolerites employee={employee} />}
           {activeTab === 'feedbacks' && <TabFeedbacks employee={employee} />}
+
+          {/* Referrals section — shown on all tabs below content */}
+          {employeeReferrals.length > 0 && (
+            <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+              <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
+                🤝 Indicações deste colaborador
+              </h4>
+              <div className="space-y-1.5">
+                {employeeReferrals.map((ref: any) => (
+                  <div key={ref.id} className="flex items-center gap-3 text-xs px-3 py-2 rounded-lg"
+                    style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.1)' }}>
+                    <span className="text-slate-300 flex-1">{ref.title}</span>
+                    <span className={ref.stage === 'fechado' ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
+                      {ref.stage === 'fechado' ? '✅ Fechado' : ref.stage}
+                    </span>
+                    <span className="text-emerald-400 font-semibold">{fmt(Number(ref.value))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

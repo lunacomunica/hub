@@ -174,7 +174,7 @@ router.get('/', async (req: Request, res: Response) => {
       catch (e) { console.error('[opp summary]', e); return []; }
     };
 
-    const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow, sourcePerf] = await Promise.all([
+    const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow, sourcePerf, activeClientsRow, referralCountRow, referralRanking] = await Promise.all([
       safeQuery(
         `SELECT COUNT(*) as total_count, COALESCE(SUM(value), 0) as total_value,
                 COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
@@ -221,6 +221,22 @@ router.get('/', async (req: Request, res: Response) => {
          GROUP BY COALESCE(NULLIF(source,''), 'Não informado')
          ORDER BY won DESC, total DESC`
       ),
+      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM agency_clients WHERE active = 1`, { c: '0' }),
+      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM opportunities WHERE referral_name IS NOT NULL AND referral_name != ''`, { c: '0' }),
+      safeQueryRows<{ referral_name: string; referral_type: string; referral_client_id: number | null; referral_employee_id: number | null; total_leads: number; won: number; won_value: number }>(
+        `SELECT referral_name,
+           COALESCE(referral_type, 'external') as referral_type,
+           referral_client_id,
+           referral_employee_id,
+           COUNT(*)::int as total_leads,
+           COUNT(*) FILTER (WHERE stage = 'fechado')::int as won,
+           COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value
+         FROM opportunities
+         WHERE referral_name IS NOT NULL AND referral_name != ''
+         GROUP BY referral_name, referral_type, referral_client_id, referral_employee_id
+         ORDER BY won DESC, total_leads DESC
+         LIMIT 20`
+      ),
     ]);
 
     const totalClosed = Number((won as any).count) + Number((lost as any).count);
@@ -242,6 +258,9 @@ router.get('/', async (req: Request, res: Response) => {
         lost_value: Number((lost as any).total),
         lost_reasons: lostReasons,
         source_performance: sourcePerf,
+        active_clients_count: Number((activeClientsRow as any).c),
+        referral_leads_count: Number((referralCountRow as any).c),
+        referral_ranking: referralRanking,
       },
     });
   } catch (err) {
@@ -439,6 +458,28 @@ router.delete('/:id', async (req: Request, res: Response) => {
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar oportunidade' });
   }
+});
+
+// ─── Referral sub-routes ──────────────────────────────────────────────────────
+
+router.get('/referrals/client/:id', async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, value, stage, created_at FROM opportunities WHERE referral_client_id = $1 ORDER BY created_at DESC`,
+      [Number(req.params.id)]
+    );
+    res.json(rows);
+  } catch (e: any) { res.status(500).json({ error: 'Erro ao buscar indicações' }); }
+});
+
+router.get('/referrals/employee/:id', async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, value, stage, created_at FROM opportunities WHERE referral_employee_id = $1 ORDER BY created_at DESC`,
+      [Number(req.params.id)]
+    );
+    res.json(rows);
+  } catch (e: any) { res.status(500).json({ error: 'Erro ao buscar indicações' }); }
 });
 
 // ─── Convert won opportunity → client ────────────────────────────────────────
