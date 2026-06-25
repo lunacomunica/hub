@@ -284,10 +284,17 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     if (Array.isArray(opp_items)) {
-      await pool.query(
-        `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
-        [JSON.stringify(opp_items), created.id]
-      );
+      try {
+        await pool.query(
+          `UPDATE opportunities SET opp_items = $1::jsonb WHERE id = $2`,
+          [JSON.stringify(opp_items), created.id]
+        );
+      } catch (e: any) {
+        if (e.message?.includes('opp_items')) {
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opp_items JSONB DEFAULT '[]'::jsonb`);
+          await pool.query(`UPDATE opportunities SET opp_items = $1::jsonb WHERE id = $2`, [JSON.stringify(opp_items), created.id]);
+        } else throw e;
+      }
     }
 
     res.status(201).json(created);
@@ -344,10 +351,21 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // ── Save opp_items separately ────────────────────────────────────────────
     if (Array.isArray(opp_items)) {
-      await pool.query(
-        `UPDATE opportunities SET opp_items = $1 WHERE id = $2`,
-        [JSON.stringify(opp_items), req.params.id]
-      );
+      try {
+        await pool.query(
+          `UPDATE opportunities SET opp_items = $1::jsonb WHERE id = $2`,
+          [JSON.stringify(opp_items), req.params.id]
+        );
+      } catch (e: any) {
+        // Se coluna não existe ainda, tenta criá-la e salva de novo
+        if (e.message?.includes('opp_items')) {
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opp_items JSONB DEFAULT '[]'::jsonb`);
+          await pool.query(
+            `UPDATE opportunities SET opp_items = $1::jsonb WHERE id = $2`,
+            [JSON.stringify(opp_items), req.params.id]
+          );
+        } else throw e;
+      }
     }
 
     const { rows: [updated] } = await pool.query(

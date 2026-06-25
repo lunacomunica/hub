@@ -158,7 +158,7 @@ export async function runMigrations() {
   } catch (e) { console.error('[migration] opportunities referral_name error:', e); }
 
   try {
-    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opp_items JSONB DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS opp_items JSONB DEFAULT '[]'::jsonb`);
   } catch (e) { console.error('[migration] opportunities opp_items column error:', e); }
 
   try {
