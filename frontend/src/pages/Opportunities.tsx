@@ -457,6 +457,7 @@ export default function Opportunities() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [view, setView] = useState<'kanban' | 'won' | 'lost' | 'funil'>('kanban');
+  const [allPrizes, setAllPrizes] = useState<any[]>([]);
 
   // DnD
   const [dragId, setDragId] = useState<number | null>(null);
@@ -531,6 +532,14 @@ export default function Opportunities() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => { if (addingStage) newStageRef.current?.focus(); }, [addingStage]);
+  useEffect(() => {
+    if (view !== 'funil') return;
+    const token = localStorage.getItem('auth-token');
+    fetch('/api/referral-prizes', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.json())
+      .then(data => setAllPrizes(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [view]);
 
   const openCreate = (stage?: string) => {
     const firstPipelineStage = stages.filter(s => !s.is_terminal)[0]?.key ?? 'prospeccao';
@@ -1330,6 +1339,7 @@ export default function Opportunities() {
                   const typeBg = r.referral_type === 'client' ? 'rgba(59,130,246,0.12)' : r.referral_type === 'employee' ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)';
                   const typeLabel = r.referral_type === 'client' ? '🏢 Cliente' : r.referral_type === 'employee' ? '👷 Func.' : '👤 Externo';
                   const convRate = r.total_leads > 0 ? (r.won / r.total_leads * 100) : 0;
+                  const hasPrize = allPrizes.some(p => p.referral_name === r.referral_name);
                   return (
                     <div key={`${r.referral_name}-${idx}`} className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
                       style={{ background: idx === 0 ? 'rgba(245,158,11,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${idx === 0 ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.08)'}` }}>
@@ -1340,6 +1350,7 @@ export default function Opportunities() {
                         {typeLabel}
                       </span>
                       <span className="font-medium text-slate-200 flex-1 text-sm truncate">{r.referral_name}</span>
+                      {hasPrize && <span title="Já premiado" className="text-amber-400 text-xs">🏆</span>}
                       <div className="flex flex-col items-end shrink-0">
                         <span className="text-xs text-emerald-400 font-semibold">{r.won} fechado{r.won !== 1 ? 's' : ''}</span>
                         <span className="text-xs text-slate-500">{r.total_leads} lead{r.total_leads !== 1 ? 's' : ''} · {convRate.toFixed(0)}%</span>

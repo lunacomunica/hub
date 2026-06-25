@@ -1243,6 +1243,18 @@ export default function EmployeeDetail() {
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<'dados' | 'financeiro' | 'holerites' | 'feedbacks'>('dados');
   const [employeeReferrals, setEmployeeReferrals] = useState<any[]>([]);
+  const [prizes, setPrizes] = useState<any[]>([]);
+  const [prizeModal, setPrizeModal] = useState(false);
+  const [prizeForm, setPrizeForm] = useState({
+    prize_date: new Date().toISOString().split('T')[0],
+    prize_type: 'presente',
+    prize_value: '',
+    revenue_generated: '',
+    opportunity_id: '',
+    opportunity_title: '',
+    notes: '',
+  });
+  const [savingPrize, setSavingPrize] = useState(false);
 
   const loadEmployee = async () => {
     if (!id) return;
@@ -1273,6 +1285,50 @@ export default function EmployeeDetail() {
     } catch {
       setEmployeeReferrals([]);
     }
+    const token = localStorage.getItem('auth-token');
+    fetch(`/api/referral-prizes/employee/${id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => setPrizes(Array.isArray(data) ? data : []))
+      .catch(() => setPrizes([]));
+  };
+
+  const savePrize = async () => {
+    if (!employee) return;
+    setSavingPrize(true);
+    try {
+      const token = localStorage.getItem('auth-token');
+      const res = await fetch('/api/referral-prizes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          referral_name: employee.name,
+          referral_type: 'employee',
+          referral_employee_id: employee.id,
+          opportunity_id: prizeForm.opportunity_id ? Number(prizeForm.opportunity_id) : null,
+          opportunity_title: prizeForm.opportunity_title || null,
+          prize_date: prizeForm.prize_date,
+          prize_type: prizeForm.prize_type,
+          prize_value: parseFloat(prizeForm.prize_value) || 0,
+          revenue_generated: parseFloat(prizeForm.revenue_generated) || 0,
+          notes: prizeForm.notes || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Erro ao salvar');
+      const newPrize = await res.json();
+      setPrizes(p => [newPrize, ...p]);
+      setPrizeModal(false);
+      setPrizeForm({ prize_date: new Date().toISOString().split('T')[0], prize_type: 'presente', prize_value: '', revenue_generated: '', opportunity_id: '', opportunity_title: '', notes: '' });
+    } catch (e) { alert('Erro ao salvar prêmio'); }
+    finally { setSavingPrize(false); }
+  };
+
+  const deletePrize = async (prizeId: number) => {
+    if (!confirm('Remover este prêmio do histórico?')) return;
+    const token = localStorage.getItem('auth-token');
+    await fetch(`/api/referral-prizes/${prizeId}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    setPrizes(p => p.filter(x => x.id !== prizeId));
   };
 
   useEffect(() => {
@@ -1405,6 +1461,49 @@ export default function EmployeeDetail() {
           {activeTab === 'holerites' && <TabHolerites employee={employee} />}
           {activeTab === 'feedbacks' && <TabFeedbacks employee={employee} />}
 
+          {/* Prize history */}
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(99,102,241,0.15)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
+                🏆 Histórico de Prêmios
+                {prizes.length > 0 && (
+                  <span className="text-xs font-normal px-2 py-0.5 rounded-full" style={{ background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+                    {prizes.length}
+                  </span>
+                )}
+              </h4>
+              <button onClick={() => setPrizeModal(true)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+                style={{ background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+                + Registrar prêmio
+              </button>
+            </div>
+            {prizes.length === 0 ? (
+              <p className="text-xs text-slate-600 py-2">Nenhum prêmio registrado ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {prizes.map((p: any) => (
+                  <div key={p.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl"
+                    style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-indigo-300">{p.prize_type}</span>
+                        {p.prize_value > 0 && <span className="text-xs text-emerald-400 font-semibold">{Number(p.prize_value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>}
+                        <span className="text-xs text-slate-600 ml-auto">{p.prize_date?.slice(0,10).split('-').reverse().join('/')}</span>
+                      </div>
+                      {p.opportunity_title && <p className="text-xs text-slate-400">Lead: {p.opportunity_title}</p>}
+                      {p.revenue_generated > 0 && <p className="text-xs text-slate-500">Receita gerada: <span className="text-emerald-500">{Number(p.revenue_generated).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>}
+                      {p.notes && <p className="text-xs text-slate-500 mt-0.5 italic">{p.notes}</p>}
+                    </div>
+                    <button onClick={() => deletePrize(p.id)} className="text-slate-700 hover:text-red-400 shrink-0 mt-0.5">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Referrals section — shown on all tabs below content */}
           <div className="mt-6 pt-5" style={{ borderTop: '1px solid rgba(245,158,11,0.15)' }}>
             <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
@@ -1435,6 +1534,81 @@ export default function EmployeeDetail() {
           </div>
         </div>
       </div>
+
+      {/* Prize modal */}
+      {prizeModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="rounded-2xl w-full max-w-md" style={{ background: '#0f172a', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(99,102,241,0.12)' }}>
+              <h2 className="font-semibold text-white flex items-center gap-2">🏆 Registrar Prêmio</h2>
+              <button onClick={() => setPrizeModal(false)} className="text-slate-400 hover:text-slate-200">✕</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Data</label>
+                  <input type="date" value={prizeForm.prize_date}
+                    onChange={e => setPrizeForm(f => ({ ...f, prize_date: e.target.value }))}
+                    className="input-dark w-full" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Tipo de prêmio</label>
+                  <select value={prizeForm.prize_type}
+                    onChange={e => setPrizeForm(f => ({ ...f, prize_type: e.target.value }))}
+                    className="input-dark w-full">
+                    <option value="presente">🎁 Presente</option>
+                    <option value="dinheiro">💵 Dinheiro</option>
+                    <option value="voucher">🎟️ Voucher</option>
+                    <option value="desconto">💳 Desconto na mensalidade</option>
+                    <option value="outro">✨ Outro</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Valor do prêmio (R$)</label>
+                  <input type="number" step="0.01" placeholder="0,00" value={prizeForm.prize_value}
+                    onChange={e => setPrizeForm(f => ({ ...f, prize_value: e.target.value }))}
+                    className="input-dark w-full" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Receita gerada (R$)</label>
+                  <input type="number" step="0.01" placeholder="0,00" value={prizeForm.revenue_generated}
+                    onChange={e => setPrizeForm(f => ({ ...f, revenue_generated: e.target.value }))}
+                    className="input-dark w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Lead vinculado (título)</label>
+                <select value={prizeForm.opportunity_id}
+                  onChange={e => {
+                    const opt = employeeReferrals.find((r: any) => String(r.id) === e.target.value);
+                    setPrizeForm(f => ({ ...f, opportunity_id: e.target.value, opportunity_title: opt?.title || '', revenue_generated: opt?.value ? String(opt.value) : f.revenue_generated }));
+                  }}
+                  className="input-dark w-full">
+                  <option value="">Selecionar indicação...</option>
+                  {employeeReferrals.map((r: any) => (
+                    <option key={r.id} value={r.id}>{r.title}{r.stage === 'fechado' ? ' ✅' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Observação</label>
+                <textarea value={prizeForm.notes} onChange={e => setPrizeForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2} placeholder="Detalhes do prêmio..." className="input-dark w-full resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid rgba(99,102,241,0.12)' }}>
+              <button onClick={() => setPrizeModal(false)} className="text-sm px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200">Cancelar</button>
+              <button onClick={savePrize} disabled={savingPrize}
+                className="text-sm px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+                style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc' }}>
+                {savingPrize ? 'Salvando...' : '🏆 Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

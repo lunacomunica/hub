@@ -21,6 +21,7 @@ import importRouter from './routes/import';
 import supplierRulesRouter from './routes/supplier-rules';
 import settingsRouter from './routes/settings';
 import tcvRouter from './routes/tcv';
+import referralPrizesRouter from './routes/referral-prizes';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -218,6 +219,26 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS referral_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL`);
   } catch (e) { console.error('[migration] referral columns error:', e); }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS referral_prizes (
+        id SERIAL PRIMARY KEY,
+        referral_name TEXT NOT NULL,
+        referral_type VARCHAR(10) DEFAULT 'external',
+        referral_client_id INTEGER REFERENCES agency_clients(id) ON DELETE SET NULL,
+        referral_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        opportunity_id INTEGER REFERENCES opportunities(id) ON DELETE SET NULL,
+        opportunity_title TEXT,
+        prize_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        prize_type VARCHAR(30) NOT NULL DEFAULT 'presente',
+        prize_value NUMERIC(10,2) DEFAULT 0,
+        revenue_generated NUMERIC(10,2) DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (e) { console.error('[migration] referral_prizes error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
@@ -241,6 +262,7 @@ app.use('/api/import',          requireAuth, importRouter);
 app.use('/api/supplier-rules',  requireAuth, supplierRulesRouter);
 app.use('/api/settings',        requireAuth, settingsRouter);
 app.use('/api/tcv',             requireAuth, tcvRouter);
+app.use('/api/referral-prizes', requireAuth, referralPrizesRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {
