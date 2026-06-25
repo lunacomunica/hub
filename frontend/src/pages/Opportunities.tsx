@@ -452,7 +452,7 @@ function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault:
                   {act.scheduled_at && (
                     <span className="text-xs flex items-center gap-1 font-medium" style={{ color: '#60a5fa' }}>
                       <Calendar size={9} />
-                      Agendado: {new Date(act.scheduled_at + 'T00:00:00').toLocaleDateString('pt-BR')}
+                      Agendado: {new Date(act.scheduled_at).toLocaleDateString('pt-BR')}
                     </span>
                   )}
                 </div>
