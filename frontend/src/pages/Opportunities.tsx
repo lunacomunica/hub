@@ -1221,6 +1221,8 @@ export default function Opportunities() {
         </div>
       ) : view === 'funil' ? (
         <div className="space-y-5">
+          {/* ── Ciclo + Ranking lado a lado ── */}
+          <div className="grid grid-cols-2 gap-5">
           {/* ── Ciclo Comercial ── */}
           {summary && (() => {
             const activeStages = stages.filter(s => !s.is_terminal).sort((a, b) => a.position - b.position);
@@ -1241,19 +1243,19 @@ export default function Opportunities() {
             const cx = 220, cy = 220, r = 155;
 
             return (
-              <div className="card p-6">
-                <div className="flex items-center justify-between mb-6">
+              <div className="card p-6 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-300">Ciclo Comercial</h3>
                     <p className="text-xs text-slate-500 mt-0.5">Do lead ao cliente — e de volta ao início</p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-slate-500">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Pipeline ativo</span>
+                  <div className="flex flex-col gap-1 text-xs text-slate-500 items-end">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Pipeline</span>
                     <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Pós-venda</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-center">
-                  <svg width="440" height="440" viewBox="0 0 440 440">
+                <div className="flex-1 flex items-center justify-center">
+                  <svg width="100%" height="auto" viewBox="0 0 440 440" style={{ maxWidth: 420 }}>
                     <defs>
                       <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
                         <path d="M0,0 L0,6 L6,3 z" fill="rgba(99,130,246,0.5)" />
@@ -1318,6 +1320,42 @@ export default function Opportunities() {
             );
           })()}
 
+          {/* ── Ranking de Indicadores (coluna direita) ── */}
+          <div className="card p-5 flex flex-col">
+            <h3 className="text-sm font-semibold text-slate-300 mb-4">🏆 Ranking de Indicadores</h3>
+            {summary && (summary as any).referral_ranking && (summary as any).referral_ranking.length > 0 ? (
+              <div className="space-y-2 overflow-y-auto flex-1">
+                {(summary as any).referral_ranking.map((r: any, idx: number) => {
+                  const typeColor = r.referral_type === 'client' ? '#93c5fd' : r.referral_type === 'employee' ? '#34d399' : '#94a3b8';
+                  const typeBg = r.referral_type === 'client' ? 'rgba(59,130,246,0.12)' : r.referral_type === 'employee' ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)';
+                  const typeLabel = r.referral_type === 'client' ? '🏢 Cliente' : r.referral_type === 'employee' ? '👷 Func.' : '👤 Externo';
+                  const convRate = r.total_leads > 0 ? (r.won / r.total_leads * 100) : 0;
+                  return (
+                    <div key={`${r.referral_name}-${idx}`} className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
+                      style={{ background: idx === 0 ? 'rgba(245,158,11,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${idx === 0 ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.08)'}` }}>
+                      <span className="text-sm font-bold w-5 text-center shrink-0" style={{ color: idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#b45309' : '#475569' }}>
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0" style={{ background: typeBg, color: typeColor, border: `1px solid ${typeColor}33` }}>
+                        {typeLabel}
+                      </span>
+                      <span className="font-medium text-slate-200 flex-1 text-sm truncate">{r.referral_name}</span>
+                      <div className="flex flex-col items-end shrink-0">
+                        <span className="text-xs text-emerald-400 font-semibold">{r.won} fechado{r.won !== 1 ? 's' : ''}</span>
+                        <span className="text-xs text-slate-500">{r.total_leads} lead{r.total_leads !== 1 ? 's' : ''} · {convRate.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-xs text-slate-600 text-center">Nenhuma indicação registrada ainda.<br/>Registre leads com origem "Indicação" para ver o ranking.</p>
+              </div>
+            )}
+          </div>
+          </div>{/* end grid */}
+
           {/* ── Performance por Origem ── */}
           {summary && summary.source_performance && summary.source_performance.length > 0 && (() => {
             const srcData = summary.source_performance;
@@ -1375,39 +1413,6 @@ export default function Opportunities() {
             );
           })()}
 
-          {/* ── Ranking de Indicadores ── */}
-          {summary && (summary as any).referral_ranking && (summary as any).referral_ranking.length > 0 && (
-            <div className="card p-5">
-              <h3 className="text-sm font-semibold text-slate-300 mb-4">🏆 Ranking de Indicadores</h3>
-              <div className="space-y-2">
-                {(summary as any).referral_ranking.map((r: any, idx: number) => {
-                  const typeColor = r.referral_type === 'client' ? '#93c5fd' : r.referral_type === 'employee' ? '#34d399' : '#94a3b8';
-                  const typeBg = r.referral_type === 'client' ? 'rgba(59,130,246,0.12)' : r.referral_type === 'employee' ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)';
-                  const typeLabel = r.referral_type === 'client' ? '🏢 Cliente' : r.referral_type === 'employee' ? '👷 Func.' : '👤 Externo';
-                  const convRate = r.total_leads > 0 ? (r.won / r.total_leads * 100) : 0;
-                  return (
-                    <div key={`${r.referral_name}-${idx}`} className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                      style={{ background: idx === 0 ? 'rgba(245,158,11,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${idx === 0 ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.08)'}` }}>
-                      <span className="text-sm font-bold w-5 text-center" style={{ color: idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#b45309' : '#475569' }}>
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0" style={{ background: typeBg, color: typeColor, border: `1px solid ${typeColor}33` }}>
-                        {typeLabel}
-                      </span>
-                      <span className="font-medium text-slate-200 flex-1 text-sm">{r.referral_name}</span>
-                      <span className="text-xs text-slate-500">{r.total_leads} lead{r.total_leads !== 1 ? 's' : ''}</span>
-                      <span className="text-xs font-semibold text-emerald-400 w-16 text-right">{r.won} fechado{r.won !== 1 ? 's' : ''}</span>
-                      <span className="text-xs font-semibold text-emerald-300 w-24 text-right">{brl(r.won_value)}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-14 text-center" style={{
-                        background: convRate >= 40 ? 'rgba(16,185,129,0.12)' : convRate >= 20 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.1)',
-                        color: convRate >= 40 ? '#34d399' : convRate >= 20 ? '#fbbf24' : '#f87171',
-                      }}>{convRate.toFixed(0)}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         <div className="space-y-4">
