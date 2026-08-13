@@ -21,6 +21,32 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const [topResult, openResult] = await Promise.all([
+      pool.query<{ product_id: number; name: string; count: string }>(
+        `SELECT o.product_id, p.name, COUNT(*) as count
+         FROM opportunities o
+         JOIN products p ON p.id = o.product_id
+         WHERE o.stage = 'fechado' AND o.product_id IS NOT NULL
+         GROUP BY o.product_id, p.name
+         ORDER BY count DESC
+         LIMIT 1`
+      ),
+      pool.query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM opportunities
+         WHERE product_id IS NOT NULL AND stage NOT IN ('fechado', 'perdido')`
+      ),
+    ]);
+    res.json({
+      top_product: topResult.rows[0] ?? null,
+      open_with_product: Number(openResult.rows[0]?.count ?? 0),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar stats de produtos' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { rows: [row] } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);

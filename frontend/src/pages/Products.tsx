@@ -36,9 +36,15 @@ const BILLING_CONFIG = {
 
 const empty = { name: '', price: 0, category: '', description: '', active: true, billing_type: 'mrr' as const };
 
+interface ProductStats {
+  top_product: { product_id: number; name: string; count: string } | null;
+  open_with_product: number;
+}
+
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [stats, setStats] = useState<ProductStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -47,12 +53,14 @@ export default function Products() {
 
   const load = async () => {
     setLoading(true);
-    const [data, cats] = await Promise.all([
+    const [data, cats, productStats] = await Promise.all([
       authFetch(BASE).then(r => r.json()),
       getCategories('revenue').catch(() => []),
+      authFetch(`${BASE}/stats`).then(r => r.json()).catch(() => null),
     ]);
     setProducts(Array.isArray(data) ? data : []);
     setCategories(cats);
+    setStats(productStats);
     setLoading(false);
   };
 
@@ -139,7 +147,7 @@ export default function Products() {
       )}
 
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="card p-4">
           <div className="label-dark mb-1">Produtos ativos</div>
           <div className="metric">{active.length}</div>
@@ -149,6 +157,22 @@ export default function Products() {
           <div className="metric">
             {active.length > 0 ? fmt(active.reduce((s, p) => s + Number(p.price), 0) / active.length) : '—'}
           </div>
+        </div>
+        <div className="card p-4">
+          <div className="label-dark mb-1">Mais vendido</div>
+          <div className="metric text-sm truncate" title={stats?.top_product?.name ?? ''}>
+            {stats?.top_product ? (
+              <>
+                <span className="text-white">{stats.top_product.name}</span>
+                <span className="text-xs text-slate-500 ml-1 font-normal">({stats.top_product.count}x)</span>
+              </>
+            ) : '—'}
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="label-dark mb-1">Em negociação</div>
+          <div className="metric text-amber-400">{stats?.open_with_product ?? '—'}</div>
+          <div className="text-xs text-slate-600 mt-0.5">opps com produto vinculado</div>
         </div>
       </div>
 
