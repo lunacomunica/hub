@@ -539,6 +539,8 @@ export default function Opportunities() {
     value_range: null as 'low' | 'mid' | 'high' | null,
     category: null as string | null,
   });
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   // Add stage
   const [addingStage, setAddingStage] = useState(false);
@@ -910,7 +912,12 @@ export default function Opportunities() {
     view === 'lost' ? items.filter(i => i.stage === (lostStage?.key ?? 'perdido')) :
     items.filter(i => pipelineStages.some(s => s.key === i.stage));
 
-  const displayItems = applyFilters(baseItems);
+  const searchLower = search.trim().toLowerCase();
+  const displayItems = applyFilters(baseItems).filter(i =>
+    !searchLower ||
+    i.title.toLowerCase().includes(searchLower) ||
+    (i.client_name ?? '').toLowerCase().includes(searchLower)
+  );
 
   const overdueCount = summary?.overdue_followups ?? 0;
   const todayCount   = summary?.today_followups   ?? 0;
@@ -991,191 +998,294 @@ export default function Opportunities() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {(['kanban','won','lost'] as const).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${view===v ? 'btn-primary' : 'btn-ghost'}`}>
-            {v === 'kanban' ? 'Pipeline' :
-             v === 'won'    ? `${wonStage?.label  ?? 'Fechados'}  (${items.filter(i=>i.stage===(wonStage?.key  ?? 'fechado')).length})` :
-                              `${lostStage?.label ?? 'Perdidos'} (${items.filter(i=>i.stage===(lostStage?.key ?? 'perdido')).length})`}
+      {/* ── Nav bar: tabs + search + temp chips + filter button ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* Tabs pill switcher */}
+        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(59,130,246,0.12)' }}>
+          <button onClick={() => setView('kanban')}
+            className="px-3 py-1.5 text-sm rounded-lg font-medium transition-all"
+            style={{
+              background: view === 'kanban' ? '#3b82f6' : 'transparent',
+              color: view === 'kanban' ? '#fff' : '#64748b',
+              boxShadow: view === 'kanban' ? '0 1px 8px rgba(59,130,246,0.35)' : 'none',
+              border: 'none',
+            }}>
+            Pipeline
           </button>
-        ))}
-        <button onClick={() => setView('funil')}
-          className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${view==='funil' ? 'btn-primary' : 'btn-ghost'}`}>
-          📊 Funil
-        </button>
-      </div>
+          <button onClick={() => setView('won')}
+            className="px-3 py-1.5 text-sm rounded-lg font-medium transition-all flex items-center gap-1.5"
+            style={{
+              background: view === 'won' ? '#10b981' : 'transparent',
+              color: view === 'won' ? '#fff' : '#64748b',
+              boxShadow: view === 'won' ? '0 1px 8px rgba(16,185,129,0.3)' : 'none',
+              border: 'none',
+            }}>
+            {wonStage?.label ?? 'Fechados'}
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-md" style={{ background: view === 'won' ? 'rgba(255,255,255,0.2)' : 'rgba(100,116,139,0.2)', minWidth: 18, textAlign: 'center' }}>
+              {items.filter(i => i.stage === (wonStage?.key ?? 'fechado')).length}
+            </span>
+          </button>
+          <button onClick={() => setView('lost')}
+            className="px-3 py-1.5 text-sm rounded-lg font-medium transition-all flex items-center gap-1.5"
+            style={{
+              background: view === 'lost' ? '#f43f5e' : 'transparent',
+              color: view === 'lost' ? '#fff' : '#64748b',
+              boxShadow: view === 'lost' ? '0 1px 8px rgba(244,63,94,0.3)' : 'none',
+              border: 'none',
+            }}>
+            {lostStage?.label ?? 'Perdidos'}
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded-md" style={{ background: view === 'lost' ? 'rgba(255,255,255,0.2)' : 'rgba(100,116,139,0.2)', minWidth: 18, textAlign: 'center' }}>
+              {items.filter(i => i.stage === (lostStage?.key ?? 'perdido')).length}
+            </span>
+          </button>
+          <button onClick={() => setView('funil')}
+            className="px-3 py-1.5 text-sm rounded-lg font-medium transition-all"
+            style={{
+              background: view === 'funil' ? '#3b82f6' : 'transparent',
+              color: view === 'funil' ? '#fff' : '#64748b',
+              boxShadow: view === 'funil' ? '0 1px 8px rgba(59,130,246,0.35)' : 'none',
+              border: 'none',
+            }}>
+            📊 Funil
+          </button>
+        </div>
 
-      {/* ── Smart filter bar (kanban view only) ── */}
-      {view === 'kanban' && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5 rounded-xl"
-          style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(59,130,246,0.1)' }}>
+        {/* Right controls */}
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative flex items-center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ position: 'absolute', left: 10, pointerEvents: 'none' }}>
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="text-sm"
+              style={{
+                width: 160,
+                height: 34,
+                padding: '0 12px 0 30px',
+                borderRadius: 9,
+                border: '1px solid rgba(59,130,246,0.15)',
+                background: 'rgba(15,23,42,0.7)',
+                color: '#e2e8f0',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
 
-          {/* Temperatura */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Temp</span>
+          {/* Temperature chips (always visible) */}
+          <div className="flex items-center gap-1">
             {(['frio','morno','quente'] as const).map(t => {
               const cfg = TEMP_CONFIG[t];
               const active = filters.temperatures.includes(t);
               return (
-                <button key={t} onClick={() => setFilters(f => ({
-                  ...f,
-                  temperatures: active ? f.temperatures.filter(x => x !== t) : [...f.temperatures, t],
-                }))}
-                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                <button key={t}
+                  onClick={() => setFilters(f => ({
+                    ...f,
+                    temperatures: active ? f.temperatures.filter(x => x !== t) : [...f.temperatures, t],
+                  }))}
+                  title={cfg.label}
                   style={{
-                    background: active ? cfg.bg : 'rgba(15,23,42,0.5)',
-                    border: `1px solid ${active ? cfg.color + '80' : 'rgba(59,130,246,0.1)'}`,
-                    color: active ? cfg.color : '#64748b',
+                    width: 32, height: 32,
+                    borderRadius: 8,
+                    border: `1px solid ${active ? cfg.color + '66' : 'rgba(59,130,246,0.12)'}`,
+                    background: active ? cfg.bg : 'rgba(15,23,42,0.7)',
+                    fontSize: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
                   }}>
-                  {cfg.icon} {cfg.label}
+                  {cfg.icon}
                 </button>
               );
             })}
           </div>
 
-          <div className="w-px h-5 bg-slate-800 shrink-0" />
-
-          {/* Follow-up */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Follow-up</span>
-            {([
-              ['overdue', 'Atrasado'],
-              ['today',   'Hoje'],
-              ['week',    'Esta semana'],
-              ['none',    'Sem data'],
-            ] as const).map(([key, label]) => {
-              const active = filters.followup === key;
-              return (
-                <button key={key} onClick={() => setFilters(f => ({ ...f, followup: active ? null : key }))}
-                  className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
-                  style={{
-                    background: active ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
-                    border: `1px solid ${active ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
-                    color: active ? '#93c5fd' : '#64748b',
-                  }}>
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="w-px h-5 bg-slate-800 shrink-0" />
-
-          {/* Responsável */}
-          {users.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Resp.</span>
-              <select
-                value={filters.owner_id ?? ''}
-                onChange={e => setFilters(f => ({ ...f, owner_id: e.target.value ? Number(e.target.value) : null }))}
-                className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
-                style={{
-                  background: filters.owner_id !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
-                  border: `1px solid ${filters.owner_id !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
-                  color: filters.owner_id !== null ? '#93c5fd' : '#64748b',
-                  outline: 'none',
-                }}>
-                <option value="">Todos</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* Origem */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Origem</span>
-            <select
-              value={filters.source ?? ''}
-              onChange={e => setFilters(f => ({ ...f, source: e.target.value || null }))}
-              className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
-              style={{
-                background: filters.source !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
-                border: `1px solid ${filters.source !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
-                color: filters.source !== null ? '#93c5fd' : '#64748b',
-                outline: 'none',
-              }}>
-              <option value="">Todas</option>
-              {sources.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div className="w-px h-5 bg-slate-800 shrink-0" />
-
-          {/* Parado +7 dias */}
-          <button onClick={() => setFilters(f => ({ ...f, stale: !f.stale }))}
-            className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+          {/* Filter button */}
+          <button
+            onClick={() => setFilterPanelOpen(o => !o)}
+            className="flex items-center gap-1.5 text-sm font-medium transition-all"
             style={{
-              background: filters.stale ? 'rgba(245,158,11,0.15)' : 'rgba(15,23,42,0.5)',
-              border: `1px solid ${filters.stale ? 'rgba(245,158,11,0.5)' : 'rgba(59,130,246,0.1)'}`,
-              color: filters.stale ? '#fcd34d' : '#64748b',
+              height: 34,
+              padding: '0 12px',
+              borderRadius: 9,
+              border: activeFilterCount > 0 ? '1px solid rgba(59,130,246,0.4)' : '1px solid rgba(59,130,246,0.15)',
+              background: activeFilterCount > 0 ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.7)',
+              color: activeFilterCount > 0 ? '#93c5fd' : '#64748b',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
             }}>
-            ⏳ Parado +7d
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Filtros
+            {activeFilterCount > 0 && (
+              <span style={{
+                width: 17, height: 17,
+                borderRadius: 5,
+                background: '#3b82f6',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {activeFilterCount}
+              </span>
+            )}
           </button>
+        </div>
+      </div>
 
-          <div className="w-px h-5 bg-slate-800 shrink-0" />
+      {/* ── Collapsible filter panel ── */}
+      {filterPanelOpen && (
+        <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(10,17,38,0.95)', border: '1px solid rgba(59,130,246,0.14)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px 24px' }}>
 
-          {/* Valor */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Valor</span>
-            {([
-              ['low',  '< R$2k'],
-              ['mid',  'R$2k–5k'],
-              ['high', '> R$5k'],
-            ] as const).map(([key, label]) => {
-              const active = filters.value_range === key;
-              return (
-                <button key={key} onClick={() => setFilters(f => ({ ...f, value_range: active ? null : key }))}
+            {/* Follow-up */}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-600 mb-2 font-semibold">Follow-up</div>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['overdue', '⚠ Atrasado'],
+                  ['today',   'Hoje'],
+                  ['week',    'Esta semana'],
+                  ['none',    'Sem data'],
+                ] as const).map(([key, label]) => {
+                  const active = filters.followup === key;
+                  return (
+                    <button key={key} onClick={() => setFilters(f => ({ ...f, followup: active ? null : key }))}
+                      className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                      style={{
+                        background: active ? (key === 'overdue' ? 'rgba(244,63,94,0.12)' : 'rgba(59,130,246,0.15)') : 'rgba(15,23,42,0.6)',
+                        border: `1px solid ${active ? (key === 'overdue' ? 'rgba(244,63,94,0.35)' : 'rgba(59,130,246,0.4)') : 'rgba(59,130,246,0.12)'}`,
+                        color: active ? (key === 'overdue' ? '#f87171' : '#93c5fd') : '#64748b',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Valor + Parado */}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-600 mb-2 font-semibold">Valor & Status</div>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['low',  '< R$2k'],
+                  ['mid',  'R$2k–5k'],
+                  ['high', '> R$5k'],
+                ] as const).map(([key, label]) => {
+                  const active = filters.value_range === key;
+                  return (
+                    <button key={key} onClick={() => setFilters(f => ({ ...f, value_range: active ? null : key }))}
+                      className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                      style={{
+                        background: active ? 'rgba(52,211,153,0.12)' : 'rgba(15,23,42,0.6)',
+                        border: `1px solid ${active ? 'rgba(52,211,153,0.4)' : 'rgba(59,130,246,0.12)'}`,
+                        color: active ? '#34d399' : '#64748b',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}>
+                      {label}
+                    </button>
+                  );
+                })}
+                <button onClick={() => setFilters(f => ({ ...f, stale: !f.stale }))}
                   className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
                   style={{
-                    background: active ? 'rgba(52,211,153,0.15)' : 'rgba(15,23,42,0.5)',
-                    border: `1px solid ${active ? 'rgba(52,211,153,0.45)' : 'rgba(59,130,246,0.1)'}`,
-                    color: active ? '#34d399' : '#64748b',
+                    background: filters.stale ? 'rgba(245,158,11,0.12)' : 'rgba(15,23,42,0.6)',
+                    border: `1px solid ${filters.stale ? 'rgba(245,158,11,0.4)' : 'rgba(59,130,246,0.12)'}`,
+                    color: filters.stale ? '#fcd34d' : '#64748b',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
                   }}>
-                  {label}
+                  ⏳ Parado +7d
                 </button>
-              );
-            })}
-          </div>
+              </div>
+            </div>
 
-          {/* Serviço (category) */}
-          {categories.length > 0 && (
-            <>
-              <div className="w-px h-5 bg-slate-800 shrink-0" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs uppercase tracking-wider text-slate-600 shrink-0">Serviço</span>
+            {/* Selects: Responsável, Origem, Serviço */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {users.length > 0 && (
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-slate-600 mb-1.5 font-semibold">Responsável</div>
+                  <select
+                    value={filters.owner_id ?? ''}
+                    onChange={e => setFilters(f => ({ ...f, owner_id: e.target.value ? Number(e.target.value) : null }))}
+                    style={{
+                      width: '100%', height: 30, padding: '0 10px', borderRadius: 7,
+                      border: `1px solid ${filters.owner_id !== null ? 'rgba(59,130,246,0.4)' : 'rgba(59,130,246,0.12)'}`,
+                      background: filters.owner_id !== null ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.6)',
+                      color: filters.owner_id !== null ? '#93c5fd' : '#64748b',
+                      fontSize: 12, fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
+                    }}>
+                    <option value="">Todos</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <div className="text-xs uppercase tracking-wider text-slate-600 mb-1.5 font-semibold">Origem</div>
                 <select
-                  value={filters.category ?? ''}
-                  onChange={e => setFilters(f => ({ ...f, category: e.target.value || null }))}
-                  className="text-xs rounded-lg px-2 py-1 font-medium transition-all"
+                  value={filters.source ?? ''}
+                  onChange={e => setFilters(f => ({ ...f, source: e.target.value || null }))}
                   style={{
-                    background: filters.category !== null ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
-                    border: `1px solid ${filters.category !== null ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.1)'}`,
-                    color: filters.category !== null ? '#93c5fd' : '#64748b',
-                    outline: 'none',
+                    width: '100%', height: 30, padding: '0 10px', borderRadius: 7,
+                    border: `1px solid ${filters.source !== null ? 'rgba(59,130,246,0.4)' : 'rgba(59,130,246,0.12)'}`,
+                    background: filters.source !== null ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.6)',
+                    color: filters.source !== null ? '#93c5fd' : '#64748b',
+                    fontSize: 12, fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
                   }}>
-                  <option value="">Todos</option>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">Todas as origens</option>
+                  {sources.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-            </>
-          )}
+              {categories.length > 0 && (
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-slate-600 mb-1.5 font-semibold">Serviço</div>
+                  <select
+                    value={filters.category ?? ''}
+                    onChange={e => setFilters(f => ({ ...f, category: e.target.value || null }))}
+                    style={{
+                      width: '100%', height: 30, padding: '0 10px', borderRadius: 7,
+                      border: `1px solid ${filters.category !== null ? 'rgba(59,130,246,0.4)' : 'rgba(59,130,246,0.12)'}`,
+                      background: filters.category !== null ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.6)',
+                      color: filters.category !== null ? '#93c5fd' : '#64748b',
+                      fontSize: 12, fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
+                    }}>
+                    <option value="">Todos os serviços</option>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
 
-          {/* Active count + clear */}
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-2 ml-auto shrink-0">
-              <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                style={{ background: 'rgba(59,130,246,0.2)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.4)' }}>
-                {activeFilterCount} ativo{activeFilterCount > 1 ? 's' : ''}
-              </span>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 mt-3 pt-3" style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}>
+            {activeFilterCount > 0 && (
               <button
                 onClick={() => setFilters({ temperatures: [], followup: null, owner_id: null, source: null, stale: false, value_range: null, category: null })}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors font-medium">
-                Limpar
+                className="text-xs font-medium transition-colors"
+                style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(59,130,246,0.15)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Limpar filtros
               </button>
-            </div>
-          )}
+            )}
+            <button
+              onClick={() => setFilterPanelOpen(false)}
+              className="text-xs font-medium"
+              style={{ padding: '5px 14px', borderRadius: 7, background: '#3b82f6', border: 'none', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+              Aplicar
+            </button>
+          </div>
         </div>
       )}
 
