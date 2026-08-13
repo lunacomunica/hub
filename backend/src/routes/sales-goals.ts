@@ -23,6 +23,8 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
   try {
     const month = Number(req.params.month);
     const year = Number(req.params.year);
+    const isComercial = (req as any).user?.role === 'comercial';
+    const userId = (req as any).user?.id;
 
     const { rows: [goal] } = await pool.query<{
       id: number; month: number; year: number;
@@ -34,12 +36,24 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
     const startDate = `${year}-${monthStr}-01`;
     const endDate = `${year}-${monthStr}-31`;
 
-    const { rows: [revenueRow] } = await pool.query<{ total: string }>(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues
-       WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-      [startDate, endDate]
-    );
-    const actualRevenue = Number(revenueRow.total);
+    let actualRevenue: number;
+    if (isComercial) {
+      // Comercial: soma apenas oportunidades fechadas pelo próprio usuário
+      const { rows: [row] } = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(value), 0) as total FROM opportunities
+         WHERE stage = 'fechado' AND owner_id = $1
+           AND closed_at >= $2 AND closed_at <= $3`,
+        [userId, startDate, endDate]
+      );
+      actualRevenue = Number(row.total);
+    } else {
+      const { rows: [revenueRow] } = await pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues
+         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [startDate, endDate]
+      );
+      actualRevenue = Number(revenueRow.total);
+    }
 
     const { rows: [clientsRow] } = await pool.query<{ count: string }>(
       `SELECT COUNT(*) as count FROM agency_clients
@@ -49,6 +63,7 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
     const actualNewClients = Number(clientsRow.count);
 
     // Goal items with product info + actual closed opportunities per product
+    const ownerFilter = isComercial ? `AND o.owner_id = ${userId}` : '';
     const items = goal ? (await pool.query(
       `SELECT
          sgi.id, sgi.goal_id, sgi.product_id, sgi.quantity, sgi.unit_price,
@@ -59,22 +74,26 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
            WHERE o.product_id = sgi.product_id
              AND o.stage = 'fechado'
              AND o.closed_at >= $1 AND o.closed_at <= $2
+             ${ownerFilter}
          ), 0) as actual_count,
          COALESCE((
            SELECT SUM(o.value) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage = 'fechado'
              AND o.closed_at >= $3 AND o.closed_at <= $4
+             ${ownerFilter}
          ), 0) as actual_revenue,
          COALESCE((
            SELECT COUNT(*) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage NOT IN ('fechado', 'perdido')
+             ${ownerFilter}
          ), 0) as pipeline_count,
          COALESCE((
            SELECT SUM(o.value) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage NOT IN ('fechado', 'perdido')
+             ${ownerFilter}
          ), 0) as pipeline_value
        FROM sales_goal_items sgi
        JOIN products p ON p.id = sgi.product_id
@@ -87,7 +106,8 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
     const { rows: [unlinkedRow] } = await pool.query<{ total: string }>(
       `SELECT COALESCE(SUM(value), 0) as total FROM opportunities
        WHERE stage = 'fechado' AND product_id IS NULL
-         AND closed_at >= $1 AND closed_at <= $2`,
+         AND closed_at >= $1 AND closed_at <= $2
+         ${isComercial ? `AND owner_id = ${userId}` : ''}`,
       [startDate, endDate]
     );
     const unlinkedClosed = Number(unlinkedRow.total);
