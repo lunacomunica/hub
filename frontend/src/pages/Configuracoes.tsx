@@ -285,7 +285,7 @@ export default function Configuracoes() {
       </div>
 
       {/* Parâmetros da Empresa */}
-      <div style={cardStyle}>
+      {user?.role !== 'comercial' && <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1.25rem' }}>
           <Clock size={16} color="var(--text-label)" />
           <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)' }}>Parâmetros da Empresa</span>
@@ -343,7 +343,7 @@ export default function Configuracoes() {
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Origens do Lead */}
       <div style={cardStyle}>
@@ -400,7 +400,7 @@ export default function Configuracoes() {
       </div>
 
       {/* Categorias */}
-      <div style={cardStyle}>
+      {user?.role !== 'comercial' && <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Tag size={16} color="var(--text-label)" />
@@ -518,7 +518,7 @@ export default function Configuracoes() {
             ))}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

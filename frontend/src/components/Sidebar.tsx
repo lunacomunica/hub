@@ -24,10 +24,7 @@ const PESSOAS_ITEMS = [
 ];
 
 const COMERCIAL_ITEMS = [
-  { to: '/clientes',      label: 'Saúde de Clientes',  icon: Users },
-  { to: '/churn',         label: 'Gestão de Churn',    icon: UserX },
   { to: '/produtos',      label: 'Produtos & Serviços', icon: Package },
-  { to: '/precificacao',  label: 'Calculadora',         icon: Calculator },
   { to: '/vendas',        label: 'Planejamento',        icon: Target },
   { to: '/oportunidades', label: 'Oportunidades',       icon: Briefcase },
 ];
