@@ -139,7 +139,7 @@ export default function Products() {
       )}
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className="card p-4">
           <div className="label-dark mb-1">Produtos ativos</div>
           <div className="metric">{active.length}</div>
@@ -149,10 +149,6 @@ export default function Products() {
           <div className="metric">
             {active.length > 0 ? fmt(active.reduce((s, p) => s + Number(p.price), 0) / active.length) : '—'}
           </div>
-        </div>
-        <div className="card p-4">
-          <div className="label-dark mb-1">Receita potencial/mês</div>
-          <div className="metric text-emerald-400">{fmt(active.reduce((s, p) => s + Number(p.price), 0))}</div>
         </div>
       </div>
 
