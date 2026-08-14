@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Pauta Mensal — Luna Comunica</title>
+<style>
+:root{--bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--border:#334155;--text:#e2e8f0;--text2:#94a3b8;--acc:#6366f1;--red:#ef4444;--yel:#f59e0b;--grn:#10b981}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;font-size:13px;min-height:100vh}
+/* HEADER */
+.hdr{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.logo{font-weight:700;font-size:15px;color:var(--acc)}
+.nav{display:flex;gap:3px;margin-left:12px}
+.nbtn{padding:5px 11px;border-radius:6px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;transition:.15s}
+.nbtn:hover{background:var(--bg3)}.nbtn.on{background:var(--acc);color:#fff}
+.ml{margin-left:auto;display:flex;align-items:center;gap:10px}
+/* FILTER BAR */
+.fbar{display:flex;align-items:center;gap:8px;padding:7px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.stabs{display:flex;gap:4px}
+.stab{padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;transition:.15s}
+.stab.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.vtog{margin-left:auto;display:flex;gap:2px;background:var(--bg3);border-radius:7px;padding:3px}
+.vbtn{padding:4px 11px;border-radius:5px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:12px;transition:.15s}
+.vbtn.on{background:var(--bg2);color:var(--text)}
+/* CAP ROW */
+.cap-row{display:flex;gap:8px;padding:8px 16px;overflow-x:auto;border-bottom:1px solid var(--border)}
+.cap-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 11px;white-space:nowrap;min-width:120px;flex-shrink:0}
+.cap-nm{font-size:11px;color:var(--text2)}
+.cap-st{font-size:12px;font-weight:700;margin-top:2px}
+.cap-bar{height:3px;background:var(--bg3);border-radius:2px;margin-top:5px}
+.cap-fill{height:100%;border-radius:2px}
+/* LEGEND */
+.legend{display:flex;gap:14px;padding:5px 16px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--bg)}
+.ldot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
+/* TIMELINE */
+.tl-wrap{overflow-x:auto;padding:10px 16px 20px}
+.tl-grid{display:grid;gap:2px;min-width:max-content}
+.tl-person{position:sticky;left:0;z-index:3;background:var(--bg);padding-right:6px}
+.tl-pcard{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;height:100%;min-width:148px}
+.tl-pname{font-weight:600;font-size:13px}
+.tl-prole{font-size:11px;color:var(--text2);margin-top:1px}
+.tl-psq{font-size:10px;color:#475569;margin-top:2px}
+.tl-dhdr{text-align:center;font-size:11px;color:var(--text2);font-weight:600;padding:4px 2px;min-width:54px;position:sticky;top:0;z-index:2;background:var(--bg)}
+.tl-dhdr.we{color:#3d5068}.tl-dhdr.tod{color:var(--acc);font-weight:800}
+.tl-dhdr .dow{font-size:9px;text-transform:uppercase;letter-spacing:.5px}
+.tl-cell{background:var(--bg2);border:1px solid var(--border);border-radius:6px;min-width:54px;min-height:64px;padding:4px;margin:1px;position:relative;cursor:pointer;transition:border-color .15s}
+.tl-cell:hover{border-color:var(--acc)}
+.tl-cell.we{background:#111b2b;opacity:.45;cursor:default;pointer-events:none}
+.tl-cell.tod{border-color:rgba(99,102,241,.55)}
+.tl-cell.ok{background:rgba(16,185,129,.04)}
+.tl-cell.full{background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.28)}
+.tl-cell.over{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.38)}
+.tl-cell.empty{cursor:default}
+.chip{font-size:10px;padding:2px 4px;border-radius:3px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;line-height:1.4}
+.chip.done{background:rgba(16,185,129,.15);color:#6ee7b7}
+.chip.late{background:rgba(239,68,68,.18);color:#fca5a5}
+.chip.prog{background:rgba(245,158,11,.15);color:#fde68a}
+.chip.todo{background:rgba(71,85,105,.2);color:#94a3b8}
+.cbar{position:absolute;bottom:3px;left:4px;right:4px;height:3px;background:var(--bg3);border-radius:2px}
+.cbar-fill{height:100%;border-radius:2px}
+/* CALENDAR */
+.cal-wrap{padding:10px 16px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dhdr{text-align:center;font-size:11px;color:var(--text2);font-weight:600;padding:4px 0}
+.cal-cell{background:var(--bg2);border:1px solid var(--border);border-radius:8px;min-height:90px;padding:6px;cursor:default}
+.cal-cell.we{background:#111b2b;opacity:.6}.cal-cell.tod{border-color:var(--acc)}.cal-cell.om{opacity:.3}
+.cal-dn{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.cal-dn.t{color:var(--acc)}
+.cal-chip{display:flex;align-items:center;gap:3px;padding:2px 5px;border-radius:4px;font-size:10px;margin-bottom:2px;cursor:pointer;transition:.1s}
+.cal-chip:hover{filter:brightness(1.2)}
+/* TABS */
+.tab{display:none}.tab.on{display:block}
+/* FLUXO TAB */
+.fluxo-wrap{padding:16px;max-width:900px}
+.flow-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.flow-diagram{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:12px;margin-bottom:20px}
+.flow-phase{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;min-width:180px;flex-shrink:0}
+.flow-phase-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);margin-bottom:10px}
+.flow-step-node{padding:8px 10px;border-radius:7px;margin-bottom:6px;cursor:pointer;transition:.15s;border:1px solid transparent}
+.flow-step-node:hover{filter:brightness(1.15)}
+.flow-step-name{font-weight:600;font-size:12px}
+.flow-step-meta{font-size:10px;opacity:.8;margin-top:2px}
+.flow-arrow{display:flex;align-items:center;padding:0 6px;color:#475569;font-size:18px;align-self:center;margin-top:-20px}
+.flow-table{width:100%;border-collapse:collapse}
+.flow-table th{color:var(--text2);font-size:11px;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid var(--border)}
+.flow-table td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.flow-table tr:hover td{background:rgba(99,102,241,.04)}
+.dep-chip{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;margin:1px;background:var(--bg3);color:var(--text2)}
+/* EQUIPE TAB */
+.eq-wrap{padding:16px;max-width:1100px}
+.eq-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.eq-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.eq-card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.eq-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.eq-name{font-weight:700;font-size:14px}
+.eq-role{font-size:11px;color:var(--text2);margin-top:1px}
+.eq-caps{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.eq-cap-row{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--bg3);border-radius:6px}
+.eq-cap-lbl{font-size:12px;color:var(--text2)}
+.eq-cap-val{font-weight:700;font-size:13px}
+/* RADAR */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:16px}
+.rcard{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.rcard-t{font-size:13px;font-weight:700;margin-bottom:8px}
+.ri{padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;justify-content:space-between;align-items:center}
+.ri:last-child{border-bottom:none}
+.badge{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
+.br{background:rgba(239,68,68,.15);color:#fca5a5}
+.by{background:rgba(245,158,11,.15);color:#fde68a}
+.bg{background:rgba(16,185,129,.15);color:#6ee7b7}
+/* MODAL */
+.moverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;align-items:center;justify-content:center}
+.moverlay.open{display:flex}
+.mbox{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;width:480px;max-height:85vh;overflow-y:auto;position:relative}
+.mtitle{font-size:15px;font-weight:700;margin-bottom:12px;padding-right:24px}
+.mclose{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;line-height:1}
+.mrow{display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:8px;margin-bottom:6px}
+.mrow-main{flex:1}
+.mrow-name{font-weight:600;font-size:13px}
+.mrow-sub{font-size:11px;color:var(--text2);margin-top:1px}
+/* FORMS */
+.fld-group{margin-bottom:12px}
+.fld-label{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;display:block;text-transform:uppercase;letter-spacing:.5px}
+.fld-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;outline:none}
+.fld-input:focus{border-color:var(--acc)}
+.fld-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld-num{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;text-align:center;font-weight:700}
+.fld-num:focus{border-color:var(--acc)}
+.btn{padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.15s}
+.btn-primary{background:var(--acc);color:#fff}.btn-primary:hover{background:#4f46e5}
+.btn-ghost{background:var(--bg3);color:var(--text2)}.btn-ghost:hover{color:var(--text)}
+.btn-danger{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.2)}
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:#10b981;color:#fff;padding:10px 18px;border-radius:8px;font-weight:600;font-size:13px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+/* RELATORIO */
+.rel-wrap{padding:16px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.kpi-lbl{font-size:11px;color:var(--text2)}.kpi-val{font-size:26px;font-weight:800;margin-top:4px}.kpi-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.insight{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
+.insight li{font-size:13px;color:var(--text2);margin-bottom:6px;list-style:none;padding-left:14px;position:relative}
+.insight li::before{content:'•';position:absolute;left:0}
+.ceo-box{background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);border-radius:10px;padding:16px}
+.ceo-box li{font-size:13px;color:var(--text2);margin-bottom:6px;list-style:none;padding-left:20px;position:relative}
+.ceo-box li::before{content:'☐';position:absolute;left:0}
+/* HOURS BAR */
+.hbar-wrap{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.hbar-fill{height:100%;border-radius:3px}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <span class="logo">⚡ Luna</span>
+  <span style="color:#475569">/</span>
+  <span style="color:#94a3b8;font-size:13px">Pauta Mensal</span>
+  <nav class="nav">
+    <button class="nbtn on" onclick="showTab('pauta',this)">📋 Pauta</button>
+    <button class="nbtn" onclick="showTab('fluxo',this)">⚡ Fluxo</button>
+    <button class="nbtn" onclick="showTab('equipe',this)">👥 Equipe</button>
+    <button class="nbtn" onclick="showTab('radar',this)">📡 Radar CEO</button>
+    <button class="nbtn" onclick="showTab('relatorio',this)">📊 Relatório</button>
+  </nav>
+  <div class="ml">
+    <span style="font-weight:600">Junho 2026</span>
+    <span style="font-size:12px;color:var(--text2)">Hoje: dia 22</span>
+  </div>
+</header>
+
+<!-- PAUTA -->
+<div id="tab-pauta" class="tab on">
+  <div class="fbar">
+    <div class="stabs">
+      <button class="stab on" onclick="setSq('all',this)">Todos</button>
+      <button class="stab" onclick="setSq('A',this)">Squad A</button>
+      <button class="stab" onclick="setSq('B',this)">Squad B</button>
+    </div>
+    <div class="vtog">
+      <button class="vbtn on" id="vt" onclick="setView('timeline')">📊 Timeline</button>
+      <button class="vbtn" id="vc" onclick="setView('calendar')">📅 Calendário</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="ldot" style="background:rgba(16,185,129,.5)"></span>Dentro da capacidade</span>
+    <span><span class="ldot" style="background:rgba(245,158,11,.6)"></span>No limite</span>
+    <span><span class="ldot" style="background:rgba(239,68,68,.55)"></span>Acima da capacidade</span>
+    <span id="sched-info" style="margin-left:auto;font-size:11px;color:#475569"></span>
+  </div>
+  <div class="cap-row" id="cap-row"></div>
+  <div id="view-tl"></div>
+  <div id="view-cal" style="display:none"></div>
+</div>
+
+<!-- FLUXO -->
+<div id="tab-fluxo" class="tab">
+  <div class="fluxo-wrap">
+    <div class="flow-topbar">
+      <div>
+        <h2 style="font-size:15px;margin-bottom:2px">Fluxo de Produção</h2>
+        <div style="font-size:12px;color:var(--text2)">Configure as etapas, responsáveis, horas e dependências — o scheduler monta o calendário automaticamente</div>
+      </div>
+      <button class="btn btn-primary" onclick="reRunScheduler()">▶ Reagendar</button>
+    </div>
+    <div id="flow-diagram"></div>
+    <table class="flow-table" id="flow-table">
+      <thead><tr>
+        <th>Etapa</th><th>Responsável (papel)</th><th>Horas/cliente</th><th>Depende de</th><th>Opcional</th><th></th>
+      </tr></thead>
+      <tbody id="flow-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EQUIPE -->
+<div id="tab-equipe" class="tab">
+  <div class="eq-wrap">
+    <div class="eq-topbar">
+      <div>
+        <h2 style="font-size:15px;margin-bottom:2px">Equipe</h2>
+        <div style="font-size:12px;color:var(--text2)">Cada pessoa, seu papel, squad e horas de trabalho por dia</div>
+      </div>
+    </div>
+    <div class="eq-grid" id="eq-grid"></div>
+  </div>
+</div>
+
+<!-- RADAR -->
+<div id="tab-radar" class="tab"><div class="rgrid" id="rgrid"></div></div>
+
+<!-- RELATÓRIO -->
+<div id="tab-relatorio" class="tab"><div class="rel-wrap" id="relatorio"></div></div>
+
+<!-- MODAL DETALHES -->
+<div class="moverlay" id="mov" onclick="if(event.target===this)closeM()">
+  <div class="mbox">
+    <button class="mclose" onclick="closeM()">×</button>
+    <div id="mbody"></div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR ETAPA -->
+<div class="moverlay" id="mov-step" onclick="if(event.target===this)closeStepM()">
+  <div class="mbox">
+    <button class="mclose" onclick="closeStepM()">×</button>
+    <div id="mbody-step"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">✅ Reagendado com sucesso</div>
+
+<script>
+const TODAY=22, YEAR=2026, MONTH=5, DIM=30;
+const DOWS=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+// ── DIAS ÚTEIS ────────────────────────────────────────
+const WORKING_DAYS=[];
+for(let d=1;d<=DIM;d++){const dw=new Date(YEAR,MONTH,d).getDay();if(dw!==0&&dw!==6) WORKING_DAYS.push(d);}
+
+function isWE(d){const dw=new Date(YEAR,MONTH,d).getDay();return dw===0||dw===6}
+function dow(d){return DOWS[new Date(YEAR,MONTH,d).getDay()]}
+
+// ── FLUXO DE PRODUÇÃO ────────────────────────────────
+// roleId: qual papel do squad executa essa etapa
+// dependsOn: ids de etapas que precisam estar concluídas antes
+let FLOW=[
+  {id:'brain',lbl:'Brain',   icon:'🧠',clr:'#6366f1',hours:3,   dependsOn:[],              roleId:'head',   optional:false},
+  {id:'pct',  lbl:'PCT',     icon:'📝',clr:'#8b5cf6',hours:2,   dependsOn:['brain'],        roleId:'estrat', optional:false},
+  {id:'pla',  lbl:'PLA',     icon:'📋',clr:'#a78bfa',hours:2,   dependsOn:['pct'],          roleId:'estrat', optional:false},
+  {id:'cap',  lbl:'CAP',     icon:'🎥',clr:'#ef4444',hours:4,   dependsOn:['brain'],        roleId:'av1',    optional:true},
+  {id:'edt',  lbl:'EDT',     icon:'✂️',clr:'#f97316',hours:3,   dependsOn:['cap'],          roleId:'av_edt', optional:true},
+  {id:'des',  lbl:'Design',  icon:'🎨',clr:'#3b82f6',hours:6,   dependsOn:['pla'],          roleId:'design', optional:false},
+  // des: se cliente tem edt, também depende de edt (tratado no scheduler)
+  {id:'rev',  lbl:'REV',     icon:'🔍',clr:'#06b6d4',hours:1,   dependsOn:['des'],          roleId:'head',   optional:false},
+  {id:'ent',  lbl:'Entrega', icon:'📤',clr:'#10b981',hours:0.5, dependsOn:['rev'],          roleId:'head',   optional:false},
+  {id:'aju',  lbl:'Ajustes', icon:'🔧',clr:'#f59e0b',hours:1,   dependsOn:['ent'],          roleId:'head',   optional:false},
+  {id:'age',  lbl:'Agenda',  icon:'🗓️',clr:'#ec4899',hours:0.5, dependsOn:['aju'],          roleId:'estrat', optional:false},
+];
+
+const ROLE_LABELS={
+  head:'Head de Conta', estrat:'Estrategista', design:'Designer',
+  av1:'AV — cap + edt', av_edt:'AV — edição',
+};
+
+// ── EQUIPE ────────────────────────────────────────────
+const TEAM=[
+  {id:'hca', name:'Priscila',roleId:'head',   squad:'A',clr:'#6366f1',hoursPerDay:8, contract:'clt'},
+  {id:'esta',name:'Camila',  roleId:'estrat', squad:'A',clr:'#8b5cf6',hoursPerDay:8, contract:'clt'},
+  {id:'desa',name:'Lucas',   roleId:'design', squad:'A',clr:'#3b82f6',hoursPerDay:8, contract:'clt'},
+  {id:'hcb', name:'Fernanda',roleId:'head',   squad:'B',clr:'#10b981',hoursPerDay:8, contract:'clt'},
+  {id:'estb',name:'Rafaela', roleId:'estrat', squad:'B',clr:'#06b6d4',hoursPerDay:8, contract:'clt'},
+  {id:'desb',name:'Pedro',   roleId:'design', squad:'B',clr:'#f59e0b',hoursPerDay:8, contract:'clt'},
+  {id:'av1', name:'João',    roleId:'av1',    squad:null,clr:'#ef4444',hoursPerDay:8,contract:'clt'},
+  {id:'av2', name:'Mari',    roleId:'av_edt', squad:null,clr:'#f97316',hoursPerDay:7,contract:'estagiario'},
+];
+
+// ── CLIENTES ──────────────────────────────────────────
+// activeSteps: quais etapas esse cliente tem
+// edtType: 'elaborado' (vai para av1/João) | 'simples' (vai para av2/Mari) | null
+const CLIENTS=[
+  {id:'c1', name:'Studio Mova', sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','cap','edt','des','rev','ent','aju','age'],edtType:'elaborado',
+   st:{brain:'done',pct:'done',cap:'done',pla:'done',edt:'done',des:'done',rev:'late',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c2', name:'Fit Connect', sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','cap','edt','des','rev','ent','aju','age'],edtType:'simples',
+   st:{brain:'done',pct:'done',cap:'done',pla:'done',edt:'done',des:'done',rev:'done',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c3', name:'Farm Bureau', sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'done',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c4', name:'Café Raízes', sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'awaiting',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c5', name:'SkinLab',     sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','cap','edt','des','rev','ent','aju','age'],edtType:'elaborado',
+   st:{brain:'done',pct:'done',cap:'done',pla:'done',edt:'in_progress',des:'in_progress',rev:'todo',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c6', name:'TechFlow',    sq:'A',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'todo',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c7', name:'Belle Skin',  sq:'B',type:'mrr',
+   activeSteps:['brain','pct','pla','cap','edt','des','rev','ent','aju','age'],edtType:'simples',
+   st:{brain:'done',pct:'done',cap:'done',pla:'done',edt:'done',des:'done',rev:'done',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c8', name:'Click Studio',sq:'B',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'late',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c9', name:'Casa Verde',  sq:'B',type:'mrr',
+   activeSteps:['brain','pct','pla','cap','edt','des','rev','ent','aju','age'],edtType:'simples',
+   st:{brain:'done',pct:'done',cap:'done',pla:'done',edt:'done',des:'done',rev:'awaiting',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c10',name:'Up Fitness',  sq:'B',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'todo',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'c11',name:'Lux Brow',    sq:'B',type:'mrr',
+   activeSteps:['brain','pct','pla','des','rev','ent','aju','age'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'done',rev:'todo',ent:'todo',aju:'todo',age:'todo'}},
+  {id:'p1', name:'Rebrand Nova',sq:'A',type:'tcv',
+   activeSteps:['brain','pct','pla','des','rev','ent'],edtType:null,
+   st:{brain:'done',pct:'done',pla:'done',des:'in_progress',rev:'todo',ent:'todo'}},
+];
+
+// ── STEP META (para renderização) ────────────────────
+function getSM(id){return FLOW.find(f=>f.id===id)||{l:id,icon:'',clr:'#94a3b8',ab:id.toUpperCase()}}
+
+// ── SCHEDULER ─────────────────────────────────────────
+function getCollabId(roleId, sq, edtType){
+  if(roleId==='head')   return sq==='A'?'hca':'hcb';
+  if(roleId==='estrat') return sq==='A'?'esta':'estb';
+  if(roleId==='design') return sq==='A'?'desa':'desb';
+  if(roleId==='av1')    return 'av1';
+  if(roleId==='av_edt') return edtType==='elaborado'?'av1':'av2';
+  return null;
+}
+
+function runScheduler(){
+  const tasks=new Map();
+
+  // Build task graph
+  for(const cl of CLIENTS){
+    for(const step of FLOW){
+      if(!cl.activeSteps.includes(step.id)) continue;
+
+      // Dependências: filtrar pelas etapas ativas do cliente
+      let deps=step.dependsOn.filter(d=>cl.activeSteps.includes(d));
+      // DES também depende de EDT se o cliente tiver EDT
+      if(step.id==='des'&&cl.activeSteps.includes('edt')) deps=[...new Set([...deps,'edt'])];
+
+      const tid=`${cl.id}_${step.id}`;
+      const collabId=getCollabId(step.roleId, cl.sq, cl.edtType);
+      tasks.set(tid,{
+        id:tid, client:cl, step,
+        hours:step.hours,
+        deps:deps.map(d=>`${cl.id}_${d}`),
+        collabId,
+        alloc:[],  // [{day, hours}]
+        done:false,
+        hoursLeft:step.hours,
+      });
+    }
+  }
+
+  // Capacidade diária por colaborador: {collabId: {day: hoursUsed}}
+  const used={};
+  for(const m of TEAM) used[m.id]={};
+
+  const avail=(cid,day)=>{
+    const m=TEAM.find(t=>t.id===cid);
+    return(m?.hoursPerDay||8)-(used[cid]?.[day]||0);
+  };
+  const useH=(cid,day,h)=>{
+    if(!used[cid]) used[cid]={};
+    used[cid][day]=(used[cid][day]||0)+h;
+  };
+  const isDone=(tid)=>tasks.get(tid)?.done||false;
+  const endDay=(tid)=>{
+    const t=tasks.get(tid);
+    return(!t||!t.alloc.length)?0:Math.max(...t.alloc.map(a=>a.day));
+  };
+
+  // Greedy scheduler — itera até tudo alocado ou sem progresso
+  let changed=true, safety=10000;
+  while(changed&&safety-->0){
+    changed=false;
+    for(const task of tasks.values()){
+      if(task.done) continue;
+      if(!task.deps.every(d=>isDone(d))) continue; // aguardando dependência
+
+      // Dia mais cedo possível: dia seguinte ao fim da última dependência
+      const depEnd=task.deps.length?Math.max(...task.deps.map(d=>endDay(d))):0;
+      const startFrom=Math.max(
+        depEnd+1,
+        task.alloc.length?Math.max(...task.alloc.map(a=>a.day))+1:1
+      );
+
+      let hoursLeft=task.hoursLeft;
+      for(const day of WORKING_DAYS.filter(d=>d>=startFrom)){
+        if(hoursLeft<=0) break;
+        if(!task.collabId) break;
+        const a=avail(task.collabId,day);
+        if(a>0){
+          const use=Math.min(a,hoursLeft);
+          useH(task.collabId,day,use);
+          task.alloc.push({day,hours:use});
+          hoursLeft-=use;
+        }
+      }
+      task.hoursLeft=hoursLeft;
+      if(hoursLeft<=0){task.done=true;changed=true;}
+    }
+  }
+
+  return{tasks,used};
+}
+
+// Converte saída do scheduler para formato {memberId:{day:[{client,step,status,hours}]}}
+function buildSchedFromTasks(tasks){
+  const s={};
+  for(const m of TEAM) s[m.id]={};
+  for(const task of tasks.values()){
+    if(!task.collabId) continue;
+    for(const alloc of task.alloc){
+      if(!s[task.collabId][alloc.day]) s[task.collabId][alloc.day]=[];
+      // Evitar duplicatas (tarefa que ocupa parcialmente o dia)
+      const ex=s[task.collabId][alloc.day].find(e=>e.client.id===task.client.id&&e.step===task.step.id);
+      if(!ex){
+        s[task.collabId][alloc.day].push({
+          client:task.client,
+          step:task.step.id,
+          status:task.client.st?.[task.step.id]||'todo',
+          hours:alloc.hours,
+        });
+      }
+    }
+  }
+  return s;
+}
+
+// ── ESTADO GLOBAL ─────────────────────────────────────
+let activeSq='all', activeView='timeline';
+let schedResult=runScheduler();
+let sched=buildSchedFromTasks(schedResult.tasks);
+
+function reRunScheduler(){
+  schedResult=runScheduler();
+  sched=buildSchedFromTasks(schedResult.tasks);
+  renderAll();
+  showToast();
+}
+
+// ── CAPACIDADE ───────────────────────────────────────
+function calcCap(mid,entries){
+  if(!entries||!entries.length) return{pct:0,cls:''};
+  const m=TEAM.find(t=>t.id===mid);
+  const hpd=m?.hoursPerDay||8;
+  const totalUsed=entries.reduce((s,e)=>s+(e.hours||0),0);
+  const pct=totalUsed/hpd;
+  const cls=pct>1.05?'over':pct>=0.95?'full':pct>0?'ok':'';
+  return{pct,cls};
+}
+
+// ── RENDER ALL ────────────────────────────────────────
+function renderAll(){
+  renderCapRow();
+  if(activeView==='timeline') renderTimeline();
+  else renderCalendar();
+  updateSchedInfo();
+}
+
+function updateSchedInfo(){
+  const total=schedResult.tasks.size;
+  const done=[...schedResult.tasks.values()].filter(t=>t.done).length;
+  document.getElementById('sched-info').textContent=`${total} etapas agendadas automaticamente`;
+}
+
+function setSq(sq,btn){
+  activeSq=sq;
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderAll();
+}
+function setView(v){
+  activeView=v;
+  document.getElementById('view-tl').style.display=v==='timeline'?'':'none';
+  document.getElementById('view-cal').style.display=v==='calendar'?'':'none';
+  document.getElementById('vt').classList.toggle('on',v==='timeline');
+  document.getElementById('vc').classList.toggle('on',v==='calendar');
+  renderAll();
+}
+
+// ── CAP SUMMARY ───────────────────────────────────────
+function renderCapRow(){
+  const members=TEAM.filter(m=>activeSq==='all'||!m.squad||m.squad===activeSq);
+  let h='';
+  for(const m of members){
+    let act=0,totalH=0,capH=0;
+    for(let d=1;d<=DIM;d++){
+      if(isWE(d)) continue;
+      const e=sched[m.id][d]||[];
+      if(!e.length) continue;
+      act++;
+      totalH+=e.reduce((s,x)=>s+(x.hours||0),0);
+      capH+=m.hoursPerDay;
+    }
+    const pct=capH>0?Math.min(totalH/capH*100,100):0;
+    const fc=pct>90?'#f59e0b':pct>75?'#10b981':'#06b6d4';
+    h+=`<div class="cap-card">
+      <div class="cap-nm">${m.name}</div>
+      <div class="cap-st" style="color:${m.clr}">${Math.round(totalH)}h / ${capH}h</div>
+      <div class="cap-bar"><div class="cap-fill" style="width:${pct}%;background:${fc}"></div></div>
+    </div>`;
+  }
+  document.getElementById('cap-row').innerHTML=h;
+}
+
+// ── TIMELINE ──────────────────────────────────────────
+function renderTimeline(){
+  const members=TEAM.filter(m=>activeSq==='all'||!m.squad||m.squad===activeSq);
+  const cols=`150px repeat(${DIM},54px)`;
+  let hdr='<div style="min-width:150px;padding-right:6px"></div>';
+  for(let d=1;d<=DIM;d++){
+    const we=isWE(d),tod=d===TODAY,dw=dow(d).slice(0,3);
+    hdr+=`<div class="tl-dhdr${we?' we':''}${tod?' tod':''}"><div class="dow">${dw}</div><div>${d}</div></div>`;
+  }
+  let rows='';
+  for(const m of members){
+    let cells=`<div class="tl-person"><div class="tl-pcard" style="border-left:3px solid ${m.clr}">
+      <div class="tl-pname">${m.name}</div>
+      <div class="tl-prole">${ROLE_LABELS[m.roleId]||m.roleId}</div>
+      ${m.squad?`<div class="tl-psq">Squad ${m.squad}</div>`:`<div class="tl-psq" style="color:#f97316">Compartilhado · ${m.hoursPerDay}h/dia</div>`}
+    </div></div>`;
+    for(let d=1;d<=DIM;d++){
+      if(isWE(d)){cells+=`<div class="tl-cell we"></div>`;continue;}
+      const entries=sched[m.id][d]||[];
+      const tod=d===TODAY;
+      if(!entries.length){cells+=`<div class="tl-cell empty${tod?' tod':''}"></div>`;continue;}
+      const hpd=m.hoursPerDay;
+      const usedH=entries.reduce((s,e)=>s+(e.hours||0),0);
+      const pct=usedH/hpd;
+      const cls=pct>1.05?'over':pct>=0.95?'full':'ok';
+      const fp=Math.min(pct*100,100);
+      const fc=cls==='over'?'#ef4444':cls==='full'?'#f59e0b':'#10b981';
+      let chips='';
+      for(const e of entries){
+        const sm=FLOW.find(f=>f.id===e.step)||{icon:'',clr:'#94a3b8'};
+        const cc=e.status==='done'?'done':e.status==='late'?'late':e.status==='in_progress'?'prog':'todo';
+        chips+=`<span class="chip ${cc}" style="border-left:2px solid ${sm.clr}" title="${e.client.name} · ${sm.lbl||e.step} (${e.hours}h)">${sm.icon} ${e.client.name.split(' ')[0]}</span>`;
+      }
+      cells+=`<div class="tl-cell ${cls}${tod?' tod':''}" onclick="openDayM('${m.id}',${d})">
+        ${chips}
+        <div class="cbar"><div class="cbar-fill" style="width:${fp}%;background:${fc}"></div></div>
+      </div>`;
+    }
+    rows+=`<div style="display:contents">${cells}</div>`;
+  }
+  document.getElementById('view-tl').innerHTML=`<div class="tl-wrap"><div class="tl-grid" style="grid-template-columns:${cols}">
+    <div style="display:contents">${hdr}</div>${rows}
+  </div></div>`;
+  setTimeout(()=>{const w=document.querySelector('.tl-wrap');if(w) w.scrollLeft=Math.max(0,(TODAY-5)*56);},60);
+}
+
+// ── CALENDAR ──────────────────────────────────────────
+function renderCalendar(){
+  const fd=new Date(YEAR,MONTH,1).getDay();
+  const offset=fd===0?6:fd-1;
+  let h='';
+  ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].forEach(d=>h+=`<div class="cal-dhdr">${d}</div>`);
+  for(let i=0;i<offset;i++) h+='<div class="cal-cell om"></div>';
+  for(let d=1;d<=DIM;d++){
+    const we=isWE(d),tod=d===TODAY;
+    const byStep={};
+    for(const m of TEAM){
+      if(activeSq!=='all'&&m.squad&&m.squad!==activeSq) continue;
+      for(const e of (sched[m.id][d]||[])){
+        if(!byStep[e.step]) byStep[e.step]=[];
+        byStep[e.step].push({...e,member:m});
+      }
+    }
+    let chips='';
+    for(const[step,entries] of Object.entries(byStep)){
+      const sm=FLOW.find(f=>f.id===step)||{icon:'',lbl:step,ab:step,clr:'#94a3b8'};
+      const done=entries.filter(e=>e.status==='done').length;
+      const late=entries.filter(e=>e.status==='late').length;
+      const tot=entries.length;
+      const clr=late>0?'#ef4444':done===tot?'#10b981':'#6366f1';
+      chips+=`<div class="cal-chip" style="background:${clr}18;color:${clr}" onclick="openDayStep(${d},'${step}')">
+        <span>${sm.icon}</span><span>${sm.ab||sm.lbl}</span>
+        <span style="margin-left:auto;font-weight:600">${done}/${tot}${late?` +${late}🔴`:''}</span>
+      </div>`;
+    }
+    h+=`<div class="cal-cell${we?' we':''}${tod?' tod':''}">
+      <div class="cal-dn${tod?' t':''}">${d}</div>${chips}
+    </div>`;
+  }
+  document.getElementById('view-cal').innerHTML=`<div class="cal-wrap"><div class="cal-grid">${h}</div></div>`;
+}
+
+// ── MODAIS ────────────────────────────────────────────
+const stMap={done:'✅ Concluído',in_progress:'🔄 Em andamento',late:'🔴 Atrasado',todo:'⬜ Pendente',awaiting:'⏳ Aguardando cliente',na:'—'};
+
+function openDayM(mid,day){
+  const m=TEAM.find(t=>t.id===mid);
+  const entries=sched[mid][day]||[];
+  if(!entries.length) return;
+  const hpd=m.hoursPerDay;
+  const usedH=entries.reduce((s,e)=>s+(e.hours||0),0);
+  const pct=Math.round(usedH/hpd*100);
+  const pctClr=pct>100?'#ef4444':pct>=90?'#f59e0b':'#10b981';
+  let h=`<div class="mtitle">${m.name} · ${dow(day)}, ${day} de junho</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${ROLE_LABELS[m.roleId]||m.roleId}${m.squad?' · Squad '+m.squad:' · Compartilhado'}</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:8px 10px;background:var(--bg3);border-radius:8px">
+      <span style="font-size:12px;color:var(--text2)">Carga do dia</span>
+      <div class="hbar-wrap"><div class="hbar-fill" style="width:${Math.min(pct,100)}%;background:${pctClr}"></div></div>
+      <span style="font-size:12px;font-weight:700;color:${pctClr}">${usedH}h / ${hpd}h (${pct}%)</span>
+    </div>`;
+  for(const e of entries){
+    const sm=FLOW.find(f=>f.id===e.step)||{icon:'',lbl:e.step,clr:'#94a3b8'};
+    h+=`<div class="mrow">
+      <div style="font-size:20px">${sm.icon}</div>
+      <div class="mrow-main">
+        <div class="mrow-name">${e.client.name} ${e.client.type==='tcv'?'<span style="font-size:10px;background:rgba(99,102,241,.2);color:#a5b4fc;padding:1px 5px;border-radius:3px;font-weight:400">TCV</span>':''}</div>
+        <div class="mrow-sub">${sm.lbl||e.step} · <strong>${e.hours}h</strong></div>
+      </div>
+      <div style="font-size:12px;text-align:right">${stMap[e.status]||e.status}</div>
+    </div>`;
+  }
+  openM(h);
+}
+
+function openDayStep(day,step){
+  const sm=FLOW.find(f=>f.id===step)||{icon:'',lbl:step,clr:'#94a3b8'};
+  const entries=[];
+  for(const m of TEAM) for(const e of (sched[m.id][day]||[])) if(e.step===step) entries.push({...e,member:m});
+  const done=entries.filter(e=>e.status==='done').length;
+  const late=entries.filter(e=>e.status==='late').length;
+  const sorted=[...entries].sort((a,b)=>{const o={late:0,in_progress:1,awaiting:2,todo:3,done:4};return(o[a.status]||3)-(o[b.status]||3);});
+  let h=`<div class="mtitle">${sm.icon} ${sm.lbl||step} · ${dow(day)}, dia ${day}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">${done}/${entries.length} concluídos${late?` · <span style="color:#ef4444">${late} atrasados</span>`:''}</div>`;
+  for(const e of sorted) h+=`<div class="mrow">
+    <div style="width:8px;height:8px;border-radius:50%;background:${e.member.clr};flex-shrink:0"></div>
+    <div class="mrow-main">
+      <div class="mrow-name">${e.client.name}</div>
+      <div class="mrow-sub">${e.member.name} · Squad ${e.client.sq||'—'} · ${e.hours}h</div>
+    </div>
+    <div style="font-size:12px">${stMap[e.status]||e.status}</div>
+  </div>`;
+  openM(h);
+}
+
+function openM(html){document.getElementById('mbody').innerHTML=html;document.getElementById('mov').classList.add('open');}
+function closeM(){document.getElementById('mov').classList.remove('open');}
+
+// ── FLUXO TAB ─────────────────────────────────────────
+function renderFluxo(){
+  // Diagrama de fases
+  const phases=[
+    {lbl:'Pré-entrega',ids:['brain','pct','pla','cap','edt','des','rev']},
+    {lbl:'Pós-entrega',ids:['ent','aju','age']},
+  ];
+  let diag='';
+  for(let i=0;i<phases.length;i++){
+    const ph=phases[i];
+    let nodes='';
+    for(const sid of ph.ids){
+      const s=FLOW.find(f=>f.id===sid);if(!s) continue;
+      nodes+=`<div class="flow-step-node" style="background:${s.clr}18;border-color:${s.clr}33"
+        onclick="openStepModal('${s.id}')">
+        <div class="flow-step-name" style="color:${s.clr}">${s.icon} ${s.lbl}</div>
+        <div class="flow-step-meta">${s.hours}h · ${ROLE_LABELS[s.roleId]||s.roleId}${s.optional?' · opcional':''}</div>
+      </div>`;
+    }
+    diag+=`<div class="flow-phase"><div class="flow-phase-lbl">${ph.lbl}</div>${nodes}</div>`;
+    if(i<phases.length-1) diag+='<div class="flow-arrow">→</div>';
+  }
+  document.getElementById('flow-diagram').innerHTML=`<div class="flow-diagram">${diag}</div>`;
+
+  // Tabela
+  let rows='';
+  for(const s of FLOW){
+    const deps=s.dependsOn.map(d=>{const f=FLOW.find(x=>x.id===d);return f?`<span class="dep-chip">${f.icon} ${f.lbl}</span>`:d;}).join(' ');
+    rows+=`<tr>
+      <td><span style="color:${s.clr};font-weight:600">${s.icon} ${s.lbl}</span></td>
+      <td style="color:var(--text2)">${ROLE_LABELS[s.roleId]||s.roleId}</td>
+      <td><strong>${s.hours}h</strong> <span style="color:var(--text2)">/cliente</span></td>
+      <td>${deps||'<span style="color:#475569">—</span>'}</td>
+      <td><span style="${s.optional?'color:#f59e0b':'color:#475569'}">${s.optional?'✓ sim':'não'}</span></td>
+      <td><button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="openStepModal('${s.id}')">✏️</button></td>
+    </tr>`;
+  }
+  document.getElementById('flow-tbody').innerHTML=rows;
+}
+
+function openStepModal(stepId){
+  const s=FLOW.find(f=>f.id===stepId);
+  if(!s) return;
+  const depOpts=FLOW.filter(f=>f.id!==stepId).map(f=>`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer">
+    <input type="checkbox" value="${f.id}"${s.dependsOn.includes(f.id)?' checked':''}> ${f.icon} ${f.lbl}
+  </label>`).join('');
+  const roleOpts=Object.entries(ROLE_LABELS).map(([k,v])=>`<option value="${k}"${s.roleId===k?' selected':''}>${v}</option>`).join('');
+  document.getElementById('mbody-step').innerHTML=`
+    <div class="mtitle">${s.icon} Editar: ${s.lbl}</div>
+    <div class="fld-row">
+      <div class="fld-group">
+        <label class="fld-label">Horas por cliente</label>
+        <input class="fld-num" type="number" id="step-hours" value="${s.hours}" min="0.25" max="24" step="0.25">
+      </div>
+      <div class="fld-group">
+        <label class="fld-label">Responsável</label>
+        <select class="fld-input" id="step-role">${roleOpts}</select>
+      </div>
+    </div>
+    <div class="fld-group">
+      <label class="fld-label">Depende de</label>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px">${depOpts}</div>
+    </div>
+    <div class="fld-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="step-optional"${s.optional?' checked':''}>
+        <span class="fld-label" style="margin:0">Etapa opcional (nem todos os clientes têm)</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveStep('${stepId}')">💾 Salvar e Reagendar</button>
+      <button class="btn btn-ghost" onclick="closeStepM()">Cancelar</button>
+    </div>`;
+  document.getElementById('mov-step').classList.add('open');
+}
+
+function saveStep(stepId){
+  const s=FLOW.find(f=>f.id===stepId);if(!s) return;
+  s.hours=parseFloat(document.getElementById('step-hours').value)||s.hours;
+  s.roleId=document.getElementById('step-role').value;
+  s.optional=document.getElementById('step-optional').checked;
+  s.dependsOn=[...document.querySelectorAll('#mbody-step input[type=checkbox][value]')]
+    .filter(cb=>cb.value&&cb.checked).map(cb=>cb.value);
+  closeStepM();
+  reRunScheduler();
+  renderFluxo();
+}
+
+function closeStepM(){document.getElementById('mov-step').classList.remove('open');}
+
+// ── EQUIPE TAB ────────────────────────────────────────
+function renderEquipe(){
+  let h='';
+  for(const m of TEAM){
+    const sqClr=m.squad==='A'?'#6366f1':m.squad==='B'?'#10b981':'#f97316';
+    const sqLbl=m.squad||'Compartilhado';
+    // Horas totais alocadas no mês
+    let totalH=0;
+    for(let d=1;d<=DIM;d++){
+      const e=sched[m.id][d]||[];
+      totalH+=e.reduce((s,x)=>s+(x.hours||0),0);
+    }
+    const maxH=WORKING_DAYS.length*m.hoursPerDay;
+    const pct=maxH>0?Math.round(totalH/maxH*100):0;
+    const pClr=pct>90?'#f59e0b':pct>50?'#10b981':'#94a3b8';
+    h+=`<div class="eq-card">
+      <div class="eq-card-hdr">
+        <div class="eq-dot" style="background:${m.clr}"></div>
+        <div style="flex:1">
+          <div class="eq-name">${m.name}</div>
+          <div class="eq-role">${ROLE_LABELS[m.roleId]||m.roleId}</div>
+        </div>
+        <span class="badge" style="background:${sqClr}18;color:${sqClr}">Squad ${sqLbl}</span>
+      </div>
+      <div class="eq-caps">
+        <div class="eq-cap-row">
+          <span class="eq-cap-lbl">Jornada</span>
+          <span class="eq-cap-val">${m.hoursPerDay}h/dia · ${m.contract==='estagiario'?'Estagiário':'CLT'}</span>
+        </div>
+        <div class="eq-cap-row">
+          <span class="eq-cap-lbl">Capacidade mensal</span>
+          <span class="eq-cap-val">${maxH}h disponíveis</span>
+        </div>
+        <div class="eq-cap-row">
+          <span class="eq-cap-lbl">Horas alocadas</span>
+          <span class="eq-cap-val" style="color:${pClr}">${Math.round(totalH)}h (${pct}%)</span>
+        </div>
+      </div>
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div style="height:100%;width:${Math.min(pct,100)}%;background:${pClr};border-radius:2px"></div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('eq-grid').innerHTML=h;
+}
+
+// ── RADAR CEO ─────────────────────────────────────────
+function renderRadar(){
+  const all=[];
+  for(const m of TEAM) for(const[day,entries] of Object.entries(sched[m.id]))
+    for(const e of entries) all.push({...e,day:+day,member:m});
+
+  const late=all.filter(e=>e.status==='late');
+  const await_=all.filter(e=>e.status==='awaiting');
+  const week=all.filter(e=>e.day>=TODAY&&e.day<=TODAY+4);
+
+  // Colaboradores com carga alta (>90% do dia)
+  const overloaded=[];
+  for(const m of TEAM) for(const[day,entries] of Object.entries(sched[m.id])){
+    const usedH=entries.reduce((s,e)=>s+(e.hours||0),0);
+    const pct=usedH/m.hoursPerDay;
+    if(pct>1.0) overloaded.push({member:m,day:+day,pct:Math.round(pct*100)});
+  }
+
+  // Tarefas que vão além do mês
+  const overflow=[...schedResult.tasks.values()].filter(t=>!t.done||t.hoursLeft>0);
+
+  document.getElementById('rgrid').innerHTML=`
+    <div class="rcard"><div class="rcard-t">🔴 Atrasados (${late.length})</div>
+      ${late.length?late.map(e=>`<div class="ri"><span>${e.client.name} · ${e.step}</span><span class="badge br">Atrasado</span></div>`).join(''):'<div class="ri" style="justify-content:center;color:#10b981">Nenhum ✅</div>'}
+    </div>
+    <div class="rcard"><div class="rcard-t">⏳ Aguardando cliente (${await_.length})</div>
+      ${await_.length?await_.map(e=>`<div class="ri"><span>${e.client.name} · ${e.step}</span><span class="badge by">Pendente</span></div>`).join(''):'<div class="ri" style="justify-content:center;color:#10b981">Nenhum ✅</div>'}
+    </div>
+    <div class="rcard"><div class="rcard-t">📅 Esta semana (dias ${TODAY}–${TODAY+4})</div>
+      ${week.length?[...new Set(week.map(e=>e.client.name+' · '+e.step))].slice(0,8).map(s=>`<div class="ri"><span>${s}</span></div>`).join(''):'<div class="ri" style="justify-content:center">Sem tarefas</div>'}
+    </div>
+    <div class="rcard"><div class="rcard-t">⚠️ Dias com sobrecarga (${overloaded.length})</div>
+      ${overloaded.length?overloaded.map(o=>`<div class="ri"><span>${o.member.name} · dia ${o.day}</span><span class="badge br">${o.pct}%</span></div>`).join(''):'<div class="ri" style="justify-content:center;color:#10b981">Equipe dentro da capacidade ✅</div>'}
+    </div>
+    <div class="rcard"><div class="rcard-t">📦 Tarefas não alocadas no mês (${overflow.length})</div>
+      ${overflow.length?overflow.slice(0,6).map(t=>`<div class="ri"><span>${t.client.name} · ${t.step.id}</span><span class="badge br">${t.hoursLeft}h restantes</span></div>`).join(''):'<div class="ri" style="justify-content:center;color:#10b981">Tudo alocado ✅</div>'}
+    </div>
+    <div class="rcard"><div class="rcard-t">📞 Contato diário (meta: 100%)</div>
+      ${CLIENTS.filter(c=>c.type==='mrr').slice(0,5).map(c=>`<div class="ri"><span>${c.name}</span><span class="badge by">Verificar</span></div>`).join('')}
+      <div style="font-size:11px;color:var(--text2);padding-top:8px">Heads de conta devem contatar todos os clientes diariamente</div>
+    </div>`;
+}
+
+// ── RELATÓRIO ─────────────────────────────────────────
+function renderRelatorio(){
+  const tasks=[...schedResult.tasks.values()];
+  const tot=tasks.length;
+  const done=tasks.filter(t=>t.done).length;
+  const notAllocated=tasks.filter(t=>!t.done).length;
+  const late=CLIENTS.flatMap(c=>Object.entries(c.st||{}).filter(([,v])=>v==='late')).length;
+  const totalH=Object.values(schedResult.used).flatMap(days=>Object.values(days)).reduce((s,h)=>s+h,0);
+  const kpi=(l,v,s,c)=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val" style="color:${c}">${v}</div><div class="kpi-sub">${s}</div></div>`;
+  document.getElementById('relatorio').innerHTML=`
+    <h2 style="margin-bottom:16px;font-size:15px">Relatório Operacional — Junho 2026</h2>
+    <div class="kpi-grid">
+      ${kpi('Tarefas no mês',tot,'etapas × clientes','#6366f1')}
+      ${kpi('Alocadas',done,`${Math.round(done/tot*100)}% pelo scheduler`,'#10b981')}
+      ${kpi('Não alocadas',notAllocated,'ultrapassam o mês','#ef4444')}
+      ${kpi('Horas de produção',Math.round(totalH)+'h','total da equipe no mês','#06b6d4')}
+      ${kpi('Etapas atrasadas',late,'status late nos clientes','#f59e0b')}
+    </div>
+    <div class="insight"><div style="font-weight:700;margin-bottom:10px">🔍 Gargalos identificados pelo scheduler</div><ul>
+      <li><strong>Estrategistas (Camila / Rafaela)</strong>: PCT + PLA ocupam ~65% do mês — são o teto de clientes por squad</li>
+      <li><strong>Studio Mova e Click Studio</strong>: REV atrasada bloqueia Entrega desta semana</li>
+      <li><strong>João (AV1)</strong>: faz CAP + EDT elaborado — dias de captação e edição podem conflitar se mais clientes forem adicionados</li>
+    </ul></div>
+    <div class="ceo-box"><div style="font-weight:700;margin-bottom:10px;color:#a5b4fc">📋 Decisões para a CEO</div><ul>
+      <li>Ajustar horas por etapa na aba Fluxo e clicar "Reagendar" para ver o impacto no calendário</li>
+      <li>Cobrar follow-up diário das heads com Café Raízes e Casa Verde — aprovação parada</li>
+      <li>Definir divisão de EDT entre João e Mari para julho antes do fechamento da pauta</li>
+    </ul></div>`;
+}
+
+// ── TABS ──────────────────────────────────────────────
+function showTab(id,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('tab-'+id).classList.add('on');
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(id==='fluxo') renderFluxo();
+  else if(id==='equipe') renderEquipe();
+  else if(id==='radar') renderRadar();
+  else if(id==='relatorio') renderRelatorio();
+}
+
+function showToast(){
+  const t=document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+renderAll();
+</script>
+</body>
+</html>

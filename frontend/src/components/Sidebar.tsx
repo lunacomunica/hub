@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +27,7 @@ const COMERCIAL_ITEMS = [
   { to: '/produtos',      label: 'Produtos & Serviços', icon: Package },
   { to: '/vendas',        label: 'Planejamento',        icon: Target },
   { to: '/oportunidades', label: 'Oportunidades',       icon: Briefcase },
+  { to: '/rotina',        label: 'Rotina Comercial',    icon: ListChecks },
 ];
 
 export default function Sidebar() {

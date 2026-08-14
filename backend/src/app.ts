@@ -22,6 +22,7 @@ import supplierRulesRouter from './routes/supplier-rules';
 import settingsRouter from './routes/settings';
 import tcvRouter from './routes/tcv';
 import referralPrizesRouter from './routes/referral-prizes';
+import routineRouter from './routes/routine';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -248,6 +249,75 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS last_activity_type VARCHAR(20) DEFAULT NULL`);
   } catch (e) { console.error('[migration] opportunities last_activity fields error:', e); }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routine_items (
+        id SERIAL PRIMARY KEY,
+        label TEXT NOT NULL,
+        description TEXT,
+        category VARCHAR(50),
+        type VARCHAR(10) NOT NULL DEFAULT 'daily',
+        weekday INTEGER,
+        position INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routine_checks (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        item_id INTEGER REFERENCES routine_items(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        checked_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, item_id, date)
+      )
+    `);
+    // Seed initial items if table is empty
+    const { rows: [{ count }] } = await pool.query(`SELECT COUNT(*) as count FROM routine_items`);
+    if (Number(count) === 0) {
+      const seed = [
+        // Daily (type='daily')
+        ['Responder novos leads', 'Atender todos os leads que chegaram', 'Atendimento', 'daily', null, 0],
+        ['Fazer follow-ups', 'Retomar contatos pendentes e confirmar próximos passos', 'Follow-up', 'daily', null, 1],
+        ['Atualizar CRM', 'Registrar todas as interações e atualizar etapas', 'CRM', 'daily', null, 2],
+        ['Confirmar agenda do dia', 'Verificar reuniões e compromissos agendados', 'Organização', 'daily', null, 3],
+        ['Registrar informações', 'Inserir dados de contatos e interações no sistema', 'CRM', 'daily', null, 4],
+        // Segunda (weekday=1)
+        ['Revisar metas da semana', 'Verificar onde está em relação às metas e ajustar plano', 'Planejamento', 'weekday', 1, 0],
+        ['Organizar agenda', 'Planejar reuniões e atividades da semana', 'Planejamento', 'weekday', 1, 1],
+        ['Revisar pipeline', 'Avaliar todas as oportunidades abertas e priorizar', 'Planejamento', 'weekday', 1, 2],
+        ['Planejar prospecção da semana', 'Definir canais e quantidade de contatos a prospectar', 'Planejamento', 'weekday', 1, 3],
+        // Terça (weekday=2)
+        ['Prospectar novos clientes', 'Buscar e abordar potenciais clientes qualificados', 'Prospecção', 'weekday', 2, 0],
+        ['Ativar networking', 'Movimentar rede de contatos e parcerias', 'Prospecção', 'weekday', 2, 1],
+        ['Buscar indicações', 'Solicitar indicações de clientes e parceiros atuais', 'Prospecção', 'weekday', 2, 2],
+        ['Fazer cold outbound', 'Entrar em contato com leads frios via canais definidos', 'Prospecção', 'weekday', 2, 3],
+        // Quarta (weekday=3)
+        ['Realizar reuniões comerciais', 'Conduzir diagnóstico e apresentar proposta de valor', 'Reuniões', 'weekday', 3, 0],
+        ['Diagnosticar clientes', 'Entender dores, objetivos e momento do lead', 'Reuniões', 'weekday', 3, 1],
+        ['Apresentar proposta de valor', 'Mostrar como a solução resolve o problema do cliente', 'Reuniões', 'weekday', 3, 2],
+        ['Definir próximo passo na reunião', 'Não sair da call sem próxima ação definida', 'Reuniões', 'weekday', 3, 3],
+        // Quinta (weekday=4)
+        ['Retomar propostas abertas', 'Confirmar recebimento e tirar dúvidas', 'Follow-up', 'weekday', 4, 0],
+        ['Confirmar decisões pendentes', 'Fazer contato ativo para avançar oportunidades', 'Follow-up', 'weekday', 4, 1],
+        ['Recuperar oportunidades paradas', 'Reativar leads que pararam de responder', 'Follow-up', 'weekday', 4, 2],
+        ['Negociar pendências', 'Resolver objeções e encaminhar fechamentos', 'Follow-up', 'weekday', 4, 3],
+        // Sexta (weekday=5)
+        ['Atualizar CRM (fechamento semanal)', 'Garantir que todas as oportunidades estão atualizadas', 'Gestão', 'weekday', 5, 0],
+        ['Revisar indicadores da semana', 'Analisar contatos, reuniões, propostas e conversões', 'Gestão', 'weekday', 5, 1],
+        ['Identificar gargalos', 'Avaliar onde as oportunidades estão travando no funil', 'Gestão', 'weekday', 5, 2],
+        ['Planejar próxima semana', 'Definir prioridades e ações para a semana seguinte', 'Gestão', 'weekday', 5, 3],
+      ];
+      for (const [label, description, category, type, weekday, position] of seed) {
+        await pool.query(
+          `INSERT INTO routine_items (label, description, category, type, weekday, position) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [label, description, category, type, weekday, position]
+        );
+      }
+    }
+  } catch (e) { console.error('[migration] routine tables error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
@@ -272,6 +342,7 @@ app.use('/api/supplier-rules',  requireAuth, supplierRulesRouter);
 app.use('/api/settings',        requireAuth, settingsRouter);
 app.use('/api/tcv',             requireAuth, tcvRouter);
 app.use('/api/referral-prizes', requireAuth, referralPrizesRouter);
+app.use('/api/routine',         requireAuth, routineRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

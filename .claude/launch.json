@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--workspace=frontend"],
       "port": 5175,
       "cwd": "/Users/vanessaraeski/financeiro-agencia"
+    },
+    {
+      "name": "operacao-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "9999"],
+      "port": 9999,
+      "cwd": "/Users/vanessaraeski/financeiro-agencia"
     }
   ]
 }
