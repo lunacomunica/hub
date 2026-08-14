@@ -318,6 +318,11 @@ export async function runMigrations() {
     }
   } catch (e) { console.error('[migration] routine tables error:', e); }
 
+  try {
+    await pool.query(`ALTER TABLE routine_items ADD COLUMN IF NOT EXISTS deliverables TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE routine_items ADD COLUMN IF NOT EXISTS how_to TEXT DEFAULT NULL`);
+  } catch (e) { console.error('[migration] routine_items deliverables/how_to error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 

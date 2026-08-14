@@ -11,6 +11,8 @@ interface RoutineItem {
   weekday: number | null;
   position: number;
   active: boolean;
+  deliverables: string | null;
+  how_to: string | null;
 }
 
 interface PerformanceRow {
@@ -76,13 +78,18 @@ function ProgressRing({ pct, size = 48, stroke = 4, color = '#3b82f6' }: { pct: 
 }
 
 // ── Admin: manage items modal ─────────────────────────────────────────────────
-const EMPTY_ITEM = { label: '', description: '', category: '', type: 'daily' as 'daily' | 'weekday', weekday: null as number | null, position: 0, active: true };
+const EMPTY_ITEM = { label: '', description: '', category: '', type: 'daily' as 'daily' | 'weekday', weekday: null as number | null, position: 0, active: true, deliverables: [] as string[], how_to: '' };
 
 function ItemModal({ item, onSave, onClose }: {
   item: Partial<RoutineItem> | null;
   onSave: (data: typeof EMPTY_ITEM) => void;
   onClose: () => void;
 }) {
+  const parseDeliverables = (d: string | null | undefined): string[] => {
+    if (!d) return [];
+    try { const p = JSON.parse(d); return Array.isArray(p) ? p : []; } catch { return []; }
+  };
+
   const [form, setForm] = useState({
     ...EMPTY_ITEM,
     ...(item ? {
@@ -93,8 +100,11 @@ function ItemModal({ item, onSave, onClose }: {
       weekday: item.weekday ?? null,
       position: item.position ?? 0,
       active: item.active !== false,
+      deliverables: parseDeliverables((item as RoutineItem).deliverables),
+      how_to: (item as RoutineItem).how_to || '',
     } : {}),
   });
+  const [newDeliverable, setNewDeliverable] = useState('');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
@@ -154,6 +164,37 @@ function ItemModal({ item, onSave, onClose }: {
               </div>
             </div>
           )}
+          {/* Entregas esperadas */}
+          <div>
+            <label className="label-dark block mb-1">Entregas esperadas</label>
+            <div className="space-y-1.5 mb-2">
+              {form.deliverables.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-emerald-400">✓</span>
+                  <span className="text-sm text-slate-300 flex-1">{d}</span>
+                  <button onClick={() => setForm(f => ({ ...f, deliverables: f.deliverables.filter((_, j) => j !== i) }))}
+                    className="text-slate-600 hover:text-red-400 transition-colors"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input className="input-dark flex-1 text-sm" value={newDeliverable}
+                onChange={e => setNewDeliverable(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && newDeliverable.trim()) { setForm(f => ({ ...f, deliverables: [...f.deliverables, newDeliverable.trim()] })); setNewDeliverable(''); } }}
+                placeholder="Ex: CRM atualizado" />
+              <button onClick={() => { if (newDeliverable.trim()) { setForm(f => ({ ...f, deliverables: [...f.deliverables, newDeliverable.trim()] })); setNewDeliverable(''); } }}
+                className="btn-primary text-xs px-3">+</button>
+            </div>
+          </div>
+
+          {/* Como executar */}
+          <div>
+            <label className="label-dark block mb-1">Como executar (processo padrão)</label>
+            <textarea className="input-dark w-full text-sm" rows={4} value={form.how_to}
+              onChange={e => setForm(f => ({ ...f, how_to: e.target.value }))}
+              placeholder={'1. Abra o CRM\n2. Filtre oportunidades sem follow-up\n3. ...'} />
+          </div>
+
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
             <span className="text-sm text-slate-300">Ativo</span>
@@ -252,6 +293,13 @@ export default function RotinaComericial() {
   const recentDays = performance.slice(0, 5);
 
   const toggleCategory = (key: string) => setExpandedCategories(p => ({ ...p, [key]: !p[key] }));
+  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+  const toggleItem = (id: number) => setExpandedItems(p => ({ ...p, [id]: !p[id] }));
+
+  const parseDeliverables = (d: string | null): string[] => {
+    if (!d) return [];
+    try { const p = JSON.parse(d); return Array.isArray(p) ? p : []; } catch { return []; }
+  };
 
   if (loading) return (
     <div className="flex justify-center py-16">
@@ -326,24 +374,55 @@ export default function RotinaComericial() {
                   <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-2">Atividades diárias</div>
                   {dailyItems.map(item => {
                     const checked = checkedIds.includes(item.id);
+                    const expanded = expandedItems[item.id] ?? false;
+                    const deliverables = parseDeliverables(item.deliverables);
+                    const hasDetail = deliverables.length > 0 || !!item.how_to;
                     return (
-                      <button key={item.id} onClick={() => toggle(item.id)}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all group"
+                      <div key={item.id} className="rounded-lg overflow-hidden transition-all"
                         style={{ background: checked ? 'rgba(52,211,153,0.08)' : 'rgba(15,23,42,0.5)', border: `1px solid ${checked ? 'rgba(52,211,153,0.2)' : 'rgba(59,130,246,0.08)'}` }}>
-                        <div className="shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-all"
-                          style={{ border: `1.5px solid ${checked ? '#34d399' : '#334155'}`, background: checked ? '#34d399' : 'transparent' }}>
-                          {checked && <Check size={9} color="#000" />}
-                        </div>
-                        <span className="text-sm flex-1" style={{ color: checked ? '#64748b' : '#e2e8f0', textDecoration: checked ? 'line-through' : 'none' }}>
-                          {item.label}
-                        </span>
-                        {item.category && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0"
-                            style={{ background: `${CATEGORY_COLORS[item.category] ?? '#64748b'}18`, color: CATEGORY_COLORS[item.category] ?? '#64748b' }}>
-                            {item.category}
+                        <div className="flex items-center gap-3 px-3 py-2">
+                          <button onClick={() => toggle(item.id)} className="shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-all"
+                            style={{ border: `1.5px solid ${checked ? '#34d399' : '#334155'}`, background: checked ? '#34d399' : 'transparent' }}>
+                            {checked && <Check size={9} color="#000" />}
+                          </button>
+                          <span className="text-sm flex-1 text-left" style={{ color: checked ? '#64748b' : '#e2e8f0', textDecoration: checked ? 'line-through' : 'none' }}>
+                            {item.label}
                           </span>
+                          {item.category && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0"
+                              style={{ background: `${CATEGORY_COLORS[item.category] ?? '#64748b'}18`, color: CATEGORY_COLORS[item.category] ?? '#64748b' }}>
+                              {item.category}
+                            </span>
+                          )}
+                          {hasDetail && (
+                            <button onClick={() => toggleItem(item.id)} className="shrink-0 text-slate-600 hover:text-slate-300 transition-colors">
+                              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
+                          )}
+                        </div>
+                        {expanded && hasDetail && (
+                          <div className="px-3 pb-3 space-y-2" style={{ borderTop: '1px solid rgba(59,130,246,0.08)' }}>
+                            {deliverables.length > 0 && (
+                              <div className="pt-2">
+                                <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Entregas esperadas</div>
+                                <div className="space-y-1">
+                                  {deliverables.map((d, i) => (
+                                    <div key={i} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                      <span className="text-emerald-400">✓</span>{d}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {item.how_to && (
+                              <div className="pt-1">
+                                <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Como executar</div>
+                                <p className="text-xs text-slate-400 whitespace-pre-line leading-relaxed">{item.how_to}</p>
+                              </div>
+                            )}
+                          </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -357,21 +436,49 @@ export default function RotinaComericial() {
                   </div>
                   {todayItems.map(item => {
                     const checked = checkedIds.includes(item.id);
+                    const expanded = expandedItems[item.id] ?? false;
+                    const deliverables = parseDeliverables(item.deliverables);
+                    const hasDetail = deliverables.length > 0 || !!item.how_to;
                     return (
-                      <button key={item.id} onClick={() => toggle(item.id)}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all"
+                      <div key={item.id} className="rounded-lg overflow-hidden transition-all"
                         style={{ background: checked ? 'rgba(52,211,153,0.08)' : 'rgba(15,23,42,0.5)', border: `1px solid ${checked ? 'rgba(52,211,153,0.2)' : todayColors.border}` }}>
-                        <div className="shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-all"
-                          style={{ border: `1.5px solid ${checked ? '#34d399' : todayColors.color}`, background: checked ? '#34d399' : 'transparent' }}>
-                          {checked && <Check size={9} color="#000" />}
+                        <div className="flex items-center gap-3 px-3 py-2">
+                          <button onClick={() => toggle(item.id)} className="shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-all"
+                            style={{ border: `1.5px solid ${checked ? '#34d399' : todayColors.color}`, background: checked ? '#34d399' : 'transparent' }}>
+                            {checked && <Check size={9} color="#000" />}
+                          </button>
+                          <span className="text-sm flex-1" style={{ color: checked ? '#64748b' : '#e2e8f0', textDecoration: checked ? 'line-through' : 'none' }}>
+                            {item.label}
+                          </span>
+                          {hasDetail && (
+                            <button onClick={() => toggleItem(item.id)} className="shrink-0 text-slate-600 hover:text-slate-300 transition-colors">
+                              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
+                          )}
                         </div>
-                        <span className="text-sm flex-1" style={{ color: checked ? '#64748b' : '#e2e8f0', textDecoration: checked ? 'line-through' : 'none' }}>
-                          {item.label}
-                        </span>
-                        {item.description && (
-                          <span className="text-xs text-slate-600 truncate max-w-32">{item.description}</span>
+                        {expanded && hasDetail && (
+                          <div className="px-3 pb-3 space-y-2" style={{ borderTop: `1px solid ${todayColors.border}` }}>
+                            {deliverables.length > 0 && (
+                              <div className="pt-2">
+                                <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Entregas esperadas</div>
+                                <div className="space-y-1">
+                                  {deliverables.map((d, i) => (
+                                    <div key={i} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                      <span className="text-emerald-400">✓</span>{d}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {item.how_to && (
+                              <div className="pt-1">
+                                <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Como executar</div>
+                                <p className="text-xs text-slate-400 whitespace-pre-line leading-relaxed">{item.how_to}</p>
+                              </div>
+                            )}
+                          </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

@@ -20,12 +20,13 @@ router.get('/items', async (req: Request, res: Response) => {
 router.post('/items', async (req: Request, res: Response) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
   try {
-    const { label, description, category, type, weekday, position } = req.body;
+    const { label, description, category, type, weekday, position, deliverables, how_to } = req.body;
     if (!label) return res.status(400).json({ error: 'label é obrigatório' });
     const { rows: [row] } = await pool.query(
-      `INSERT INTO routine_items (label, description, category, type, weekday, position)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [label, description || null, category || null, type || 'daily', weekday ?? null, position ?? 0]
+      `INSERT INTO routine_items (label, description, category, type, weekday, position, deliverables, how_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [label, description || null, category || null, type || 'daily', weekday ?? null, position ?? 0,
+       deliverables ? JSON.stringify(deliverables) : null, how_to || null]
     );
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: 'Erro ao criar item' }); }
@@ -34,11 +35,12 @@ router.post('/items', async (req: Request, res: Response) => {
 router.put('/items/:id', async (req: Request, res: Response) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
   try {
-    const { label, description, category, type, weekday, position, active } = req.body;
+    const { label, description, category, type, weekday, position, active, deliverables, how_to } = req.body;
     const { rows: [row] } = await pool.query(
       `UPDATE routine_items SET label=$1, description=$2, category=$3, type=$4,
-       weekday=$5, position=$6, active=$7 WHERE id=$8 RETURNING *`,
-      [label, description ?? null, category ?? null, type, weekday ?? null, position ?? 0, active !== false, req.params.id]
+       weekday=$5, position=$6, active=$7, deliverables=$8, how_to=$9 WHERE id=$10 RETURNING *`,
+      [label, description ?? null, category ?? null, type, weekday ?? null, position ?? 0, active !== false,
+       deliverables ? JSON.stringify(deliverables) : null, how_to || null, req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Item não encontrado' });
     res.json(row);
