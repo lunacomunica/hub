@@ -75,6 +75,41 @@ router.delete('/items/:id', async (req: Request, res: Response) => {
   } catch (e) { res.status(500).json({ error: 'Erro ao deletar item' }); }
 });
 
+// ── User assignments ──────────────────────────────────────────────────────────
+
+// GET /api/routine/user-assignments?user_id=
+router.get('/user-assignments', async (req: Request, res: Response) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
+  try {
+    const targetUserId = Number(req.query.user_id);
+    if (!targetUserId) return res.status(400).json({ error: 'user_id obrigatório' });
+    const { rows } = await pool.query(
+      `SELECT item_id FROM routine_item_users WHERE user_id = $1`,
+      [targetUserId]
+    );
+    res.json({ item_ids: rows.map(r => r.item_id) });
+  } catch (e) { res.status(500).json({ error: 'Erro ao buscar atribuições' }); }
+});
+
+// PUT /api/routine/user-assignments — replace all assignments for a user
+router.put('/user-assignments', async (req: Request, res: Response) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
+  try {
+    const { user_id, item_ids } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+    await pool.query(`DELETE FROM routine_item_users WHERE user_id = $1`, [user_id]);
+    if (Array.isArray(item_ids) && item_ids.length > 0) {
+      for (const itemId of item_ids) {
+        await pool.query(
+          `INSERT INTO routine_item_users (item_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [itemId, user_id]
+        );
+      }
+    }
+    res.json({ success: true, assigned: item_ids?.length ?? 0 });
+  } catch (e) { res.status(500).json({ error: 'Erro ao salvar atribuições' }); }
+});
+
 // ── Checks ────────────────────────────────────────────────────────────────────
 
 // GET /api/routine/checks?date=YYYY-MM-DD&user_id=

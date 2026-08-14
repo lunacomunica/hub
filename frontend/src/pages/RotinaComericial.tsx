@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Plus, Pencil, Trash2, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Check, Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Save } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface RoutineItem {
@@ -60,8 +60,7 @@ function localToday(): string {
 }
 
 function todayWeekday(): number {
-  const d = new Date().getDay(); // 0=sun,1=mon,...,6=sat
-  return d; // we use 1-5 for mon-fri, 0 and 6 are weekend
+  return new Date().getDay();
 }
 
 // ── Progress ring ─────────────────────────────────────────────────────────────
@@ -78,14 +77,19 @@ function ProgressRing({ pct, size = 48, stroke = 4, color = '#3b82f6' }: { pct: 
   );
 }
 
-// ── Admin: manage items modal ─────────────────────────────────────────────────
-const EMPTY_ITEM = { label: '', description: '', category: '', type: 'daily' as 'daily' | 'weekday', weekday: null as number | null, position: 0, active: true, deliverables: [] as string[], how_to: '', assigned_user_ids: [] as number[] };
+// ── Item modal (sem atribuição — gerenciado na aba Rotinas) ───────────────────
+const EMPTY_ITEM = {
+  label: '', description: '', category: '',
+  type: 'daily' as 'daily' | 'weekday',
+  weekday: null as number | null,
+  position: 0, active: true,
+  deliverables: [] as string[], how_to: '',
+};
 
-function ItemModal({ item, onSave, onClose, users }: {
+function ItemModal({ item, onSave, onClose }: {
   item: Partial<RoutineItem> | null;
   onSave: (data: typeof EMPTY_ITEM) => void;
   onClose: () => void;
-  users: { id: number; name: string }[];
 }) {
   const parseDeliverables = (d: string | null | undefined): string[] => {
     if (!d) return [];
@@ -104,14 +108,13 @@ function ItemModal({ item, onSave, onClose, users }: {
       active: item.active !== false,
       deliverables: parseDeliverables((item as RoutineItem).deliverables),
       how_to: (item as RoutineItem).how_to || '',
-      assigned_user_ids: (item as RoutineItem).assigned_user_ids ?? [],
     } : {}),
   });
   const [newDeliverable, setNewDeliverable] = useState('');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
-      <div className="card w-full max-w-md p-6 space-y-4">
+      <div className="card w-full max-w-md p-6 space-y-4" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold text-white">{item?.id ? 'Editar item' : 'Novo item'}</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors"><X size={16} /></button>
@@ -167,6 +170,7 @@ function ItemModal({ item, onSave, onClose, users }: {
               </div>
             </div>
           )}
+
           {/* Entregas esperadas */}
           <div>
             <label className="label-dark block mb-1">Entregas esperadas</label>
@@ -198,39 +202,6 @@ function ItemModal({ item, onSave, onClose, users }: {
               placeholder={'1. Abra o CRM\n2. Filtre oportunidades sem follow-up\n3. ...'} />
           </div>
 
-          {/* Atribuído a */}
-          <div>
-            <label className="label-dark block mb-1">Atribuído a <span className="text-slate-600 font-normal normal-case">(vazio = todos)</span></label>
-            {users.length === 0 ? (
-              <p className="text-xs text-slate-600">Nenhum usuário cadastrado ainda.</p>
-            ) : (
-            <div className="flex flex-wrap gap-2">
-              {users.map(u => {
-                  const selected = form.assigned_user_ids.includes(u.id);
-                  return (
-                    <button key={u.id} type="button"
-                      onClick={() => setForm(f => ({
-                        ...f,
-                        assigned_user_ids: selected
-                          ? f.assigned_user_ids.filter(id => id !== u.id)
-                          : [...f.assigned_user_ids, u.id],
-                      }))}
-                      className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
-                      style={{
-                        background: selected ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
-                        border: `1px solid ${selected ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.12)'}`,
-                        color: selected ? '#93c5fd' : '#64748b',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}>
-                      {selected ? '✓ ' : ''}{u.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
             <span className="text-sm text-slate-300">Ativo</span>
@@ -251,19 +222,26 @@ export default function RotinaComericial() {
   const isAdmin = user?.role === 'admin';
 
   const [items, setItems] = useState<RoutineItem[]>([]);
+  const [allItems, setAllItems] = useState<RoutineItem[]>([]);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
   const [performance, setPerformance] = useState<PerformanceRow[]>([]);
-  const [comercialUsers, setComercialUsers] = useState<{ id: number; name: string }[]>([]);
+  const [allUsers, setAllUsers] = useState<{ id: number; name: string }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'rotina' | 'gerenciar'>('rotina');
+  const [gerenciarTab, setGerenciarTab] = useState<'itens' | 'rotinas'>('itens');
   const [itemModal, setItemModal] = useState<Partial<RoutineItem> | null | false>(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+
+  // State for "Rotinas por usuário" sub-tab
+  const [routineUserId, setRoutineUserId] = useState<number | null>(null);
+  const [assignedItemIds, setAssignedItemIds] = useState<number[]>([]);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentSaved, setAssignmentSaved] = useState(false);
 
   const today = localToday();
   const weekday = todayWeekday();
-
-  const targetUserId = selectedUserId ?? (user?.id ?? null);
 
   const load = async () => {
     setLoading(true);
@@ -274,20 +252,37 @@ export default function RotinaComericial() {
         authFetch(`/api/routine/performance?weeks=4${isAdmin && selectedUserId ? `&user_id=${selectedUserId}` : ''}`).then(r => r.json()),
       ]);
       const activeItems = Array.isArray(itemsRes) ? itemsRes.filter((i: RoutineItem) => i.active) : [];
-      // Filter by user assignment: show if no assignments OR user is in the list
       const uid = isAdmin && selectedUserId ? selectedUserId : (user?.id ?? null);
       setItems(activeItems.filter((i: RoutineItem) =>
         !i.assigned_user_ids || i.assigned_user_ids.length === 0 || (uid && i.assigned_user_ids.includes(uid))
       ));
       setCheckedIds(Array.isArray(checksRes) ? checksRes : []);
       if (perfRes?.performance) setPerformance(perfRes.performance);
-      if (perfRes?.users) setComercialUsers(perfRes.users);
+      if (perfRes?.users) setAllUsers(perfRes.users);
     } finally { setLoading(false); }
   };
 
   const loadAllItems = async () => {
     const res = await authFetch('/api/routine/items').then(r => r.json());
-    setItems(Array.isArray(res) ? res : []);
+    setAllItems(Array.isArray(res) ? res : []);
+  };
+
+  const loadUserAssignments = async (userId: number) => {
+    const res = await authFetch(`/api/routine/user-assignments?user_id=${userId}`).then(r => r.json());
+    setAssignedItemIds(Array.isArray(res?.item_ids) ? res.item_ids : []);
+  };
+
+  const saveUserAssignments = async () => {
+    if (!routineUserId) return;
+    setAssignmentSaving(true);
+    await authFetch('/api/routine/user-assignments', {
+      method: 'PUT',
+      body: JSON.stringify({ user_id: routineUserId, item_ids: assignedItemIds }),
+    });
+    setAssignmentSaving(false);
+    setAssignmentSaved(true);
+    setTimeout(() => setAssignmentSaved(false), 2000);
+    load();
   };
 
   useEffect(() => { load(); }, [selectedUserId]);
@@ -316,7 +311,15 @@ export default function RotinaComericial() {
     loadAllItems();
   };
 
-  // Items for today's checklist
+  const toggleItem = (id: number) => setExpandedItems(p => ({ ...p, [id]: !p[id] }));
+  const toggleCategory = (key: string) => setExpandedCategories(p => ({ ...p, [key]: !p[key] }));
+
+  const parseDeliverables = (d: string | null): string[] => {
+    if (!d) return [];
+    try { const p = JSON.parse(d); return Array.isArray(p) ? p : []; } catch { return []; }
+  };
+
+  // Checklist items for today
   const dailyItems = items.filter(i => i.type === 'daily');
   const todayItems = weekday >= 1 && weekday <= 5
     ? items.filter(i => i.type === 'weekday' && i.weekday === weekday)
@@ -324,23 +327,9 @@ export default function RotinaComericial() {
   const allTodayItems = [...dailyItems, ...todayItems];
   const checkedToday = allTodayItems.filter(i => checkedIds.includes(i.id)).length;
   const pct = allTodayItems.length > 0 ? Math.round((checkedToday / allTodayItems.length) * 100) : 0;
-
   const todayColors = weekday >= 1 && weekday <= 5 ? WEEKDAY_COLORS[weekday] : { color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)' };
-
-  // Group weekday items for the "Agenda da Semana" section
-  const weekDays = [1,2,3,4,5];
-
-  // Performance: last 5 weekdays
   const recentDays = performance.slice(0, 5);
-
-  const toggleCategory = (key: string) => setExpandedCategories(p => ({ ...p, [key]: !p[key] }));
-  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
-  const toggleItem = (id: number) => setExpandedItems(p => ({ ...p, [id]: !p[id] }));
-
-  const parseDeliverables = (d: string | null): string[] => {
-    if (!d) return [];
-    try { const p = JSON.parse(d); return Array.isArray(p) ? p : []; } catch { return []; }
-  };
+  const weekDays = [1,2,3,4,5];
 
   if (loading) return (
     <div className="flex justify-center py-16">
@@ -368,7 +357,7 @@ export default function RotinaComericial() {
               className="input-dark text-sm pr-8"
               style={{ minWidth: 160 }}>
               <option value="">Minha visão</option>
-              {comercialUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           )}
           {isAdmin && (
@@ -381,16 +370,16 @@ export default function RotinaComericial() {
               <button onClick={() => { setTab('gerenciar'); loadAllItems(); }}
                 className="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
                 style={{ background: tab === 'gerenciar' ? '#3b82f6' : 'transparent', color: tab === 'gerenciar' ? '#fff' : '#64748b', border: 'none' }}>
-                Gerenciar itens
+                Gerenciar
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* ── Rotina tab ── */}
       {tab === 'rotina' && (
         <>
-          {/* Today card + mini performance */}
           <div className="grid grid-cols-1 gap-4" style={{ gridTemplateColumns: '1fr auto' }}>
             {/* Today card */}
             <div className="card p-5" style={{ border: `1px solid ${todayColors.border}`, background: `linear-gradient(135deg, rgba(10,17,38,0.9) 0%, ${todayColors.bg} 100%)` }}>
@@ -409,7 +398,6 @@ export default function RotinaComericial() {
                 </div>
               </div>
 
-              {/* Daily items */}
               {dailyItems.length > 0 && (
                 <div className="space-y-1.5 mb-3">
                   <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-2">Atividades diárias</div>
@@ -469,7 +457,6 @@ export default function RotinaComericial() {
                 </div>
               )}
 
-              {/* Today's weekday items */}
               {todayItems.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: todayColors.color }}>
@@ -525,12 +512,12 @@ export default function RotinaComericial() {
                 </div>
               )}
 
-              {weekday === 0 || weekday === 6 ? (
+              {(weekday === 0 || weekday === 6) && (
                 <p className="text-sm text-slate-500 text-center py-4">Sem checklist no fim de semana 🎉</p>
-              ) : null}
+              )}
             </div>
 
-            {/* Mini performance — last 5 days */}
+            {/* Mini performance */}
             <div className="card p-4 flex flex-col gap-2" style={{ minWidth: 160 }}>
               <div className="text-xs uppercase tracking-wider text-slate-600 font-semibold mb-1">Últimos 5 dias</div>
               {recentDays.length === 0 && <p className="text-xs text-slate-600">Sem histórico ainda</p>}
@@ -596,7 +583,7 @@ export default function RotinaComericial() {
             </div>
           </div>
 
-          {/* Performance table (admin or self) */}
+          {/* Performance table */}
           {performance.length > 0 && (
             <div className="card p-5">
               <h2 className="text-sm font-semibold text-slate-300 mb-4">Histórico das últimas 4 semanas</h2>
@@ -622,7 +609,7 @@ export default function RotinaComericial() {
                       const isToday = row.date === today;
                       return (
                         <tr key={row.date} style={{ background: isToday ? 'rgba(59,130,246,0.05)' : undefined }}>
-                          <td className="py-2 pr-4 text-slate-400 font-variant-numeric">
+                          <td className="py-2 pr-4 text-slate-400">
                             {d.toLocaleDateString('pt-BR')}
                             {isToday && <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.15)', color: '#93c5fd' }}>hoje</span>}
                           </td>
@@ -650,58 +637,193 @@ export default function RotinaComericial() {
         </>
       )}
 
+      {/* ── Gerenciar tab ── */}
       {tab === 'gerenciar' && isAdmin && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-400">{items.length} itens cadastrados</p>
-            <button onClick={() => setItemModal({})} className="btn-primary flex items-center gap-2 text-sm">
-              <Plus size={15} /> Novo item
+          {/* Sub-tab switcher */}
+          <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(59,130,246,0.12)' }}>
+            <button
+              onClick={() => { setGerenciarTab('itens'); loadAllItems(); }}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+              style={{ background: gerenciarTab === 'itens' ? 'rgba(59,130,246,0.2)' : 'transparent', color: gerenciarTab === 'itens' ? '#93c5fd' : '#64748b', border: 'none' }}>
+              Itens da rotina
+            </button>
+            <button
+              onClick={() => { setGerenciarTab('rotinas'); loadAllItems(); }}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
+              style={{ background: gerenciarTab === 'rotinas' ? 'rgba(59,130,246,0.2)' : 'transparent', color: gerenciarTab === 'rotinas' ? '#93c5fd' : '#64748b', border: 'none' }}>
+              Rotinas por usuário
             </button>
           </div>
 
-          {/* Group by type */}
-          {['daily', 'weekday'].map(type => {
-            const grouped = type === 'daily'
-              ? [{ label: 'Todo dia', items: items.filter(i => i.type === 'daily') }]
-              : [1,2,3,4,5].map(d => ({ label: `${WEEKDAY_NAMES[d]} — ${WEEKDAY_FOCUS[d]}`, wd: d, items: items.filter(i => i.type === 'weekday' && i.weekday === d) })).filter(g => g.items.length > 0);
-
-            return grouped.map(group => (
-              <div key={`${type}-${(group as any).wd ?? 'daily'}`} className="card p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  {type === 'weekday' && (group as any).wd && (
-                    <div className="w-2 h-2 rounded-full" style={{ background: WEEKDAY_COLORS[(group as any).wd]?.color }} />
-                  )}
-                  <h3 className="text-sm font-semibold text-slate-300">{group.label}</h3>
-                  <span className="text-xs text-slate-600">({group.items.length})</span>
-                </div>
-                <div className="space-y-2">
-                  {group.items.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg group"
-                      style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.08)' }}>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-slate-200 truncate">{item.label}</div>
-                        {item.description && <div className="text-xs text-slate-600 truncate">{item.description}</div>}
-                      </div>
-                      {item.category && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0"
-                          style={{ background: `${CATEGORY_COLORS[item.category] ?? '#64748b'}18`, color: CATEGORY_COLORS[item.category] ?? '#64748b' }}>
-                          {item.category}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        <button onClick={() => setItemModal(item)} className="p-1.5 rounded-lg text-slate-600 hover:text-blue-400 transition-colors">
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => deleteItem(item.id)} className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 transition-colors">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          {/* Sub-tab: Itens */}
+          {gerenciarTab === 'itens' && (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-400">{allItems.length} itens cadastrados</p>
+                <button onClick={() => setItemModal({})} className="btn-primary flex items-center gap-2 text-sm">
+                  <Plus size={15} /> Novo item
+                </button>
               </div>
-            ));
-          })}
+
+              {['daily', 'weekday'].map(type => {
+                const grouped = type === 'daily'
+                  ? [{ label: 'Todo dia', items: allItems.filter(i => i.type === 'daily') }]
+                  : [1,2,3,4,5].map(d => ({ label: `${WEEKDAY_NAMES[d]} — ${WEEKDAY_FOCUS[d]}`, wd: d, items: allItems.filter(i => i.type === 'weekday' && i.weekday === d) })).filter(g => g.items.length > 0);
+
+                return grouped.map(group => (
+                  <div key={`${type}-${(group as any).wd ?? 'daily'}`} className="card p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      {type === 'weekday' && (group as any).wd && (
+                        <div className="w-2 h-2 rounded-full" style={{ background: WEEKDAY_COLORS[(group as any).wd]?.color }} />
+                      )}
+                      <h3 className="text-sm font-semibold text-slate-300">{group.label}</h3>
+                      <span className="text-xs text-slate-600">({group.items.length})</span>
+                    </div>
+                    <div className="space-y-2">
+                      {group.items.map(item => (
+                        <div key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg group"
+                          style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.08)' }}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-slate-200 truncate">{item.label}</span>
+                              {!item.active && <span className="text-xs px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(100,116,139,0.15)', color: '#64748b' }}>inativo</span>}
+                            </div>
+                            {item.description && <div className="text-xs text-slate-600 truncate">{item.description}</div>}
+                          </div>
+                          {item.category && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0"
+                              style={{ background: `${CATEGORY_COLORS[item.category] ?? '#64748b'}18`, color: CATEGORY_COLORS[item.category] ?? '#64748b' }}>
+                              {item.category}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button onClick={() => setItemModal(item)} className="p-1.5 rounded-lg text-slate-600 hover:text-blue-400 transition-colors">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => deleteItem(item.id)} className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })}
+            </>
+          )}
+
+          {/* Sub-tab: Rotinas por usuário */}
+          {gerenciarTab === 'rotinas' && (
+            <div className="card p-5 space-y-5">
+              <div>
+                <label className="label-dark block mb-2">Selecionar usuário</label>
+                <select
+                  className="input-dark text-sm"
+                  style={{ minWidth: 220 }}
+                  value={routineUserId ?? ''}
+                  onChange={e => {
+                    const uid = Number(e.target.value);
+                    setRoutineUserId(uid || null);
+                    if (uid) loadUserAssignments(uid);
+                    else setAssignedItemIds([]);
+                  }}>
+                  <option value="">Escolha um usuário...</option>
+                  {allUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+
+              {routineUserId && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-400">
+                      {assignedItemIds.length === 0
+                        ? 'Nenhuma task selecionada — o usuário verá todas as tasks ativas'
+                        : `${assignedItemIds.length} task${assignedItemIds.length > 1 ? 's' : ''} na rotina`}
+                    </p>
+                    <button
+                      onClick={saveUserAssignments}
+                      disabled={assignmentSaving}
+                      className="btn-primary flex items-center gap-2 text-sm"
+                      style={{ opacity: assignmentSaving ? 0.6 : 1 }}>
+                      <Save size={14} />
+                      {assignmentSaved ? 'Salvo!' : assignmentSaving ? 'Salvando...' : 'Salvar rotina'}
+                    </button>
+                  </div>
+
+                  {/* Select / deselect all */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAssignedItemIds(allItems.filter(i => i.active).map(i => i.id))}
+                      className="text-xs px-2.5 py-1 rounded-lg transition-all"
+                      style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: '#93c5fd' }}>
+                      Selecionar todas
+                    </button>
+                    <button
+                      onClick={() => setAssignedItemIds([])}
+                      className="text-xs px-2.5 py-1 rounded-lg transition-all"
+                      style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.1)', color: '#64748b' }}>
+                      Limpar seleção
+                    </button>
+                  </div>
+
+                  {/* Items grouped by type/day */}
+                  {['daily', 'weekday'].map(type => {
+                    const grouped = type === 'daily'
+                      ? [{ label: 'Todo dia', wd: null as number | null, items: allItems.filter(i => i.type === 'daily' && i.active) }]
+                      : [1,2,3,4,5].map(d => ({
+                          label: `${WEEKDAY_NAMES[d]} — ${WEEKDAY_FOCUS[d]}`,
+                          wd: d,
+                          items: allItems.filter(i => i.type === 'weekday' && i.weekday === d && i.active),
+                        })).filter(g => g.items.length > 0);
+
+                    return grouped.map(group => group.items.length === 0 ? null : (
+                      <div key={`rot-${type}-${group.wd ?? 'daily'}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {group.wd && <div className="w-2 h-2 rounded-full" style={{ background: WEEKDAY_COLORS[group.wd]?.color }} />}
+                          <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{group.label}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {group.items.map(item => {
+                            const selected = assignedItemIds.includes(item.id);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setAssignedItemIds(prev =>
+                                  selected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                                )}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all"
+                                style={{
+                                  background: selected ? 'rgba(59,130,246,0.1)' : 'rgba(15,23,42,0.4)',
+                                  border: `1px solid ${selected ? 'rgba(59,130,246,0.35)' : 'rgba(59,130,246,0.08)'}`,
+                                }}>
+                                <div
+                                  className="shrink-0 w-4 h-4 rounded flex items-center justify-center transition-all"
+                                  style={{ background: selected ? '#3b82f6' : 'transparent', border: `1.5px solid ${selected ? '#3b82f6' : '#334155'}` }}>
+                                  {selected && <Check size={10} color="#fff" />}
+                                </div>
+                                <span className="text-sm flex-1" style={{ color: selected ? '#e2e8f0' : '#94a3b8' }}>
+                                  {item.label}
+                                </span>
+                                {item.category && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded-md shrink-0"
+                                    style={{ background: `${CATEGORY_COLORS[item.category] ?? '#64748b'}18`, color: CATEGORY_COLORS[item.category] ?? '#64748b' }}>
+                                    {item.category}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -710,7 +832,6 @@ export default function RotinaComericial() {
           item={itemModal || null}
           onSave={saveItem}
           onClose={() => setItemModal(false)}
-          users={comercialUsers}
         />
       )}
     </div>
