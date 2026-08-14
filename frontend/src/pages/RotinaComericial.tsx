@@ -115,7 +115,10 @@ function ItemModal({ item, onSave, onClose }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label-dark block mb-1">Categoria</label>
-              <input className="input-dark w-full" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Ex: CRM, Follow-up" />
+              <select className="input-dark w-full" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                <option value="">Sem categoria</option>
+                {Object.keys(CATEGORY_COLORS).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div>
               <label className="label-dark block mb-1">Posição</label>
