@@ -246,11 +246,13 @@ export default function RotinaComericial() {
   const load = async () => {
     setLoading(true);
     try {
-      const [itemsRes, checksRes, perfRes] = await Promise.all([
+      const requests: Promise<any>[] = [
         authFetch('/api/routine/items').then(r => r.json()),
         authFetch(`/api/routine/checks?date=${today}${isAdmin && selectedUserId ? `&user_id=${selectedUserId}` : ''}`).then(r => r.json()),
         authFetch(`/api/routine/performance?weeks=4${isAdmin && selectedUserId ? `&user_id=${selectedUserId}` : ''}`).then(r => r.json()),
-      ]);
+      ];
+      if (isAdmin) requests.push(authFetch('/api/routine/users').then(r => r.json()));
+      const [itemsRes, checksRes, perfRes, usersRes] = await Promise.all(requests);
       const activeItems = Array.isArray(itemsRes) ? itemsRes.filter((i: RoutineItem) => i.active) : [];
       const uid = isAdmin && selectedUserId ? selectedUserId : (user?.id ?? null);
       setItems(activeItems.filter((i: RoutineItem) =>
@@ -258,7 +260,7 @@ export default function RotinaComericial() {
       ));
       setCheckedIds(Array.isArray(checksRes) ? checksRes : []);
       if (perfRes?.performance) setPerformance(perfRes.performance);
-      if (perfRes?.users) setAllUsers(perfRes.users);
+      if (Array.isArray(usersRes)) setAllUsers(usersRes);
     } finally { setLoading(false); }
   };
 

@@ -75,6 +75,16 @@ router.delete('/items/:id', async (req: Request, res: Response) => {
   } catch (e) { res.status(500).json({ error: 'Erro ao deletar item' }); }
 });
 
+// ── Users list ────────────────────────────────────────────────────────────────
+
+router.get('/users', async (req: Request, res: Response) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
+  try {
+    const { rows } = await pool.query(`SELECT id, name FROM users WHERE active = true ORDER BY name`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: 'Erro ao buscar usuários' }); }
+});
+
 // ── User assignments ──────────────────────────────────────────────────────────
 
 // GET /api/routine/user-assignments?user_id=
