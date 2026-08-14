@@ -199,11 +199,13 @@ function ItemModal({ item, onSave, onClose, users }: {
           </div>
 
           {/* Atribuído a */}
-          {users.length > 0 && (
-            <div>
-              <label className="label-dark block mb-1">Atribuído a <span className="text-slate-600 font-normal normal-case">(vazio = todos)</span></label>
-              <div className="flex flex-wrap gap-2">
-                {users.map(u => {
+          <div>
+            <label className="label-dark block mb-1">Atribuído a <span className="text-slate-600 font-normal normal-case">(vazio = todos)</span></label>
+            {users.length === 0 ? (
+              <p className="text-xs text-slate-600">Nenhum usuário cadastrado ainda.</p>
+            ) : (
+            <div className="flex flex-wrap gap-2">
+              {users.map(u => {
                   const selected = form.assigned_user_ids.includes(u.id);
                   return (
                     <button key={u.id} type="button"
@@ -226,8 +228,8 @@ function ItemModal({ item, onSave, onClose, users }: {
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />

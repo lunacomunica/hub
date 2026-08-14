@@ -11,7 +11,15 @@ const userId  = (req: Request): number => (req as any).user?.id;
 router.get('/items', async (req: Request, res: Response) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM routine_items ORDER BY position ASC, id ASC`
+      `SELECT ri.*,
+         COALESCE(
+           json_agg(riu.user_id) FILTER (WHERE riu.user_id IS NOT NULL),
+           '[]'
+         ) as assigned_user_ids
+       FROM routine_items ri
+       LEFT JOIN routine_item_users riu ON riu.item_id = ri.id
+       GROUP BY ri.id
+       ORDER BY ri.position ASC, ri.id ASC`
     );
     res.json(rows);
   } catch (e) { res.status(500).json({ error: 'Erro ao buscar itens' }); }
@@ -20,7 +28,7 @@ router.get('/items', async (req: Request, res: Response) => {
 router.post('/items', async (req: Request, res: Response) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
   try {
-    const { label, description, category, type, weekday, position, deliverables, how_to } = req.body;
+    const { label, description, category, type, weekday, position, deliverables, how_to, assigned_user_ids } = req.body;
     if (!label) return res.status(400).json({ error: 'label é obrigatório' });
     const { rows: [row] } = await pool.query(
       `INSERT INTO routine_items (label, description, category, type, weekday, position, deliverables, how_to)
@@ -28,14 +36,19 @@ router.post('/items', async (req: Request, res: Response) => {
       [label, description || null, category || null, type || 'daily', weekday ?? null, position ?? 0,
        deliverables ? JSON.stringify(deliverables) : null, how_to || null]
     );
-    res.status(201).json(row);
+    if (Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0) {
+      for (const uid of assigned_user_ids) {
+        await pool.query(`INSERT INTO routine_item_users (item_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [row.id, uid]);
+      }
+    }
+    res.status(201).json({ ...row, assigned_user_ids: assigned_user_ids ?? [] });
   } catch (e) { res.status(500).json({ error: 'Erro ao criar item' }); }
 });
 
 router.put('/items/:id', async (req: Request, res: Response) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Acesso negado' });
   try {
-    const { label, description, category, type, weekday, position, active, deliverables, how_to } = req.body;
+    const { label, description, category, type, weekday, position, active, deliverables, how_to, assigned_user_ids } = req.body;
     const { rows: [row] } = await pool.query(
       `UPDATE routine_items SET label=$1, description=$2, category=$3, type=$4,
        weekday=$5, position=$6, active=$7, deliverables=$8, how_to=$9 WHERE id=$10 RETURNING *`,
@@ -43,7 +56,14 @@ router.put('/items/:id', async (req: Request, res: Response) => {
        deliverables ? JSON.stringify(deliverables) : null, how_to || null, req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Item não encontrado' });
-    res.json(row);
+    // Replace user assignments
+    await pool.query(`DELETE FROM routine_item_users WHERE item_id=$1`, [req.params.id]);
+    if (Array.isArray(assigned_user_ids) && assigned_user_ids.length > 0) {
+      for (const uid of assigned_user_ids) {
+        await pool.query(`INSERT INTO routine_item_users (item_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [row.id, uid]);
+      }
+    }
+    res.json({ ...row, assigned_user_ids: assigned_user_ids ?? [] });
   } catch (e) { res.status(500).json({ error: 'Erro ao atualizar item' }); }
 });
 
@@ -136,7 +156,7 @@ router.get('/performance', async (req: Request, res: Response) => {
     let users: { id: number; name: string }[] = [];
     if (isAdmin(req)) {
       const { rows: usersRows } = await pool.query(
-        `SELECT id, name FROM users WHERE role = 'comercial' ORDER BY name`
+        `SELECT id, name FROM users ORDER BY name`
       );
       users = usersRows;
     }
