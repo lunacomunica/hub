@@ -13,6 +13,7 @@ interface RoutineItem {
   active: boolean;
   deliverables: string | null;
   how_to: string | null;
+  assigned_user_ids: number[];
 }
 
 interface PerformanceRow {
@@ -78,12 +79,13 @@ function ProgressRing({ pct, size = 48, stroke = 4, color = '#3b82f6' }: { pct: 
 }
 
 // ── Admin: manage items modal ─────────────────────────────────────────────────
-const EMPTY_ITEM = { label: '', description: '', category: '', type: 'daily' as 'daily' | 'weekday', weekday: null as number | null, position: 0, active: true, deliverables: [] as string[], how_to: '' };
+const EMPTY_ITEM = { label: '', description: '', category: '', type: 'daily' as 'daily' | 'weekday', weekday: null as number | null, position: 0, active: true, deliverables: [] as string[], how_to: '', assigned_user_ids: [] as number[] };
 
-function ItemModal({ item, onSave, onClose }: {
+function ItemModal({ item, onSave, onClose, users }: {
   item: Partial<RoutineItem> | null;
   onSave: (data: typeof EMPTY_ITEM) => void;
   onClose: () => void;
+  users: { id: number; name: string }[];
 }) {
   const parseDeliverables = (d: string | null | undefined): string[] => {
     if (!d) return [];
@@ -102,6 +104,7 @@ function ItemModal({ item, onSave, onClose }: {
       active: item.active !== false,
       deliverables: parseDeliverables((item as RoutineItem).deliverables),
       how_to: (item as RoutineItem).how_to || '',
+      assigned_user_ids: (item as RoutineItem).assigned_user_ids ?? [],
     } : {}),
   });
   const [newDeliverable, setNewDeliverable] = useState('');
@@ -195,6 +198,37 @@ function ItemModal({ item, onSave, onClose }: {
               placeholder={'1. Abra o CRM\n2. Filtre oportunidades sem follow-up\n3. ...'} />
           </div>
 
+          {/* Atribuído a */}
+          {users.length > 0 && (
+            <div>
+              <label className="label-dark block mb-1">Atribuído a <span className="text-slate-600 font-normal normal-case">(vazio = todos)</span></label>
+              <div className="flex flex-wrap gap-2">
+                {users.map(u => {
+                  const selected = form.assigned_user_ids.includes(u.id);
+                  return (
+                    <button key={u.id} type="button"
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        assigned_user_ids: selected
+                          ? f.assigned_user_ids.filter(id => id !== u.id)
+                          : [...f.assigned_user_ids, u.id],
+                      }))}
+                      className="text-xs px-2.5 py-1 rounded-lg font-medium transition-all"
+                      style={{
+                        background: selected ? 'rgba(59,130,246,0.18)' : 'rgba(15,23,42,0.5)',
+                        border: `1px solid ${selected ? 'rgba(59,130,246,0.5)' : 'rgba(59,130,246,0.12)'}`,
+                        color: selected ? '#93c5fd' : '#64748b',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}>
+                      {selected ? '✓ ' : ''}{u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
             <span className="text-sm text-slate-300">Ativo</span>
@@ -237,7 +271,12 @@ export default function RotinaComericial() {
         authFetch(`/api/routine/checks?date=${today}${isAdmin && selectedUserId ? `&user_id=${selectedUserId}` : ''}`).then(r => r.json()),
         authFetch(`/api/routine/performance?weeks=4${isAdmin && selectedUserId ? `&user_id=${selectedUserId}` : ''}`).then(r => r.json()),
       ]);
-      setItems(Array.isArray(itemsRes) ? itemsRes.filter((i: RoutineItem) => i.active) : []);
+      const activeItems = Array.isArray(itemsRes) ? itemsRes.filter((i: RoutineItem) => i.active) : [];
+      // Filter by user assignment: show if no assignments OR user is in the list
+      const uid = isAdmin && selectedUserId ? selectedUserId : (user?.id ?? null);
+      setItems(activeItems.filter((i: RoutineItem) =>
+        !i.assigned_user_ids || i.assigned_user_ids.length === 0 || (uid && i.assigned_user_ids.includes(uid))
+      ));
       setCheckedIds(Array.isArray(checksRes) ? checksRes : []);
       if (perfRes?.performance) setPerformance(perfRes.performance);
       if (perfRes?.users) setComercialUsers(perfRes.users);
@@ -669,6 +708,7 @@ export default function RotinaComericial() {
           item={itemModal || null}
           onSave={saveItem}
           onClose={() => setItemModal(false)}
+          users={comercialUsers}
         />
       )}
     </div>
