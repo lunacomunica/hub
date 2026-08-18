@@ -323,6 +323,27 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE routine_items ADD COLUMN IF NOT EXISTS how_to TEXT DEFAULT NULL`);
   } catch (e) { console.error('[migration] routine_items deliverables/how_to error:', e); }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS routine_item_users (
+        item_id INTEGER REFERENCES routine_items(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (item_id, user_id)
+      )
+    `);
+  } catch (e) { console.error('[migration] routine_item_users error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS promise TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS target_audience TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS deliverables TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS differentials TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS objections TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS pitch TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS faqs TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS social_proof TEXT DEFAULT NULL`);
+  } catch (e) { console.error('[migration] products detail columns error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 

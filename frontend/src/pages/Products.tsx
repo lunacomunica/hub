@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Package, Tag } from 'lucide-react';
 import { getCategories } from '../api';
 import type { Category } from '../types';
@@ -42,6 +43,7 @@ interface ProductStats {
 }
 
 export default function Products() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [stats, setStats] = useState<ProductStats | null>(null);
@@ -239,7 +241,12 @@ export default function Products() {
                   const bt = BILLING_CONFIG[p.billing_type || 'mrr'];
                   return (
                   <tr key={p.id} className="tr">
-                    <td className="td px-4 py-3 font-medium text-slate-200">{p.name}</td>
+                    <td className="td px-4 py-3 font-medium">
+                      <button onClick={() => navigate(`/produtos/${p.id}`)}
+                        className="text-slate-200 hover:text-blue-400 transition-colors text-left">
+                        {p.name}
+                      </button>
+                    </td>
                     <td className="td px-4 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: bt.bg, color: bt.color }}>{bt.label}</span>
                     </td>
@@ -278,7 +285,12 @@ export default function Products() {
                 <tbody>
                   {inactive.map(p => (
                     <tr key={p.id} className="tr opacity-50">
-                      <td className="td px-4 py-3">{p.name}</td>
+                      <td className="td px-4 py-3">
+                        <button onClick={() => navigate(`/produtos/${p.id}`)}
+                          className="text-slate-400 hover:text-blue-400 transition-colors text-left">
+                          {p.name}
+                        </button>
+                      </td>
                       <td className="td px-4 py-3">{p.category || '—'}</td>
                       <td className="td px-4 py-3 text-right">{fmt(p.price)}</td>
                       <td className="td px-4 py-3">

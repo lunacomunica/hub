@@ -51,7 +51,12 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { rows: [row] } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Produto não encontrado' });
-    res.json(row);
+    const { rows: opps } = await pool.query(
+      `SELECT id, title, stage, value, client_name, created_at
+       FROM opportunities WHERE product_id = $1 ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ ...row, opportunities: opps });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar produto' });
   }
@@ -77,14 +82,27 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { name, price, category, description, active, billing_type } = req.body;
+    const { name, price, category, description, active, billing_type,
+            promise, target_audience, deliverables, differentials,
+            objections, pitch, faqs, social_proof } = req.body;
     const activeVal = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [existing] } = await pool.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Produto não encontrado' });
     await pool.query(
-      `UPDATE products SET name = $1, price = $2, category = $3, description = $4, active = $5, billing_type = $6, updated_at = NOW()
-       WHERE id = $7`,
-      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr', req.params.id]
+      `UPDATE products SET
+         name=$1, price=$2, category=$3, description=$4, active=$5, billing_type=$6,
+         promise=$7, target_audience=$8, deliverables=$9, differentials=$10,
+         objections=$11, pitch=$12, faqs=$13, social_proof=$14, updated_at=NOW()
+       WHERE id=$15`,
+      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr',
+       promise || null, target_audience || null,
+       deliverables ? JSON.stringify(deliverables) : null,
+       differentials || null,
+       objections ? JSON.stringify(objections) : null,
+       pitch || null,
+       faqs ? JSON.stringify(faqs) : null,
+       social_proof || null,
+       req.params.id]
     );
     const { rows: [updated] } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     res.json(updated);
