@@ -425,7 +425,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { title, client_name, value, stage, probability, expected_close_date,
             service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
             original_price, payment_method, installments, payment_notes, referral_name,
-            referral_type, referral_client_id, referral_employee_id, opp_items } = req.body;
+            referral_type, referral_client_id, referral_employee_id, opp_items, company_id } = req.body;
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
       'SELECT id, stage, closed_at FROM opportunities WHERE id = $1',
@@ -453,8 +453,9 @@ router.put('/:id', async (req: Request, res: Response) => {
          source = $14, lost_reason = $15,
          original_price = $16, payment_method = $17, installments = $18, payment_notes = $19,
          referral_name = $20,
+         company_id = COALESCE($21, company_id),
          updated_at = NOW()${stageEnteredClause}
-       WHERE id = $21`,
+       WHERE id = $22`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
@@ -462,6 +463,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         next_followup || null, owner_id || null, source || null, lost_reason || null,
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
         referral_name || null,
+        company_id || null,
         req.params.id,
       ]
     );
