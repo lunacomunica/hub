@@ -373,8 +373,8 @@ router.post('/', async (req: Request, res: Response) => {
           next_followup, owner_id, source, lost_reason,
           original_price, payment_method, installments, payment_notes,
           referral_name, stage_entered_at, company_id,
-          contact_email, contact_whatsapp, contact_instagram, contact_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21,$22,$23,$24,$25)
+          contact_email, contact_whatsapp, contact_instagram)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21,$22,$23,$24)
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -384,9 +384,20 @@ router.post('/', async (req: Request, res: Response) => {
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
         referral_name || null, companyId,
         contact_email || null, contact_whatsapp || null, contact_instagram || null,
-        contact_date || null,
       ]
     );
+
+    // ── Contact date — self-healing ──────────────────────────────────────────
+    try {
+      console.log('[opp POST] salvando contact_date:', contact_date || null, 'para id:', created.id);
+      await pool.query(`UPDATE opportunities SET contact_date = $1 WHERE id = $2`, [contact_date || null, created.id]);
+    } catch (e: any) {
+      console.error('[opp POST] contact_date erro:', e.message);
+      if (e.message?.includes('contact_date')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_date DATE`);
+        await pool.query(`UPDATE opportunities SET contact_date = $1 WHERE id = $2`, [contact_date || null, created.id]);
+      }
+    }
 
     // ── Referral linking — self-healing ─────────────────────────────────────────
     try {
@@ -464,9 +475,8 @@ router.put('/:id', async (req: Request, res: Response) => {
          referral_name = $20,
          company_id = COALESCE($21, company_id),
          contact_email = $22, contact_whatsapp = $23, contact_instagram = $24,
-         contact_date = $25,
          updated_at = NOW()${stageEnteredClause}
-       WHERE id = $26`,
+       WHERE id = $25`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
@@ -476,10 +486,25 @@ router.put('/:id', async (req: Request, res: Response) => {
         referral_name || null,
         company_id || null,
         contact_email || null, contact_whatsapp || null, contact_instagram || null,
-        contact_date || null,
         req.params.id,
       ]
     );
+
+    // ── Contact date — self-healing ──────────────────────────────────────────
+    try {
+      const dateVal = contact_date || null;
+      console.log('[opp PUT] salvando contact_date:', dateVal, 'para id:', req.params.id);
+      await pool.query(
+        `UPDATE opportunities SET contact_date = $1 WHERE id = $2`,
+        [dateVal, req.params.id]
+      );
+    } catch (e: any) {
+      console.error('[opp PUT] contact_date erro:', e.message);
+      if (e.message?.includes('contact_date')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_date DATE`);
+        await pool.query(`UPDATE opportunities SET contact_date = $1 WHERE id = $2`, [contact_date || null, req.params.id]);
+      }
+    }
 
     // ── Referral linking — self-healing (colunas podem não existir ainda) ───────
     try {
