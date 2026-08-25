@@ -75,6 +75,30 @@ app.use('/api/auth/login', rateLimit({
 import pool from './db';
 
 export async function runMigrations() {
+  // Auth tables — must run first (login depends on these)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_attempts (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        ip TEXT NOT NULL,
+        success INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        user_email TEXT,
+        action TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        ip TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  } catch (e) { console.error('[migration] auth tables error:', e); }
+
   try {
     const { rows: existing } = await pool.query(
       `SELECT id FROM financial_categories WHERE name = 'Marketing e Anúncios' AND type = 'expense'`

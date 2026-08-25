@@ -47,40 +47,47 @@ function isStrongPassword(password: string): boolean {
 
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    }
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const ip = getClientIp(req);
+
+    // Check lockout before hitting the DB with password comparison
+    try {
+      if (await isLockedOut(normalizedEmail, ip)) {
+        return res.status(429).json({
+          error: 'Conta temporariamente bloqueada. Aguarde 15 minutos e tente novamente.',
+        });
+      }
+    } catch { /* login_attempts table may not exist yet — skip lockout check */ }
+
+    const { rows: [user] } = await dbQuery<{
+      id: number; name: string; email: string; password_hash: string; role: string;
+    }>(
+      'SELECT * FROM users WHERE email = $1 AND active = 1',
+      [normalizedEmail]
+    );
+
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      try { await recordAttempt(normalizedEmail, ip, false); } catch { /* ignore */ }
+      // Generic message — do not reveal whether email exists
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    // Success — clear slate and issue token
+    try { await recordAttempt(normalizedEmail, ip, true); } catch { /* ignore */ }
+    try { await writeAudit(user.id, user.email, 'login', 'auth', ip); } catch { /* ignore */ }
+
+    const token = generateToken({ id: user.id, email: user.email, name: user.name, role: user.role });
+    return res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  } catch (err) {
+    console.error('[login]', err);
+    return res.status(500).json({ error: 'Erro interno ao autenticar. Tente novamente.' });
   }
-
-  const normalizedEmail = String(email).toLowerCase().trim();
-  const ip = getClientIp(req);
-
-  // Check lockout before hitting the DB with password comparison
-  if (await isLockedOut(normalizedEmail, ip)) {
-    return res.status(429).json({
-      error: 'Conta temporariamente bloqueada. Aguarde 15 minutos e tente novamente.',
-    });
-  }
-
-  const { rows: [user] } = await dbQuery<{
-    id: number; name: string; email: string; password_hash: string; role: string;
-  }>(
-    'SELECT * FROM users WHERE email = $1 AND active = 1',
-    [normalizedEmail]
-  );
-
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    await recordAttempt(normalizedEmail, ip, false);
-    // Generic message — do not reveal whether email exists
-    return res.status(401).json({ error: 'Credenciais inválidas' });
-  }
-
-  // Success — clear slate and issue token
-  await recordAttempt(normalizedEmail, ip, true);
-  await writeAudit(user.id, user.email, 'login', 'auth', ip);
-
-  const token = generateToken({ id: user.id, email: user.email, name: user.name, role: user.role });
-  return res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
 // ─── GET /api/auth/me ────────────────────────────────────────────────────────
