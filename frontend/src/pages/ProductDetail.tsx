@@ -2,20 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Pencil, Save, X, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { req } from '../api';
 
 const fmt = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-function authFetch(url: string, options?: RequestInit) {
-  const token = localStorage.getItem('auth-token');
-  return fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
-}
 
 const BILLING_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   mrr:   { label: 'MRR', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
@@ -162,7 +151,7 @@ export default function ProductDetail() {
 
   const load = async () => {
     setLoading(true);
-    const res = await authFetch(`/api/products/${id}`).then(r => r.json());
+    const res = await req<any>(`/products/${id}`);
     setProduct(res);
     // seed form
     setPromise(res.promise || '');
@@ -181,7 +170,7 @@ export default function ProductDetail() {
   const save = async () => {
     if (!product) return;
     setSaving(true);
-    await authFetch(`/api/products/${id}`, {
+    await req(`/products/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
         name: product.name, price: product.price, category: product.category,
@@ -189,7 +178,7 @@ export default function ProductDetail() {
         promise, target_audience: targetAudience, deliverables,
         differentials, objections, pitch, faqs, social_proof: socialProof,
       }),
-    });
+    }).catch(() => null);
     setSaving(false);
     setEditing(false);
     load();

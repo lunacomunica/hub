@@ -1,23 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Package, Tag } from 'lucide-react';
-import { getCategories } from '../api';
+import { getCategories, req } from '../api';
 import type { Category } from '../types';
 
-const BASE = '/api/products';
 const fmt = (v: number | string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-function authFetch(url: string, options?: RequestInit) {
-  const token = localStorage.getItem('auth-token');
-  return fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
-}
 
 interface Product {
   id: number;
@@ -56,9 +43,9 @@ export default function Products() {
   const load = async () => {
     setLoading(true);
     const [data, cats, productStats] = await Promise.all([
-      authFetch(BASE).then(r => r.json()),
+      req<Product[]>('/products').catch(() => []),
       getCategories('revenue').catch(() => []),
-      authFetch(`${BASE}/stats`).then(r => r.json()).catch(() => null),
+      req<ProductStats>('/products/stats').catch(() => null),
     ]);
     setProducts(Array.isArray(data) ? data : []);
     setCategories(cats);
@@ -77,21 +64,19 @@ export default function Products() {
 
   const save = async () => {
     if (!form.name.trim()) return alert('Nome é obrigatório');
-    const method = editing ? 'PUT' : 'POST';
-    const url = editing ? `${BASE}/${editing.id}` : BASE;
-    const res = await authFetch(url, { method, body: JSON.stringify(form) });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
-      alert(err.error || 'Erro ao salvar produto');
-      return;
+    const url = editing ? `/products/${editing.id}` : '/products';
+    try {
+      await req(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(form) });
+      setShowModal(false);
+      load();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Erro ao salvar produto');
     }
-    setShowModal(false);
-    load();
   };
 
   const remove = async (id: number) => {
     if (!confirm('Excluir produto? Isso pode afetar metas vinculadas.')) return;
-    await authFetch(`${BASE}/${id}`, { method: 'DELETE' });
+    await req(`/products/${id}`, { method: 'DELETE' }).catch(() => null);
     load();
   };
 
