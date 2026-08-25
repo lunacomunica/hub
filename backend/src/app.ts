@@ -386,6 +386,7 @@ export async function runMigrations() {
       VALUES (1, 'Luna Comunica', 'luna-comunica', '#3b82f6')
       ON CONFLICT (id) DO NOTHING
     `);
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER DEFAULT 1`);
     await pool.query(`SELECT setval('companies_id_seq', GREATEST((SELECT MAX(id) FROM companies), 1))`);
   } catch (e) { console.error('[migration] companies error:', e); }
 

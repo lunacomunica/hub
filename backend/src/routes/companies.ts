@@ -44,8 +44,9 @@ router.post('/', async (req: Request, res: Response) => {
     );
     res.status(201).json(company);
   } catch (e: any) {
+    console.error('[companies POST]', e);
     if (e.code === '23505') return res.status(400).json({ error: 'Já existe uma empresa com esse nome' });
-    res.status(500).json({ error: 'Erro ao criar empresa' });
+    res.status(500).json({ error: e?.message || 'Erro ao criar empresa' });
   }
 });
 
