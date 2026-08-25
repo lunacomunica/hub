@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { useState, useEffect } from 'react';
+import { useCompany } from '../context/CompanyContext';
+import { useState, useEffect, useRef } from 'react';
 
 const FINANCEIRO_ITEMS = [
   { to: '/dashboard',    label: 'Dashboard',        icon: LayoutDashboard },
@@ -33,11 +34,24 @@ const COMERCIAL_ITEMS = [
 export default function Sidebar() {
   const { theme, toggle } = useTheme();
   const { user, logout } = useAuth();
+  const { companies, currentCompany, switchCompany } = useCompany();
   const navigate = useNavigate();
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const companyRef = useRef<HTMLDivElement>(null);
 
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (companyRef.current && !companyRef.current.contains(e.target as Node)) {
+        setCompanyOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(collapsed));
@@ -118,6 +132,58 @@ export default function Sidebar() {
           </button>
         )}
       </div>
+
+      {/* Company switcher */}
+      {companies.length > 0 && (
+        <div ref={companyRef} style={{ padding: collapsed ? '8px 0' : '8px 8px', borderBottom: '1px solid var(--border-sidebar)', position: 'relative' }}>
+          {!collapsed ? (
+            <button
+              onClick={() => companies.length > 1 && setCompanyOpen(p => !p)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '6px 8px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.07)', cursor: companies.length > 1 ? 'pointer' : 'default',
+              }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: currentCompany?.color || '#3b82f6', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentCompany?.name || '—'}
+              </span>
+              {companies.length > 1 && (
+                <ChevronRight size={12} style={{ color: 'var(--text-secondary)', flexShrink: 0, transform: companyOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+              )}
+            </button>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: currentCompany?.color || '#3b82f6' }} />
+            </div>
+          )}
+
+          {/* Dropdown */}
+          {companyOpen && companies.length > 1 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 8, right: 8, zIndex: 100,
+              background: 'var(--bg-card)', border: '1px solid var(--border-card)',
+              borderRadius: '10px', padding: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}>
+              {companies.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => { switchCompany(c); setCompanyOpen(false); }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '7px 10px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+                    background: currentCompany?.id === c.id ? 'rgba(59,130,246,0.1)' : 'transparent',
+                    color: currentCompany?.id === c.id ? '#93c5fd' : 'var(--text-primary)',
+                  }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: 500, textAlign: 'left', flex: 1 }}>{c.name}</span>
+                  {currentCompany?.id === c.id && <span style={{ fontSize: '0.65rem', color: '#93c5fd' }}>✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden" style={{ padding: collapsed ? '12px 0' : '12px 8px' }}>

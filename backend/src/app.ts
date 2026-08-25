@@ -23,6 +23,7 @@ import settingsRouter from './routes/settings';
 import tcvRouter from './routes/tcv';
 import referralPrizesRouter from './routes/referral-prizes';
 import routineRouter from './routes/routine';
+import companiesRouter from './routes/companies';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -344,6 +345,42 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS social_proof TEXT DEFAULT NULL`);
   } catch (e) { console.error('[migration] products detail columns error:', e); }
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id        SERIAL PRIMARY KEY,
+        name      VARCHAR(255) NOT NULL,
+        slug      VARCHAR(100) UNIQUE NOT NULL,
+        color     VARCHAR(7)   DEFAULT '#3b82f6',
+        active    INTEGER      DEFAULT 1,
+        created_at TIMESTAMP   DEFAULT NOW()
+      )
+    `);
+    // seed Luna Comunica as company 1
+    await pool.query(`
+      INSERT INTO companies (id, name, slug, color)
+      VALUES (1, 'Luna Comunica', 'luna-comunica', '#3b82f6')
+      ON CONFLICT (id) DO NOTHING
+    `);
+    await pool.query(`SELECT setval('companies_id_seq', GREATEST((SELECT MAX(id) FROM companies), 1))`);
+  } catch (e) { console.error('[migration] companies error:', e); }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_companies (
+        user_id    INTEGER REFERENCES users(id)    ON DELETE CASCADE,
+        company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, company_id)
+      )
+    `);
+    // link all existing users to Luna Comunica
+    await pool.query(`
+      INSERT INTO user_companies (user_id, company_id)
+      SELECT id, 1 FROM users
+      ON CONFLICT DO NOTHING
+    `);
+  } catch (e) { console.error('[migration] user_companies error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
@@ -369,6 +406,7 @@ app.use('/api/settings',        requireAuth, settingsRouter);
 app.use('/api/tcv',             requireAuth, tcvRouter);
 app.use('/api/referral-prizes', requireAuth, referralPrizesRouter);
 app.use('/api/routine',         requireAuth, routineRouter);
+app.use('/api/companies',       requireAuth, companiesRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

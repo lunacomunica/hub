@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { CompanyProvider } from './context/CompanyContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Revenues from './pages/Revenues';
@@ -45,6 +46,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
+      <CompanyProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -86,6 +88,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </CompanyProvider>
     </AuthProvider>
   );
 }
