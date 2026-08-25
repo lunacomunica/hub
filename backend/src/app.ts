@@ -370,6 +370,7 @@ export async function runMigrations() {
   } catch (e) { console.error('[migration] products detail columns error:', e); }
 
   try {
+    console.log('[migration] creating companies table...');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
         id        SERIAL PRIMARY KEY,
@@ -380,15 +381,24 @@ export async function runMigrations() {
         created_at TIMESTAMP   DEFAULT NOW()
       )
     `);
-    // seed Luna Comunica as company 1
+    console.log('[migration] companies table OK');
+  } catch (e) { console.error('[migration] companies CREATE error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER DEFAULT 1`);
+  } catch (e) { console.error('[migration] companies active column error:', e); }
+
+  try {
     await pool.query(`
       INSERT INTO companies (id, name, slug, color)
       VALUES (1, 'Luna Comunica', 'luna-comunica', '#3b82f6')
       ON CONFLICT (id) DO NOTHING
     `);
-    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER DEFAULT 1`);
+  } catch (e) { console.error('[migration] companies seed error:', e); }
+
+  try {
     await pool.query(`SELECT setval('companies_id_seq', GREATEST((SELECT MAX(id) FROM companies), 1))`);
-  } catch (e) { console.error('[migration] companies error:', e); }
+  } catch (e) { console.error('[migration] companies setval error:', e); }
 
   try {
     await pool.query(`
