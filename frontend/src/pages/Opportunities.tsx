@@ -1095,7 +1095,7 @@ export default function Opportunities() {
             }}>
             {wonStage?.label ?? 'Fechados'}
             <span className="text-xs font-bold px-1.5 py-0.5 rounded-md" style={{ background: view === 'won' ? 'rgba(255,255,255,0.2)' : 'rgba(100,116,139,0.2)', minWidth: 18, textAlign: 'center' }}>
-              {items.filter(i => i.stage === (wonStage?.key ?? 'fechado')).length}
+              {filteredAll.filter(i => i.stage === (wonStage?.key ?? 'fechado')).length}
             </span>
           </button>
           <button onClick={() => setView('lost')}
@@ -1108,7 +1108,7 @@ export default function Opportunities() {
             }}>
             {lostStage?.label ?? 'Perdidos'}
             <span className="text-xs font-bold px-1.5 py-0.5 rounded-md" style={{ background: view === 'lost' ? 'rgba(255,255,255,0.2)' : 'rgba(100,116,139,0.2)', minWidth: 18, textAlign: 'center' }}>
-              {items.filter(i => i.stage === (lostStage?.key ?? 'perdido')).length}
+              {filteredAll.filter(i => i.stage === (lostStage?.key ?? 'perdido')).length}
             </span>
           </button>
           <button onClick={() => setView('funil')}
