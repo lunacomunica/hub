@@ -2,7 +2,7 @@ import type { Category, Revenue, Expense, AgencyClient, ClientCost, SalesGoal, O
 
 const BASE = '/api';
 
-async function req<T>(url: string, options?: RequestInit): Promise<T> {
+export async function req<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('auth-token');
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout

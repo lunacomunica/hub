@@ -22,6 +22,7 @@ import Usuarios from './pages/Usuarios';
 import Configuracoes from './pages/Configuracoes';
 import RotinaComericial from './pages/RotinaComericial';
 import ProductDetail from './pages/ProductDetail';
+import Consolidado from './pages/Consolidado';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -76,6 +77,7 @@ export default function App() {
             <Route path="pessoas/:id" element={<EmployeeDetail />} />
             <Route path="relatorio" element={<Relatorio />} />
             <Route path="rotina" element={<RotinaComericial />} />
+            <Route path="consolidado" element={<Consolidado />} />
             <Route
               path="usuarios"
               element={

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -73,6 +73,10 @@ export default function Sidebar() {
     modules.push({ label: 'Financeiro', items: financieroItems });
   }
   if (role === 'admin') {
+    modules.push({
+      label: 'Consolidado',
+      items: [{ to: '/consolidado', label: 'Visão Consolidada', icon: LayoutGrid }],
+    });
     modules.push({ label: 'Pessoas', items: PESSOAS_ITEMS });
   }
   if (role === 'admin' || role === 'comercial') {
