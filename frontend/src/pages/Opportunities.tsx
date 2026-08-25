@@ -836,6 +836,7 @@ export default function Opportunities() {
   };
 
   const items = data?.items || [];
+  const summary = data?.summary;
   const pipelineStages = stages.filter(s => !s.is_terminal);
   const wonStage  = stages.find(s => s.key === 'fechado');
   const lostStage = stages.find(s => s.key === 'perdido');
