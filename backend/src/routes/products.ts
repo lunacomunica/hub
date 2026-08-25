@@ -31,19 +31,22 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.get('/stats', async (req: Request, res: Response) => {
   try {
+    const companyId = await getCompanyId(req);
     const [topResult, openResult] = await Promise.all([
       pool.query<{ product_id: number; name: string; count: string }>(
         `SELECT o.product_id, p.name, COUNT(*) as count
          FROM opportunities o
          JOIN products p ON p.id = o.product_id
-         WHERE o.stage = 'fechado' AND o.product_id IS NOT NULL
+         WHERE o.stage = 'fechado' AND o.product_id IS NOT NULL AND o.company_id = $1
          GROUP BY o.product_id, p.name
          ORDER BY count DESC
-         LIMIT 1`
+         LIMIT 1`,
+        [companyId]
       ),
       pool.query<{ count: string }>(
         `SELECT COUNT(*) as count FROM opportunities
-         WHERE product_id IS NOT NULL AND stage NOT IN ('fechado', 'perdido')`
+         WHERE product_id IS NOT NULL AND stage NOT IN ('fechado', 'perdido') AND company_id = $1`,
+        [companyId]
       ),
     ]);
     res.json({
