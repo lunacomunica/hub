@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.get('/', async (req: Request, res: Response) => {
     const year  = parseInt(req.query.year  as string) || now.getFullYear();
     const isAnnual = !monthParam;
     const month = monthParam || (now.getMonth() + 1);
+    const companyId = await getCompanyId(req);
 
     // Date range: full year or single month
     const startDate = isAnnual ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`;
@@ -50,51 +52,51 @@ router.get('/', async (req: Request, res: Response) => {
     ] = await Promise.allSettled([
       query<{ total: string }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-        [startDate, endDate]
+         WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [startDate, endDate, companyId]
       ),
       query<{ total: string }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM financial_expenses
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-        [startDate, endDate]
+         WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [startDate, endDate, companyId]
       ),
       // Trend: group by YYYY-MM prefix (TEXT column, no casting needed)
       query<{ month_key: string; total: string }>(
         `SELECT SUBSTRING(date, 1, 7) as month_key, COALESCE(SUM(amount), 0) as total
          FROM financial_revenues
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'
+         WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'
          GROUP BY SUBSTRING(date, 1, 7) ORDER BY month_key`,
-        [trendStart, trendEnd]
+        [trendStart, trendEnd, companyId]
       ),
       query<{ month_key: string; total: string }>(
         `SELECT SUBSTRING(date, 1, 7) as month_key, COALESCE(SUM(amount), 0) as total
          FROM financial_expenses
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'
+         WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'
          GROUP BY SUBSTRING(date, 1, 7) ORDER BY month_key`,
-        [trendStart, trendEnd]
+        [trendStart, trendEnd, companyId]
       ),
       query(
         `SELECT fc.name, fc.color, COALESCE(SUM(fr.amount), 0) as total
          FROM financial_revenues fr
          LEFT JOIN financial_categories fc ON fr.category_id = fc.id
-         WHERE fr.date >= $1 AND fr.date <= $2 AND fr.status != 'cancelado'
+         WHERE fr.company_id = $3 AND fr.date >= $1 AND fr.date <= $2 AND fr.status != 'cancelado'
          GROUP BY fc.id, fc.name, fc.color ORDER BY total DESC`,
-        [startDate, endDate]
+        [startDate, endDate, companyId]
       ),
       query(
         `SELECT fc.name, fc.color, COALESCE(SUM(fe.amount), 0) as total
          FROM financial_expenses fe
          LEFT JOIN financial_categories fc ON fe.category_id = fc.id
-         WHERE fe.date >= $1 AND fe.date <= $2 AND fe.status != 'cancelado'
+         WHERE fe.company_id = $3 AND fe.date >= $1 AND fe.date <= $2 AND fe.status != 'cancelado'
          GROUP BY fc.id, fc.name, fc.color ORDER BY total DESC`,
-        [startDate, endDate]
+        [startDate, endDate, companyId]
       ),
       query(
         `SELECT client_name, COALESCE(SUM(amount), 0) as total
          FROM financial_revenues
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado' AND client_name IS NOT NULL
+         WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado' AND client_name IS NOT NULL
          GROUP BY client_name ORDER BY total DESC LIMIT 5`,
-        [startDate, endDate]
+        [startDate, endDate, companyId]
       ),
       query(
         `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value,
@@ -107,11 +109,13 @@ router.get('/', async (req: Request, res: Response) => {
       ),
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM financial_revenues
-         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != '')`
+         WHERE company_id = $1 AND (status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != ''))`,
+        [companyId]
       ),
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM financial_expenses
-         WHERE status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != '')`
+         WHERE company_id = $1 AND (status = 'atrasado' OR (status = 'pendente' AND due_date < CURRENT_DATE AND due_date != ''))`,
+        [companyId]
       ),
     ]);
 

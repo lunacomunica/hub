@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
@@ -21,14 +22,15 @@ router.get('/', async (req: Request, res: Response) => {
       const m = String(month).padStart(2, '0');
       const startDate = `${year}-${m}-01`;
       const endDate = `${year}-${m}-31`;
+      const companyId = await getCompanyId(req);
 
       const { rows: [revRow] } = await pool.query<{ total: string }>(
-        `SELECT COALESCE(SUM(amount),0) as total FROM financial_revenues WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-        [startDate, endDate]
+        `SELECT COALESCE(SUM(amount),0) as total FROM financial_revenues WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [startDate, endDate, companyId]
       );
       const { rows: [expRow] } = await pool.query<{ total: string }>(
-        `SELECT COALESCE(SUM(amount),0) as total FROM financial_expenses WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-        [startDate, endDate]
+        `SELECT COALESCE(SUM(amount),0) as total FROM financial_expenses WHERE company_id = $3 AND date >= $1 AND date <= $2 AND status != 'cancelado'`,
+        [startDate, endDate, companyId]
       );
 
       const actualRevenue = Number(revRow.total);

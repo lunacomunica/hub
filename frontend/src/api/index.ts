@@ -9,10 +9,12 @@ async function req<T>(url: string, options?: RequestInit): Promise<T> {
 
   let res: Response;
   try {
+    const companyId = localStorage.getItem('current-company-id');
     res = await fetch(`${BASE}${url}`, {
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(companyId ? { 'X-Company-Id': companyId } : {}),
       },
       signal: controller.signal,
       ...options,

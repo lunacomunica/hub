@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import pool from '../db';
 import { AuthRequest } from '../middleware/auth';
 import { saveRule } from '../utils/categorization';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
@@ -57,16 +58,17 @@ router.patch('/bulk', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { month, year, status, client_name, category_id } = req.query;
+    const companyId = await getCompanyId(req);
     let query = `
       SELECT fr.*, fc.name as category_name, fc.color as category_color,
              ac.name as client_display_name
       FROM financial_revenues fr
       LEFT JOIN financial_categories fc ON fr.category_id = fc.id
       LEFT JOIN agency_clients ac ON fr.client_id = ac.id
-      WHERE 1=1
+      WHERE fr.company_id = $1
     `;
-    const params: (string | number)[] = [];
-    let idx = 1;
+    const params: (string | number)[] = [companyId];
+    let idx = 2;
 
     if (month && year) {
       const m = String(month).padStart(2, '0');
@@ -255,6 +257,8 @@ router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ error: 'Nenhum item para importar' });
   }
   try {
+    const companyId = await getCompanyId(req);
+
     // Single bulk INSERT using unnest — avoids N round-trips and Vercel 10s timeout
     const descriptions = items.map(i => i.description);
     const amounts      = items.map(i => i.amount);
@@ -264,13 +268,12 @@ router.post('/bulk-import', async (req: AuthRequest, res: Response) => {
     const notes        = items.map(i => i.notes || null);
 
     const { rows } = await pool.query(
-      `INSERT INTO financial_revenues (description, amount, date, category_id, client_name, notes, status)
-       SELECT * FROM unnest(
-         $1::text[], $2::numeric[], $3::text[], $4::int[], $5::text[], $6::text[],
-         array_fill('pendente'::text, ARRAY[$7::int])
-       )
+      `INSERT INTO financial_revenues (description, amount, date, category_id, client_name, notes, status, company_id)
+       SELECT unnest($1::text[]), unnest($2::numeric[]), unnest($3::text[]), unnest($4::int[]),
+              unnest($5::text[]), unnest($6::text[]),
+              'pendente', $7::int
        RETURNING id`,
-      [descriptions, amounts, dates, categoryIds, clientNames, notes, items.length]
+      [descriptions, amounts, dates, categoryIds, clientNames, notes, companyId]
     );
 
     // Learn from confirmed imports (fire-and-forget, non-blocking)
@@ -292,11 +295,13 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Campos obrigatórios: description, amount, date' });
     }
 
+    const companyId = await getCompanyId(req);
+
     const { rows: [inserted] } = await pool.query(`
-      INSERT INTO financial_revenues (description, client_name, category_id, client_id, amount, date, due_date, status, is_recurring, recurrence_type, notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO financial_revenues (description, client_name, category_id, client_id, amount, date, due_date, status, is_recurring, recurrence_type, notes, company_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id
-    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? 1 : 0, recurrence_type || null, notes || null]);
+    `, [description, client_name || null, category_id || null, client_id || null, amount, date, due_date || null, status || 'pendente', is_recurring ? 1 : 0, recurrence_type || null, notes || null, companyId]);
 
     const { rows: [newRow] } = await pool.query(`
       SELECT fr.*, fc.name as category_name, fc.color as category_color,

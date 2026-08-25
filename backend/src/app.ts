@@ -381,6 +381,17 @@ export async function runMigrations() {
     `);
   } catch (e) { console.error('[migration] user_companies error:', e); }
 
+  // Phase 2: company_id on financial tables
+  try {
+    await pool.query(`ALTER TABLE financial_revenues ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) DEFAULT 1`);
+    await pool.query(`UPDATE financial_revenues SET company_id = 1 WHERE company_id IS NULL`);
+  } catch (e) { console.error('[migration] financial_revenues company_id error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE financial_expenses ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) DEFAULT 1`);
+    await pool.query(`UPDATE financial_expenses SET company_id = 1 WHERE company_id IS NULL`);
+  } catch (e) { console.error('[migration] financial_expenses company_id error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
