@@ -443,6 +443,12 @@ export async function runMigrations() {
     await pool.query(`UPDATE products SET company_id = 1 WHERE company_id IS NULL`);
   } catch (e) { console.error('[migration] products company_id error:', e); }
 
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_email TEXT`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_whatsapp TEXT`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_instagram TEXT`);
+  } catch (e) { console.error('[migration] opportunities contact fields error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 

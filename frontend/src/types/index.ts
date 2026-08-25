@@ -177,6 +177,10 @@ export interface Opportunity {
   company_id?: number | null;
   company_name?: string | null;
   company_color?: string | null;
+  // Contato do lead
+  contact_email?: string | null;
+  contact_whatsapp?: string | null;
+  contact_instagram?: string | null;
 }
 
 export interface SimpleEmployee { id: number; name: string; role?: string; }

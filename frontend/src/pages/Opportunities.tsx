@@ -86,6 +86,7 @@ const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
   original_price: null, payment_method: null, installments: 1, payment_notes: null,
   referral_name: null, referral_type: null, referral_client_id: null, referral_employee_id: null,
+  contact_email: null, contact_whatsapp: null, contact_instagram: null,
 };
 
 const STAGE_COLORS = [
@@ -2078,6 +2079,22 @@ export default function Opportunities() {
                       <input value={form.client_name || ''} onChange={e => setForm(f => ({...f, client_name: e.target.value}))}
                         className="input-dark w-full" />
                     </Field>
+
+                    {/* Contato do lead */}
+                    <div className="col-span-2 grid grid-cols-3 gap-3">
+                      <Field label="E-mail">
+                        <input type="email" value={form.contact_email || ''} onChange={e => setForm(f => ({...f, contact_email: e.target.value || null}))}
+                          placeholder="contato@email.com" className="input-dark w-full" />
+                      </Field>
+                      <Field label="WhatsApp">
+                        <input type="tel" value={form.contact_whatsapp || ''} onChange={e => setForm(f => ({...f, contact_whatsapp: e.target.value || null}))}
+                          placeholder="(11) 99999-9999" className="input-dark w-full" />
+                      </Field>
+                      <Field label="Instagram">
+                        <input value={form.contact_instagram || ''} onChange={e => setForm(f => ({...f, contact_instagram: e.target.value || null}))}
+                          placeholder="@usuario" className="input-dark w-full" />
+                      </Field>
+                    </div>
 
                     {/* Empresa (admin only) */}
                     {isAdmin && companies.length > 1 && (
