@@ -835,10 +835,10 @@ export default function Opportunities() {
   };
 
   const items = data?.items || [];
-  const summary = data?.summary;
   const pipelineStages = stages.filter(s => !s.is_terminal);
   const wonStage  = stages.find(s => s.key === 'fechado');
   const lostStage = stages.find(s => s.key === 'perdido');
+  const terminalKeys = stages.filter(s => s.is_terminal).map(s => s.key);
 
   // Derived filter helpers
   const categories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[];
@@ -936,9 +936,26 @@ export default function Opportunities() {
     (i.client_name ?? '').toLowerCase().includes(searchLower)
   );
 
-  const overdueCount = summary?.overdue_followups ?? 0;
-  const todayCount   = summary?.today_followups   ?? 0;
-  const soonCount    = summary?.soon_followups     ?? 0;
+  // Summary derived from filtered items — updates instantly on company filter change
+  const filteredAll = isAdmin && companyFilter !== 'all'
+    ? items.filter(o => o.company_id === companyFilter)
+    : items;
+  const activeItems = filteredAll.filter(o => !terminalKeys.includes(o.stage));
+  const wonItems    = filteredAll.filter(o => o.stage === (wonStage?.key ?? 'fechado'));
+  const lostItems   = filteredAll.filter(o => o.stage === (lostStage?.key ?? 'perdido'));
+  const wonCount    = wonItems.length;
+  const lostCount   = lostItems.length;
+  const derivedSummary = {
+    total_value:       activeItems.reduce((s, o) => s + Number(o.value), 0),
+    negotiation_value: filteredAll.filter(o => o.stage === 'negociacao').reduce((s, o) => s + Number(o.value), 0),
+    won_value:         wonItems.reduce((s, o) => s + Number(o.value), 0),
+    win_rate:          wonCount + lostCount > 0 ? (wonCount / (wonCount + lostCount)) * 100 : 0,
+  };
+
+  const today = localToday();
+  const overdueCount = filteredAll.filter(o => !terminalKeys.includes(o.stage) && o.next_followup && o.next_followup < today).length;
+  const todayCount   = filteredAll.filter(o => !terminalKeys.includes(o.stage) && o.next_followup === today).length;
+  const soonCount    = filteredAll.filter(o => !terminalKeys.includes(o.stage) && o.next_followup && o.next_followup > today && o.next_followup <= new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)).length;
 
   return (
     <div className="space-y-5">
@@ -1025,24 +1042,24 @@ export default function Opportunities() {
         </div>
       )}
 
-      {/* KPIs */}
-      {summary && (
+      {/* KPIs — derived from filtered items, updates instantly */}
+      {data && (
         <div className="grid grid-cols-4 gap-4">
           <div className="card p-4">
             <div className="label-dark mb-1">Total</div>
-            <div className="metric-md">{brl(summary.total_value)}</div>
+            <div className="metric-md">{brl(derivedSummary.total_value)}</div>
           </div>
           <div className="card p-4">
             <div className="label-dark mb-1">Em negociação</div>
-            <div className="metric-md text-amber-400">{brl(summary.negotiation_value ?? 0)}</div>
+            <div className="metric-md text-amber-400">{brl(derivedSummary.negotiation_value)}</div>
           </div>
           <div className="card p-4">
             <div className="label-dark mb-1">Convertidos</div>
-            <div className="metric-md text-emerald-400">{brl(summary.won_value)}</div>
+            <div className="metric-md text-emerald-400">{brl(derivedSummary.won_value)}</div>
           </div>
           <div className="card p-4">
             <div className="label-dark mb-1">Taxa de conversão</div>
-            <div className="metric-md text-emerald-400">{summary.win_rate.toFixed(1)}%</div>
+            <div className="metric-md text-emerald-400">{derivedSummary.win_rate.toFixed(1)}%</div>
           </div>
         </div>
       )}
