@@ -179,8 +179,11 @@ router.delete('/:id/activities/:aid', async (req: Request, res: Response) => {
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { stage } = req.query;
-    const companyId = await getCompanyId(req);
+    const { stage, all_companies } = req.query;
+    const role = (req as any).user?.role;
+    const isAdmin = role === 'admin';
+    const viewAll = isAdmin && all_companies === '1';
+    const companyId = viewAll ? null : await getCompanyId(req);
 
     let query = `
       SELECT
@@ -188,16 +191,25 @@ router.get('/', async (req: Request, res: Response) => {
         p.name  as product_name,
         p.price as product_price,
         u.name  as owner_name,
+        c.name  as company_name,
+        c.color as company_color,
         EXTRACT(DAY FROM NOW() - COALESCE(o.stage_entered_at, o.created_at)::timestamp)::integer as days_in_stage,
         (SELECT COUNT(*) FROM opportunity_activities a WHERE a.opportunity_id = o.id) as activity_count
       FROM opportunities o
-      LEFT JOIN products p ON p.id = o.product_id
-      LEFT JOIN users    u ON u.id = o.owner_id
-      WHERE o.company_id = $1
+      LEFT JOIN products  p ON p.id = o.product_id
+      LEFT JOIN users     u ON u.id = o.owner_id
+      LEFT JOIN companies c ON c.id = o.company_id
     `;
-    const params: (string | number)[] = [companyId];
-    let paramIdx = 2;
-    if (stage) { query += ` AND o.stage = $${paramIdx++}`; params.push(stage as string); }
+    const params: (string | number)[] = [];
+    let paramIdx = 1;
+
+    if (!viewAll) {
+      query += ` WHERE o.company_id = $${paramIdx++}`;
+      params.push(companyId as number);
+      if (stage) { query += ` AND o.stage = $${paramIdx++}`; params.push(stage as string); }
+    } else {
+      if (stage) { query += ` WHERE o.stage = $${paramIdx++}`; params.push(stage as string); }
+    }
     query += ' ORDER BY o.created_at DESC';
 
     // ── Main items query (critical — if this fails, return 500) ──────────────

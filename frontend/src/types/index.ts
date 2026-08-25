@@ -173,6 +173,10 @@ export interface Opportunity {
   last_activity_type: 'nota' | 'ligacao' | 'email' | 'reuniao' | 'whatsapp' | 'proposta' | null;
   created_at: string;
   updated_at: string;
+  // Multi-empresa
+  company_id?: number | null;
+  company_name?: string | null;
+  company_color?: string | null;
 }
 
 export interface SimpleEmployee { id: number; name: string; role?: string; }

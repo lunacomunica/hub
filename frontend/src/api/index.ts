@@ -185,9 +185,12 @@ export interface OppSummary {
   referral_leads_count: number;
   referral_ranking: { referral_name: string; referral_type: string; referral_client_id: number | null; referral_employee_id: number | null; total_leads: number; won: number; won_value: number }[];
 }
-export const getOpportunities = (filters?: { stage?: string }): Promise<{ items: Opportunity[]; summary: OppSummary }> => {
-  const params = filters?.stage ? `?stage=${filters.stage}` : '';
-  return req(`/opportunities${params}`);
+export const getOpportunities = (filters?: { stage?: string; allCompanies?: boolean }): Promise<{ items: Opportunity[]; summary: OppSummary }> => {
+  const p = new URLSearchParams();
+  if (filters?.stage) p.set('stage', filters.stage);
+  if (filters?.allCompanies) p.set('all_companies', '1');
+  const qs = p.toString();
+  return req(`/opportunities${qs ? `?${qs}` : ''}`);
 };
 export const createOpportunity = (data: Partial<Opportunity>): Promise<Opportunity> =>
   req('/opportunities', { method: 'POST', body: JSON.stringify(data) });

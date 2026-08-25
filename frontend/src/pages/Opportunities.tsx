@@ -14,6 +14,7 @@ import {
 } from '../api';
 import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useCompany } from '../context/CompanyContext';
 
 interface Product { id: number; name: string; price: number; category: string | null; billing_type?: 'mrr' | 'tcv' | 'ambos' }
 interface OppItem { id?: number; description: string; product_id?: number | null; value: number; }
@@ -128,10 +129,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Opportunity card ─────────────────────────────────────────────────────────
 
-function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, staleThreshold }: {
+function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, staleThreshold, showCompany }: {
   opp: Opportunity; onEdit: (o: Opportunity) => void; onDelete: (id: number) => void;
   onDragStart: (id: number) => void; onDragEnd: () => void; isDragging: boolean;
-  staleThreshold: number;
+  staleThreshold: number; showCompany?: boolean;
 }) {
   const fuStatus = followupStatus(opp.next_followup);
   const fuColors = {
@@ -174,6 +175,16 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, st
           <Trash2 size={11} />
         </button>
       </div>
+
+      {/* Company badge */}
+      {showCompany && opp.company_name && (
+        <div className="mb-1">
+          <span className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+            style={{ background: (opp.company_color || '#3b82f6') + '22', color: opp.company_color || '#3b82f6', border: `1px solid ${(opp.company_color || '#3b82f6')}44` }}>
+            {opp.company_name}
+          </span>
+        </div>
+      )}
 
       {/* Stale alert */}
       {isStale && (
@@ -486,6 +497,9 @@ function ActivityPanel({ oppId, authorDefault }: { oppId: number; authorDefault:
 
 export default function Opportunities() {
   const { user } = useAuth();
+  const { companies } = useCompany();
+  const isAdmin = user?.role === 'admin';
+  const [companyFilter, setCompanyFilter] = useState<'all' | number>('all');
   const [data, setData] = useState<{ items: Opportunity[]; summary: OppSummary } | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -558,7 +572,7 @@ export default function Opportunities() {
     try {
       const token = localStorage.getItem('auth-token');
       const [opps, allProds, stgs, usrs, settings] = await Promise.all([
-        getOpportunities().catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
+        getOpportunities(isAdmin ? { allCompanies: true } : {}).catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
         getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
         getPipelineStages().catch(e => { console.error('stages', e); return [] as any[]; }),
         getUsers().catch(e => { console.error('users', e); return [] as any[]; }),
@@ -841,6 +855,9 @@ export default function Opportunities() {
 
   function applyFilters(list: Opportunity[]): Opportunity[] {
     return list.filter(opp => {
+      // Company filter (admin only)
+      if (isAdmin && companyFilter !== 'all' && opp.company_id !== companyFilter) return false;
+
       // Temperature (multi-select)
       if (filters.temperatures.length > 0 && !filters.temperatures.includes(opp.temperature ?? '')) return false;
 
@@ -975,6 +992,38 @@ export default function Opportunities() {
           </button>
         </div>
       </div>
+
+      {/* Company filter pills — admin only, when multiple companies exist */}
+      {isAdmin && companies.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setCompanyFilter('all')}
+            style={{
+              padding: '5px 12px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+              border: companyFilter === 'all' ? '1px solid rgba(59,130,246,0.5)' : '1px solid rgba(59,130,246,0.15)',
+              background: companyFilter === 'all' ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.7)',
+              color: companyFilter === 'all' ? '#93c5fd' : '#64748b',
+              transition: 'all 0.15s',
+            }}>
+            Todas as empresas
+          </button>
+          {companies.map(c => (
+            <button key={c.id}
+              onClick={() => setCompanyFilter(companyFilter === c.id ? 'all' : c.id)}
+              style={{
+                padding: '5px 12px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                border: companyFilter === c.id ? `1px solid ${c.color}66` : '1px solid rgba(59,130,246,0.12)',
+                background: companyFilter === c.id ? c.color + '22' : 'rgba(15,23,42,0.7)',
+                color: companyFilter === c.id ? c.color : '#64748b',
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* KPIs */}
       {summary && (
@@ -1330,7 +1379,8 @@ export default function Opportunities() {
                   {stageItems.map(o => (
                     <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
                       onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
-                      isDragging={dragId === o.id} staleThreshold={staleThreshold} />
+                      isDragging={dragId === o.id} staleThreshold={staleThreshold}
+                      showCompany={isAdmin && companyFilter === 'all' && companies.length > 1} />
                   ))}
                   <button onClick={() => openCreate(stage.key)}
                     className="w-full text-xs text-slate-700 hover:text-slate-500 py-2 rounded-lg flex items-center justify-center gap-1 transition-colors"
@@ -1357,7 +1407,8 @@ export default function Opportunities() {
                 {orphanedItems.map(o => (
                   <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
                     onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
-                    isDragging={dragId === o.id} staleThreshold={staleThreshold} />
+                    isDragging={dragId === o.id} staleThreshold={staleThreshold}
+                    showCompany={isAdmin && companyFilter === 'all' && companies.length > 1} />
                 ))}
               </div>
               <p className="text-xs text-amber-600 mt-1.5 px-1">
