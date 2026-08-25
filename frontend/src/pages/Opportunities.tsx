@@ -2083,7 +2083,7 @@ export default function Opportunities() {
                     {/* Contato do lead */}
                     <div className="col-span-2 grid grid-cols-4 gap-3">
                       <Field label="Data do contato">
-                        <input type="date" value={form.contact_date || ''} onChange={e => setForm(f => ({...f, contact_date: e.target.value || null}))}
+                        <input type="date" value={form.contact_date ? form.contact_date.slice(0, 10) : ''} onChange={e => setForm(f => ({...f, contact_date: e.target.value || null}))}
                           className="input-dark w-full" />
                       </Field>
                       <Field label="E-mail">

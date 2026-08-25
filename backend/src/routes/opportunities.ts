@@ -266,9 +266,9 @@ router.get('/', async (req: Request, res: Response) => {
          GROUP BY lost_reason ORDER BY count DESC`,
         [cid]
       ),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup < CURRENT_DATE::text AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup = CURRENT_DATE::text AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup > CURRENT_DATE::text AND next_followup <= (CURRENT_DATE + INTERVAL '3 days')::text AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
       safeQueryRows<{ source: string; total: number; won: number; lost: number; active: number; won_value: number; won_value_month: number }>(
         `SELECT
            COALESCE(NULLIF(source,''), 'Não informado') as source,
