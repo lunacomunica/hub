@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
@@ -10,17 +11,18 @@ function computeHealth(marginPercent: number, target: number, riskAlert?: number
   return 'critico';
 }
 
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
+    const companyId = await getCompanyId(req);
 
     const { rows: clients } = await pool.query<{
       id: number; name: string; monthly_fee: number; margin_target: number;
       active: boolean; start_date: string | null; notes: string | null;
       created_at: string; updated_at: string;
-    }>('SELECT * FROM agency_clients ORDER BY name');
+    }>('SELECT * FROM agency_clients WHERE company_id = $1 ORDER BY name', [companyId]);
 
     // Calculate total MRR from all active clients
     const totalMrr = clients.filter(c => c.active).reduce((s, c) => s + Number(c.monthly_fee), 0);
@@ -152,11 +154,12 @@ router.post('/', async (req: Request, res: Response) => {
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
     const isActive = active !== undefined ? (active ? 1 : 0) : 1;
+    const companyId = await getCompanyId(req);
     const { rows: [created] } = await pool.query(
-      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential, client_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, notes, service_type, churn_date, churn_reason, churn_notes, reactivation_potential, client_type, company_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao', client_type || 'mrr']
+      [name, monthly_fee || 0, margin_target || 30, isActive, start_date || null, notes || null, service_type || null, churn_date || null, churn_reason || null, churn_notes || null, reactivation_potential || 'nao', client_type || 'mrr', companyId]
     );
 
     res.status(201).json(created);

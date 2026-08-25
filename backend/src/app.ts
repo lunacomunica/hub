@@ -392,6 +392,22 @@ export async function runMigrations() {
     await pool.query(`UPDATE financial_expenses SET company_id = 1 WHERE company_id IS NULL`);
   } catch (e) { console.error('[migration] financial_expenses company_id error:', e); }
 
+  // Phase 3: company_id on commercial tables
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) DEFAULT 1`);
+    await pool.query(`UPDATE opportunities SET company_id = 1 WHERE company_id IS NULL`);
+  } catch (e) { console.error('[migration] opportunities company_id error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE agency_clients ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) DEFAULT 1`);
+    await pool.query(`UPDATE agency_clients SET company_id = 1 WHERE company_id IS NULL`);
+  } catch (e) { console.error('[migration] agency_clients company_id error:', e); }
+
+  try {
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) DEFAULT 1`);
+    await pool.query(`UPDATE products SET company_id = 1 WHERE company_id IS NULL`);
+  } catch (e) { console.error('[migration] products company_id error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 

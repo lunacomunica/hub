@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { active } = req.query;
-    let query = 'SELECT * FROM products WHERE 1=1';
-    const params: unknown[] = [];
-    let paramIdx = 1;
+    const companyId = await getCompanyId(req);
+    let query = 'SELECT * FROM products WHERE company_id = $1';
+    const params: unknown[] = [companyId];
+    let paramIdx = 2;
     if (active !== undefined) {
       query += ` AND active = $${paramIdx++}`;
       params.push(active === 'true' || active === '1' ? 1 : 0);
@@ -67,11 +69,12 @@ router.post('/', async (req: Request, res: Response) => {
     const { name, price, category, description, active, billing_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
     const activeVal = active !== undefined ? (active ? 1 : 0) : 1;
+    const companyId = await getCompanyId(req);
     const { rows: [created] } = await pool.query(
-      `INSERT INTO products (name, price, category, description, active, billing_type)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (name, price, category, description, active, billing_type, company_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr']
+      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr', companyId]
     );
     res.status(201).json(created);
   } catch (err) {

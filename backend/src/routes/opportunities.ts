@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
@@ -179,6 +180,8 @@ router.delete('/:id/activities/:aid', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { stage } = req.query;
+    const companyId = await getCompanyId(req);
+
     let query = `
       SELECT
         o.*,
@@ -190,10 +193,10 @@ router.get('/', async (req: Request, res: Response) => {
       FROM opportunities o
       LEFT JOIN products p ON p.id = o.product_id
       LEFT JOIN users    u ON u.id = o.owner_id
-      WHERE 1=1
+      WHERE o.company_id = $1
     `;
-    const params: string[] = [];
-    let paramIdx = 1;
+    const params: (string | number)[] = [companyId];
+    let paramIdx = 2;
     if (stage) { query += ` AND o.stage = $${paramIdx++}`; params.push(stage as string); }
     query += ' ORDER BY o.created_at DESC';
 
@@ -206,50 +209,54 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // ── Summary queries (non-critical — each fails gracefully) ────────────────
-    const safeQuery = async <T>(sql: string, fallback: T): Promise<T> => {
-      try { const { rows: r } = await pool.query(sql); return (r[0] ?? fallback) as T; }
+    const safeQuery = async <T>(sql: string, params_: unknown[], fallback: T): Promise<T> => {
+      try { const { rows: r } = await pool.query(sql, params_); return (r[0] ?? fallback) as T; }
       catch (e) { console.error('[opp summary]', e); return fallback; }
     };
-    const safeQueryRows = async <T>(sql: string): Promise<T[]> => {
-      try { const { rows: r } = await pool.query(sql); return r as T[]; }
+    const safeQueryRows = async <T>(sql: string, params_: unknown[]): Promise<T[]> => {
+      try { const { rows: r } = await pool.query(sql, params_); return r as T[]; }
       catch (e) { console.error('[opp summary]', e); return []; }
     };
+
+    const cid = companyId;
 
     const [summary, negRow, byStage, won, lost, lostReasons, overdueRow, todayRow, soonRow, sourcePerf, activeClientsRow, referralCountRow, referralRanking] = await Promise.all([
       safeQuery(
         `SELECT COUNT(*) as total_count, COALESCE(SUM(value), 0) as total_value,
                 COALESCE(SUM(value * probability / 100.0), 0) as weighted_value
-         FROM opportunities WHERE stage NOT IN ('fechado','perdido')`,
-        { total_count: '0', total_value: '0', weighted_value: '0' }
+         FROM opportunities WHERE company_id = $1 AND stage NOT IN ('fechado','perdido')`,
+        [cid], { total_count: '0', total_value: '0', weighted_value: '0' }
       ),
       safeQuery(
-        `SELECT COALESCE(SUM(value),0) as v FROM opportunities WHERE stage = 'negociacao'`,
-        { v: '0' }
+        `SELECT COALESCE(SUM(value),0) as v FROM opportunities WHERE company_id = $1 AND stage = 'negociacao'`,
+        [cid], { v: '0' }
       ),
       safeQueryRows(
         `SELECT stage, COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
-         FROM opportunities GROUP BY stage`
+         FROM opportunities WHERE company_id = $1 GROUP BY stage`,
+        [cid]
       ),
       safeQuery(
-        `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE stage='fechado'`,
-        { count: '0', total: '0' }
+        `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total FROM opportunities WHERE company_id = $1 AND stage='fechado'`,
+        [cid], { count: '0', total: '0' }
       ),
       safeQuery(
         `SELECT COUNT(*) as count, COALESCE(SUM(value),0) as total
          FROM opportunities
-         WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')`,
-        { count: '0', total: '0' }
+         WHERE company_id = $1 AND stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')`,
+        [cid], { count: '0', total: '0' }
       ),
       safeQueryRows(
         `SELECT COALESCE(lost_reason, 'Não informado') as reason,
                 COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
          FROM opportunities
-         WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')
-         GROUP BY lost_reason ORDER BY count DESC`
+         WHERE company_id = $1 AND stage IN (SELECT key FROM pipeline_stages WHERE is_terminal=1 AND key!='fechado')
+         GROUP BY lost_reason ORDER BY count DESC`,
+        [cid]
       ),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
-      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup < CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup = CURRENT_DATE AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
+      safeQuery(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND next_followup > CURRENT_DATE AND next_followup <= CURRENT_DATE + INTERVAL '3 days' AND stage NOT IN ('fechado','perdido')`, [cid], { c: '0' }),
       safeQueryRows<{ source: string; total: number; won: number; lost: number; active: number; won_value: number; won_value_month: number }>(
         `SELECT
            COALESCE(NULLIF(source,''), 'Não informado') as source,
@@ -260,11 +267,13 @@ router.get('/', async (req: Request, res: Response) => {
            COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value,
            COALESCE(SUM(value) FILTER (WHERE stage = 'fechado' AND updated_at >= DATE_TRUNC('month', CURRENT_DATE)), 0) as won_value_month
          FROM opportunities
+         WHERE company_id = $1
          GROUP BY COALESCE(NULLIF(source,''), 'Não informado')
-         ORDER BY won DESC, total DESC`
+         ORDER BY won DESC, total DESC`,
+        [cid]
       ),
-      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM agency_clients WHERE active = 1`, { c: '0' }),
-      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM opportunities WHERE referral_name IS NOT NULL AND referral_name != ''`, { c: '0' }),
+      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM agency_clients WHERE company_id = $1 AND active = 1`, [cid], { c: '0' }),
+      safeQuery<{ c: string }>(`SELECT COUNT(*) as c FROM opportunities WHERE company_id = $1 AND referral_name IS NOT NULL AND referral_name != ''`, [cid], { c: '0' }),
       safeQueryRows<{ referral_name: string; referral_type: string; referral_client_id: number | null; referral_employee_id: number | null; total_leads: number; won: number; won_value: number }>(
         `SELECT referral_name,
            COALESCE(referral_type, 'external') as referral_type,
@@ -274,10 +283,11 @@ router.get('/', async (req: Request, res: Response) => {
            COUNT(*) FILTER (WHERE stage = 'fechado')::int as won,
            COALESCE(SUM(value) FILTER (WHERE stage = 'fechado'), 0) as won_value
          FROM opportunities
-         WHERE referral_name IS NOT NULL AND referral_name != ''
+         WHERE company_id = $1 AND referral_name IS NOT NULL AND referral_name != ''
          GROUP BY referral_name, referral_type, referral_client_id, referral_employee_id
          ORDER BY won DESC, total_leads DESC
-         LIMIT 20`
+         LIMIT 20`,
+        [cid]
       ),
     ]);
 
@@ -338,6 +348,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const closedAt = stage === 'fechado' ? new Date().toISOString().split('T')[0] : null;
     const temp = ['frio','morno','quente'].includes(temperature) ? temperature : 'morno';
+    const companyId = await getCompanyId(req);
 
     const { rows: [created] } = await pool.query(
       `INSERT INTO opportunities
@@ -345,8 +356,8 @@ router.post('/', async (req: Request, res: Response) => {
           service_type, product_id, notes, closed_at, temperature,
           next_followup, owner_id, source, lost_reason,
           original_price, payment_method, installments, payment_notes,
-          referral_name, stage_entered_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+          referral_name, stage_entered_at, company_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21)
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -354,7 +365,7 @@ router.post('/', async (req: Request, res: Response) => {
         notes || null, closedAt, temp,
         next_followup || null, owner_id || null, source || null, lost_reason || null,
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
-        referral_name || null,
+        referral_name || null, companyId,
       ]
     );
 
@@ -541,11 +552,12 @@ router.post('/:id/convert-to-client', async (req: Request, res: Response) => {
     const fee = isMrr ? Number(monthly_fee || 0) : 0;
     const startDate = start_date || new Date().toISOString().split('T')[0];
     const clientName = opp.client_name || opp.title;
+    const oppCompanyId = opp.company_id || 1;
 
     const { rows: [client] } = await db.query(
-      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, client_type, service_type)
-       VALUES ($1, $2, $3, 1, $4, $5, $6) RETURNING *`,
-      [clientName, fee, margin_target || 30, startDate, type, service_type || opp.service_type || null]
+      `INSERT INTO agency_clients (name, monthly_fee, margin_target, active, start_date, client_type, service_type, company_id)
+       VALUES ($1, $2, $3, 1, $4, $5, $6, $7) RETURNING *`,
+      [clientName, fee, margin_target || 30, startDate, type, service_type || opp.service_type || null, oppCompanyId]
     );
 
     if (isTcv) {
