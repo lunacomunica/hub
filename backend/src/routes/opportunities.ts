@@ -434,6 +434,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items, company_id,
             contact_email, contact_whatsapp, contact_instagram, contact_date } = req.body;
+    console.log('[opp PUT] contact_date recebido:', contact_date, '| company_id:', company_id);
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
       'SELECT id, stage, closed_at FROM opportunities WHERE id = $1',
@@ -526,6 +527,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
     res.json(updated);
   } catch (err) {
+    console.error('[opp PUT] erro:', err);
     res.status(500).json({ error: 'Erro ao atualizar oportunidade' });
   }
 });
