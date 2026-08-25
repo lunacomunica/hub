@@ -688,10 +688,13 @@ export default function Opportunities() {
     const serviceType = oppItems.length > 0
       ? oppItems.filter(i => i.description?.trim()).map(i => i.description).join(', ')
       : (opp.service_type || linkedProduct?.category || '');
-    // total value from items
-    const totalValue = oppItems.length > 0
+    // If a discount was negotiated, use opp.value (the saved negotiated price).
+    // Otherwise derive from items sum (or opp.value as fallback).
+    const hasNegotiatedDiscount = opp.original_price != null && Number(opp.original_price) > 0;
+    const itemsTotal = oppItems.length > 0
       ? oppItems.reduce((s, i) => s + (Number(i.value) || 0), 0)
       : Number(opp.value || 0);
+    const totalValue = hasNegotiatedDiscount ? Number(opp.value || 0) : itemsTotal;
     setConvertForm({
       client_type: billingType,
       monthly_fee: totalValue,
