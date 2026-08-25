@@ -6,16 +6,22 @@ const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { active } = req.query;
-    const companyId = await getCompanyId(req);
-    let query = 'SELECT * FROM products WHERE company_id = $1';
-    const params: unknown[] = [companyId];
-    let paramIdx = 2;
+    const { active, all_companies } = req.query;
+    const role = (req as any).user?.role;
+    const viewAll = role === 'admin' && all_companies === '1';
+    const companyId = viewAll ? null : await getCompanyId(req);
+
+    let query = viewAll
+      ? 'SELECT p.*, c.name as company_name, c.color as company_color FROM products p LEFT JOIN companies c ON c.id = p.company_id WHERE 1=1'
+      : 'SELECT * FROM products WHERE company_id = $1';
+    const params: unknown[] = viewAll ? [] : [companyId];
+    let paramIdx = viewAll ? 1 : 2;
+
     if (active !== undefined) {
-      query += ` AND active = $${paramIdx++}`;
+      query += ` AND ${viewAll ? 'p.' : ''}active = $${paramIdx++}`;
       params.push(active === 'true' || active === '1' ? 1 : 0);
     }
-    query += ' ORDER BY name';
+    query += viewAll ? ' ORDER BY p.name' : ' ORDER BY name';
     const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {

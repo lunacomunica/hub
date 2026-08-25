@@ -264,8 +264,13 @@ export const getCardExpenses = (id: number, month?: number, year?: number) => {
 };
 
 // Products
-export const getProducts = (activeOnly = false): Promise<{ id: number; name: string; price: number; category: string | null; description: string | null; active: number }[]> =>
-  req(`/products${activeOnly ? '?active=true' : ''}`);
+export const getProducts = (activeOnly = false, allCompanies = false): Promise<{ id: number; name: string; price: number; category: string | null; description: string | null; active: number; company_id?: number; company_name?: string; company_color?: string }[]> => {
+  const p = new URLSearchParams();
+  if (activeOnly) p.set('active', 'true');
+  if (allCompanies) p.set('all_companies', '1');
+  const qs = p.toString();
+  return req(`/products${qs ? `?${qs}` : ''}`);
+};
 
 // Auth
 export const login = (email: string, password: string) =>

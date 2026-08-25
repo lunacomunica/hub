@@ -573,7 +573,7 @@ export default function Opportunities() {
       const token = localStorage.getItem('auth-token');
       const [opps, allProds, stgs, usrs, settings] = await Promise.all([
         getOpportunities(isAdmin ? { allCompanies: true } : {}).catch(e => { console.error('opps', e); return { items: [], summary: null } as any; }),
-        getProducts().catch(e => { console.error('prods', e); return [] as any[]; }),
+        getProducts(false, isAdmin).catch(e => { console.error('prods', e); return [] as any[]; }),
         getPipelineStages().catch(e => { console.error('stages', e); return [] as any[]; }),
         getUsers().catch(e => { console.error('users', e); return [] as any[]; }),
         getCompanySettings().catch(() => ({} as any)),
@@ -612,7 +612,8 @@ export default function Opportunities() {
   const openCreate = (stage?: string) => {
     const firstPipelineStage = stages.filter(s => !s.is_terminal)[0]?.key ?? 'prospeccao';
     const s = stage || firstPipelineStage;
-    setForm({ ...EMPTY, stage: s, probability: PROB_DEFAULT[s] ?? 20 });
+    const defaultCompanyId = companyFilter !== 'all' ? companyFilter : (companies[0]?.id ?? undefined);
+    setForm({ ...EMPTY, stage: s, probability: PROB_DEFAULT[s] ?? 20, company_id: isAdmin ? defaultCompanyId : undefined });
     setOppItems([{ description: '', product_id: undefined, value: 0 }]);
     setModalTab('dados');
     setModal(true);
@@ -2077,6 +2078,21 @@ export default function Opportunities() {
                         className="input-dark w-full" />
                     </Field>
 
+                    {/* Empresa (admin only) */}
+                    {isAdmin && companies.length > 1 && (
+                      <Field label="Empresa">
+                        <select
+                          value={form.company_id ?? ''}
+                          onChange={e => setForm(f => ({ ...f, company_id: e.target.value ? Number(e.target.value) : undefined }))}
+                          className="input-dark w-full"
+                        >
+                          {companies.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+
                     {/* Serviços / Itens */}
                     <div className="col-span-2">
                       <div className="flex items-center justify-between mb-2">
@@ -2113,7 +2129,9 @@ export default function Opportunities() {
                                 className="input-dark w-full text-xs mt-1 text-slate-400"
                               >
                                 <option value="">Produto do catálogo (opcional)</option>
-                                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {products
+                                  .filter(p => !isAdmin || !form.company_id || (p as any).company_id === form.company_id)
+                                  .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                               </select>
                             </div>
                             {/* Value */}
