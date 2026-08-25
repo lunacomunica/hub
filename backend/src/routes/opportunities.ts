@@ -356,12 +356,14 @@ router.post('/', async (req: Request, res: Response) => {
             service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items,
-            contact_email, contact_whatsapp, contact_instagram } = req.body;
+            contact_email, contact_whatsapp, contact_instagram, company_id: bodyCompanyId } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
     const closedAt = stage === 'fechado' ? new Date().toISOString().split('T')[0] : null;
     const temp = ['frio','morno','quente'].includes(temperature) ? temperature : 'morno';
-    const companyId = await getCompanyId(req);
+    const role = (req as any).user?.role;
+    const defaultCompanyId = await getCompanyId(req);
+    const companyId = (role === 'admin' && bodyCompanyId) ? Number(bodyCompanyId) : defaultCompanyId;
 
     const { rows: [created] } = await pool.query(
       `INSERT INTO opportunities
