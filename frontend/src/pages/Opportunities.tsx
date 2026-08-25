@@ -319,11 +319,15 @@ function StageHeader({ stage, count, isOver, onRename, onDelete, canDelete, onMo
         />
       ) : (
         <button onClick={() => { setVal(stage.label); setEditing(true); }}
-          className="text-xs font-semibold text-left flex-1 flex items-center gap-1 group/lbl"
+          className="text-xs font-semibold text-left flex-1 flex items-center gap-2 group/lbl"
           style={{ color: stage.color, background: 'none', border: 'none', cursor: 'text' }}
           title="Clique para renomear"
         >
           {stage.label}
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+            style={{ background: stage.color + '22', color: stage.color }}>
+            {count}
+          </span>
           <Pencil size={9} className="opacity-0 group-hover/lbl:opacity-50 transition-opacity" />
         </button>
       )}
