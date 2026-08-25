@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -74,8 +74,11 @@ export default function Sidebar() {
   }
   if (role === 'admin') {
     modules.push({
-      label: 'Consolidado',
-      items: [{ to: '/consolidado', label: 'Visão Consolidada', icon: LayoutGrid }],
+      label: 'Empresas',
+      items: [
+        { to: '/consolidado', label: 'Visão Consolidada', icon: LayoutGrid },
+        { to: '/empresas',    label: 'Empresas',          icon: Building2 },
+      ],
     });
     modules.push({ label: 'Pessoas', items: PESSOAS_ITEMS });
   }
