@@ -356,7 +356,8 @@ router.post('/', async (req: Request, res: Response) => {
             service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items,
-            contact_email, contact_whatsapp, contact_instagram, company_id: bodyCompanyId } = req.body;
+            contact_email, contact_whatsapp, contact_instagram, contact_date,
+            company_id: bodyCompanyId } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
     const closedAt = stage === 'fechado' ? new Date().toISOString().split('T')[0] : null;
@@ -372,8 +373,8 @@ router.post('/', async (req: Request, res: Response) => {
           next_followup, owner_id, source, lost_reason,
           original_price, payment_method, installments, payment_notes,
           referral_name, stage_entered_at, company_id,
-          contact_email, contact_whatsapp, contact_instagram)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21,$22,$23,$24)
+          contact_email, contact_whatsapp, contact_instagram, contact_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21,$22,$23,$24,$25)
        RETURNING *`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
@@ -383,6 +384,7 @@ router.post('/', async (req: Request, res: Response) => {
         original_price || null, payment_method || null, installments || 1, payment_notes || null,
         referral_name || null, companyId,
         contact_email || null, contact_whatsapp || null, contact_instagram || null,
+        contact_date || null,
       ]
     );
 
@@ -431,7 +433,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items, company_id,
-            contact_email, contact_whatsapp, contact_instagram } = req.body;
+            contact_email, contact_whatsapp, contact_instagram, contact_date } = req.body;
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
       'SELECT id, stage, closed_at FROM opportunities WHERE id = $1',
@@ -461,8 +463,9 @@ router.put('/:id', async (req: Request, res: Response) => {
          referral_name = $20,
          company_id = COALESCE($21, company_id),
          contact_email = $22, contact_whatsapp = $23, contact_instagram = $24,
+         contact_date = $25,
          updated_at = NOW()${stageEnteredClause}
-       WHERE id = $25`,
+       WHERE id = $26`,
       [
         title, client_name || null, value || 0, stage || 'prospeccao', probability || 20,
         expected_close_date || null, service_type || null, product_id || null,
@@ -472,6 +475,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         referral_name || null,
         company_id || null,
         contact_email || null, contact_whatsapp || null, contact_instagram || null,
+        contact_date || null,
         req.params.id,
       ]
     );

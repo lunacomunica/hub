@@ -181,6 +181,7 @@ export interface Opportunity {
   contact_email?: string | null;
   contact_whatsapp?: string | null;
   contact_instagram?: string | null;
+  contact_date?: string | null;
 }
 
 export interface SimpleEmployee { id: number; name: string; role?: string; }

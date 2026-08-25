@@ -447,6 +447,7 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_email TEXT`);
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_whatsapp TEXT`);
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_instagram TEXT`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_date DATE`);
   } catch (e) { console.error('[migration] opportunities contact fields error:', e); }
 
   console.log('✅ Migrations concluídas');

@@ -86,7 +86,7 @@ const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   expected_close_date: '', notes: '', product_id: undefined, lost_reason: null,
   original_price: null, payment_method: null, installments: 1, payment_notes: null,
   referral_name: null, referral_type: null, referral_client_id: null, referral_employee_id: null,
-  contact_email: null, contact_whatsapp: null, contact_instagram: null,
+  contact_email: null, contact_whatsapp: null, contact_instagram: null, contact_date: null,
 };
 
 const STAGE_COLORS = [
@@ -2081,7 +2081,11 @@ export default function Opportunities() {
                     </Field>
 
                     {/* Contato do lead */}
-                    <div className="col-span-2 grid grid-cols-3 gap-3">
+                    <div className="col-span-2 grid grid-cols-4 gap-3">
+                      <Field label="Data do contato">
+                        <input type="date" value={form.contact_date || ''} onChange={e => setForm(f => ({...f, contact_date: e.target.value || null}))}
+                          className="input-dark w-full" />
+                      </Field>
                       <Field label="E-mail">
                         <input type="email" value={form.contact_email || ''} onChange={e => setForm(f => ({...f, contact_email: e.target.value || null}))}
                           placeholder="contato@email.com" className="input-dark w-full" />
