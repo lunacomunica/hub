@@ -97,26 +97,38 @@ router.put('/:id', async (req: Request, res: Response) => {
     const activeVal = active !== undefined ? (active ? 1 : 0) : 1;
     const { rows: [existing] } = await pool.query('SELECT id FROM products WHERE id = $1', [req.params.id]);
     if (!existing) return res.status(404).json({ error: 'Produto não encontrado' });
+
+    // ── Core fields (always exist) ───────────────────────────────────────────
     await pool.query(
-      `UPDATE products SET
-         name=$1, price=$2, category=$3, description=$4, active=$5, billing_type=$6,
-         promise=$7, target_audience=$8, deliverables=$9, differentials=$10,
-         objections=$11, pitch=$12, faqs=$13, social_proof=$14, updated_at=NOW()
-       WHERE id=$15`,
-      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr',
-       promise || null, target_audience || null,
-       deliverables ? JSON.stringify(deliverables) : null,
-       differentials || null,
-       objections ? JSON.stringify(objections) : null,
-       pitch || null,
-       faqs ? JSON.stringify(faqs) : null,
-       social_proof || null,
-       req.params.id]
+      `UPDATE products SET name=$1, price=$2, category=$3, description=$4, active=$5, billing_type=$6 WHERE id=$7`,
+      [name, price || 0, category || null, description || null, activeVal, billing_type || 'mrr', req.params.id]
     );
+
+    // ── Advanced fields (self-healing) ───────────────────────────────────────
+    try {
+      await pool.query(
+        `UPDATE products SET
+           promise=$1, target_audience=$2, deliverables=$3, differentials=$4,
+           objections=$5, pitch=$6, faqs=$7, social_proof=$8, updated_at=NOW()
+         WHERE id=$9`,
+        [promise || null, target_audience || null,
+         deliverables ? JSON.stringify(deliverables) : null,
+         differentials || null,
+         objections ? JSON.stringify(objections) : null,
+         pitch || null,
+         faqs ? JSON.stringify(faqs) : null,
+         social_proof || null,
+         req.params.id]
+      );
+    } catch (e: any) {
+      console.error('[products PUT] advanced fields error:', e.message);
+    }
+
     const { rows: [updated] } = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao atualizar produto' });
+  } catch (err: any) {
+    console.error('[products PUT] error:', err);
+    res.status(500).json({ error: err?.message || 'Erro ao atualizar produto' });
   }
 });
 
