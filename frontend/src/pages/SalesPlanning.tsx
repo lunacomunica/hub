@@ -84,7 +84,7 @@ export default function SalesPlanning() {
         const m = d.getMonth() + 1;
         const y = d.getFullYear();
         const r = await authFetch(`${API}/sales-goals/${m}/${y}`).then(x => x.json());
-        hist.push({ month: `${String(m).padStart(2,'0')}/${y}`, revenue: r.actual_revenue, goal: r.total_target || 0 });
+        hist.push({ month: `${String(m).padStart(2,'0')}/${y}`, revenue: r.total_actual_from_opps || 0, goal: r.total_target || 0 });
       }
       setHistory(hist);
     } catch (e) { console.error(e); }
