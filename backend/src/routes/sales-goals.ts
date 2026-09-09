@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { getCompanyId } from '../utils/company';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { month, year } = req.query;
-    let query = 'SELECT * FROM sales_goals WHERE 1=1';
-    const params: number[] = [];
-    let paramIdx = 1;
+    const companyId = await getCompanyId(req);
+    let query = 'SELECT * FROM sales_goals WHERE company_id = $1';
+    const params: number[] = [companyId];
+    let paramIdx = 2;
     if (month) { query += ` AND month = $${paramIdx++}`; params.push(Number(month)); }
     if (year) { query += ` AND year = $${paramIdx++}`; params.push(Number(year)); }
     query += ' ORDER BY year DESC, month DESC';
@@ -25,12 +27,13 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
     const year = Number(req.params.year);
     const isComercial = (req as any).user?.role === 'comercial';
     const userId = (req as any).user?.id;
+    const companyId = await getCompanyId(req);
 
     const { rows: [goal] } = await pool.query<{
       id: number; month: number; year: number;
       target_revenue: number; target_new_clients: number; target_recurring: number;
       notes: string | null;
-    }>('SELECT * FROM sales_goals WHERE month = $1 AND year = $2', [month, year]);
+    }>('SELECT * FROM sales_goals WHERE month = $1 AND year = $2 AND company_id = $3', [month, year, companyId]);
 
     const monthStr = String(month).padStart(2, '0');
     const startDate = `${year}-${monthStr}-01`;
@@ -41,29 +44,30 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
       // Comercial: soma apenas oportunidades fechadas pelo próprio usuário
       const { rows: [row] } = await pool.query<{ total: string }>(
         `SELECT COALESCE(SUM(value), 0) as total FROM opportunities
-         WHERE stage = 'fechado' AND owner_id = $1
+         WHERE stage = 'fechado' AND owner_id = $1 AND company_id = $4
            AND closed_at >= $2 AND closed_at <= $3`,
-        [userId, startDate, endDate]
+        [userId, startDate, endDate, companyId]
       );
       actualRevenue = Number(row.total);
     } else {
       const { rows: [revenueRow] } = await pool.query<{ total: string }>(
         `SELECT COALESCE(SUM(amount), 0) as total FROM financial_revenues
-         WHERE date >= $1 AND date <= $2 AND status != 'cancelado'`,
-        [startDate, endDate]
+         WHERE date >= $1 AND date <= $2 AND status != 'cancelado' AND company_id = $3`,
+        [startDate, endDate, companyId]
       );
       actualRevenue = Number(revenueRow.total);
     }
 
     const { rows: [clientsRow] } = await pool.query<{ count: string }>(
       `SELECT COUNT(*) as count FROM agency_clients
-       WHERE start_date >= $1 AND start_date <= $2`,
-      [startDate, endDate]
+       WHERE start_date >= $1 AND start_date <= $2 AND company_id = $3`,
+      [startDate, endDate, companyId]
     );
     const actualNewClients = Number(clientsRow.count);
 
     // Goal items with product info + actual closed opportunities per product
     const ownerFilter = isComercial ? `AND o.owner_id = ${userId}` : '';
+    const companyFilter = `AND o.company_id = ${companyId}`;
     const items = goal ? (await pool.query(
       `SELECT
          sgi.id, sgi.goal_id, sgi.product_id, sgi.quantity, sgi.unit_price,
@@ -74,26 +78,26 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
            WHERE o.product_id = sgi.product_id
              AND o.stage = 'fechado'
              AND o.closed_at >= $1 AND o.closed_at <= $2
-             ${ownerFilter}
+             ${companyFilter} ${ownerFilter}
          ), 0) as actual_count,
          COALESCE((
            SELECT SUM(o.value) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage = 'fechado'
              AND o.closed_at >= $3 AND o.closed_at <= $4
-             ${ownerFilter}
+             ${companyFilter} ${ownerFilter}
          ), 0) as actual_revenue,
          COALESCE((
            SELECT COUNT(*) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage NOT IN ('fechado', 'perdido')
-             ${ownerFilter}
+             ${companyFilter} ${ownerFilter}
          ), 0) as pipeline_count,
          COALESCE((
            SELECT SUM(o.value) FROM opportunities o
            WHERE o.product_id = sgi.product_id
              AND o.stage NOT IN ('fechado', 'perdido')
-             ${ownerFilter}
+             ${companyFilter} ${ownerFilter}
          ), 0) as pipeline_value
        FROM sales_goal_items sgi
        JOIN products p ON p.id = sgi.product_id
@@ -105,10 +109,10 @@ router.get('/:month/:year', async (req: Request, res: Response) => {
     // Also count closed opps without product_id (unlinked) toward total
     const { rows: [unlinkedRow] } = await pool.query<{ total: string }>(
       `SELECT COALESCE(SUM(value), 0) as total FROM opportunities
-       WHERE stage = 'fechado' AND product_id IS NULL
+       WHERE stage = 'fechado' AND product_id IS NULL AND company_id = $3
          AND closed_at >= $1 AND closed_at <= $2
          ${isComercial ? `AND owner_id = ${userId}` : ''}`,
-      [startDate, endDate]
+      [startDate, endDate, companyId]
     );
     const unlinkedClosed = Number(unlinkedRow.total);
 
@@ -134,6 +138,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const { month, year, target_new_clients, notes, items } = req.body;
     if (!month || !year) return res.status(400).json({ error: 'month e year são obrigatórios' });
+    const companyId = await getCompanyId(req);
 
     // target_revenue is auto-calculated from items
     const target_revenue = Array.isArray(items)
@@ -141,8 +146,8 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const { rows: [existing] } = await pool.query<{ id: number }>(
-      'SELECT id FROM sales_goals WHERE month = $1 AND year = $2',
-      [month, year]
+      'SELECT id FROM sales_goals WHERE month = $1 AND year = $2 AND company_id = $3',
+      [month, year, companyId]
     );
 
     let goalId: number;
@@ -155,10 +160,10 @@ router.post('/', async (req: Request, res: Response) => {
       goalId = existing.id;
     } else {
       const { rows: [created] } = await pool.query<{ id: number }>(
-        `INSERT INTO sales_goals (month, year, target_revenue, target_new_clients, target_recurring, notes)
-         VALUES ($1, $2, $3, $4, 0, $5)
+        `INSERT INTO sales_goals (month, year, target_revenue, target_new_clients, target_recurring, notes, company_id)
+         VALUES ($1, $2, $3, $4, 0, $5, $6)
          RETURNING id`,
-        [month, year, target_revenue, target_new_clients || 0, notes || null]
+        [month, year, target_revenue, target_new_clients || 0, notes || null, companyId]
       );
       goalId = created.id;
     }
