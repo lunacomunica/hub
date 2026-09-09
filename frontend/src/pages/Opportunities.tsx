@@ -42,6 +42,49 @@ const PROB_DEFAULT: Record<string, number> = {
   prospeccao: 10, contato: 25, proposta: 50, negociacao: 75, fechado: 100, perdido: 0,
 };
 
+function fireConfetti(originX: number, originY: number) {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999';
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d')!;
+  const colors = ['#10b981','#3b82f6','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+  const particles = Array.from({ length: 90 }, () => ({
+    x: originX, y: originY,
+    vx: (Math.random() - 0.5) * 14,
+    vy: Math.random() * -14 - 6,
+    w: Math.random() * 8 + 4,
+    h: Math.random() * 4 + 2,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    rot: Math.random() * Math.PI * 2,
+    rotV: (Math.random() - 0.5) * 0.25,
+    alpha: 1,
+  }));
+  let frame: number;
+  const tick = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.45; p.vx *= 0.98;
+      p.rot += p.rotV; p.alpha -= 0.013;
+      if (p.alpha <= 0) continue;
+      alive = true;
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (alive) frame = requestAnimationFrame(tick);
+    else canvas.remove();
+  };
+  frame = requestAnimationFrame(tick);
+}
+
 const TEMP_CONFIG = {
   frio:   { label: 'Frio',   icon: '❄️',  color: '#93c5fd', bg: 'rgba(147,197,253,0.1)'  },
   morno:  { label: 'Morno',  icon: '🌡️', color: '#fcd34d', bg: 'rgba(252,211,77,0.1)'   },
@@ -130,10 +173,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Opportunity card ─────────────────────────────────────────────────────────
 
-function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, staleThreshold, showCompany }: {
+function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, staleThreshold, showCompany, onConvert }: {
   opp: Opportunity; onEdit: (o: Opportunity) => void; onDelete: (id: number) => void;
   onDragStart: (id: number) => void; onDragEnd: () => void; isDragging: boolean;
-  staleThreshold: number; showCompany?: boolean;
+  staleThreshold: number; showCompany?: boolean; onConvert?: (o: Opportunity) => void;
 }) {
   const fuStatus = followupStatus(opp.next_followup);
   const fuColors = {
@@ -275,6 +318,21 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, st
           </span>
         )}
       </div>
+
+      {onConvert && (
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            fireConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            onConvert(opp);
+          }}
+          className="mt-2 w-full opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold py-1.5 rounded-lg flex items-center justify-center gap-1.5"
+          style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)' }}
+        >
+          🏆 Convertido!
+        </button>
+      )}
     </div>
   );
 }
@@ -1407,7 +1465,8 @@ export default function Opportunities() {
                     <OppCard key={o.id} opp={o} onEdit={openEdit} onDelete={handleDelete}
                       onDragStart={setDragId} onDragEnd={() => { setDragId(null); setDropStage(null); }}
                       isDragging={dragId === o.id} staleThreshold={staleThreshold}
-                      showCompany={isAdmin && companyFilter === 'all' && companies.length > 1} />
+                      showCompany={isAdmin && companyFilter === 'all' && companies.length > 1}
+                      onConvert={!stage.is_terminal ? (o) => openConvertModal(o, wonStage?.key) : undefined} />
                   ))}
                   <button onClick={() => openCreate(stage.key)}
                     className="w-full text-xs text-slate-700 hover:text-slate-500 py-2 rounded-lg flex items-center justify-center gap-1 transition-colors"
