@@ -272,11 +272,17 @@ export const getProducts = (activeOnly = false, allCompanies = false): Promise<{
   return req(`/products${qs ? `?${qs}` : ''}`);
 };
 
-// Auth
-export const login = (email: string, password: string) =>
-  req<{ token: string; user: { id: number; name: string; email: string; role: string } }>('/auth/login', {
-    method: 'POST', body: JSON.stringify({ email, password }),
+// Auth — login usa fetch direto para não confundir 401 (credenciais erradas) com sessão expirada
+export const login = async (email: string, password: string) => {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
   });
+  const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+  if (!res.ok) throw new Error(data.error || 'E-mail ou senha incorretos');
+  return data as { token: string; user: { id: number; name: string; email: string; role: string } };
+};
 export const getMe = () => req<{ id: number; name: string; email: string; role: string }>('/auth/me');
 export const getUsers = () => req<User[]>('/auth/users');
 export const createUser = (data: { name: string; email: string; password: string; role: string }) =>
