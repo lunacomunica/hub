@@ -24,6 +24,7 @@ import tcvRouter from './routes/tcv';
 import referralPrizesRouter from './routes/referral-prizes';
 import routineRouter from './routes/routine';
 import companiesRouter from './routes/companies';
+import notesRouter from './routes/notes';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -476,6 +477,7 @@ app.use('/api/tcv',             requireAuth, tcvRouter);
 app.use('/api/referral-prizes', requireAuth, referralPrizesRouter);
 app.use('/api/routine',         requireAuth, routineRouter);
 app.use('/api/companies',       requireAuth, companiesRouter);
+app.use('/api/notes',           requireAuth, notesRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

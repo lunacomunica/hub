@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2, BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -29,6 +29,10 @@ const COMERCIAL_ITEMS = [
   { to: '/vendas',        label: 'Planejamento',        icon: Target },
   { to: '/oportunidades', label: 'Oportunidades',       icon: Briefcase },
   { to: '/rotina',        label: 'Rotina Comercial',    icon: ListChecks },
+];
+
+const WORKSPACE_ITEMS = [
+  { to: '/anotacoes', label: 'Anotações', icon: BookOpen },
 ];
 
 export default function Sidebar() {
@@ -85,6 +89,7 @@ export default function Sidebar() {
   if (role === 'admin' || role === 'comercial') {
     modules.push({ label: 'Comercial', items: COMERCIAL_ITEMS });
   }
+  modules.push({ label: 'Workspace', items: WORKSPACE_ITEMS });
 
   return (
     <aside

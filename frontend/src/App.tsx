@@ -24,6 +24,7 @@ import RotinaComericial from './pages/RotinaComericial';
 import ProductDetail from './pages/ProductDetail';
 import Consolidado from './pages/Consolidado';
 import Empresas from './pages/Empresas';
+import Notes from './pages/Notes';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -89,6 +90,7 @@ export default function App() {
               }
             />
             <Route path="configuracoes" element={<Configuracoes />} />
+            <Route path="anotacoes" element={<Notes />} />
           </Route>
         </Routes>
       </BrowserRouter>
