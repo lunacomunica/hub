@@ -3,7 +3,7 @@ import {
   Plus, X, Trash2, RefreshCw, Pencil, Check, GripVertical,
   Phone, Mail, Users, MessageSquare, FileText, StickyNote,
   Calendar, AlertCircle, Clock, UserPlus, ExternalLink,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, FileSignature, Copy, Link,
 } from 'lucide-react';
 import {
   getOpportunities, createOpportunity, updateOpportunity, deleteOpportunity,
@@ -11,6 +11,7 @@ import {
   getProducts, getPipelineStages, createPipelineStage, updatePipelineStage, deletePipelineStage,
   getOppActivities, addOppActivity, deleteOppActivity,
   getUsers, getCompanySettings, updateCompanySettings, type OppSummary,
+  req,
 } from '../api';
 import type { Opportunity, OppActivity, PipelineStage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -606,6 +607,13 @@ export default function Opportunities() {
   }>({ client_type: 'mrr', monthly_fee: 0, margin_target: 30, project_title: '', contract_value: 0, service_type: '', start_date: '' });
   const [converting, setConverting] = useState(false);
 
+  // Proposal modal
+  const [proposalModal, setProposalModal] = useState<{ opp: Opportunity } | null>(null);
+  const [proposalLogoUrl, setProposalLogoUrl] = useState('');
+  const [proposalGenerating, setProposalGenerating] = useState(false);
+  const [proposalLink, setProposalLink] = useState('');
+  const [proposalCopied, setProposalCopied] = useState(false);
+
   // Smart filters
   const [filters, setFilters] = useState({
     temperatures: [] as string[],
@@ -790,6 +798,36 @@ export default function Opportunities() {
       load();
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Erro ao converter'); }
     finally { setConverting(false); }
+  };
+
+  const openProposalModal = (opp: Opportunity) => {
+    setProposalModal({ opp });
+    setProposalLogoUrl((opp as any).client_logo_url || '');
+    setProposalLink((opp as any).proposal_token
+      ? `${window.location.origin}/proposta-comercial?token=${(opp as any).proposal_token}`
+      : '');
+    setProposalCopied(false);
+  };
+
+  const generateProposal = async () => {
+    if (!proposalModal) return;
+    setProposalGenerating(true);
+    try {
+      const data = await req<{ token: string }>(
+        `/api/opportunities/${proposalModal.opp.id}/generate-proposal`,
+        { method: 'POST', body: JSON.stringify({ client_logo_url: proposalLogoUrl || null }) }
+      );
+      const link = `${window.location.origin}/proposta-comercial?token=${data.token}`;
+      setProposalLink(link);
+      load();
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Erro ao gerar proposta'); }
+    finally { setProposalGenerating(false); }
+  };
+
+  const copyProposalLink = () => {
+    navigator.clipboard.writeText(proposalLink);
+    setProposalCopied(true);
+    setTimeout(() => setProposalCopied(false), 2000);
   };
 
   const skipConvert = async () => {
@@ -2125,7 +2163,18 @@ export default function Opportunities() {
                   )}
                 </div>
               </div>
-              <button onClick={closeModal} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+              <div className="flex items-center gap-2">
+                {form.id && (
+                  <button
+                    onClick={() => { const opp = items.find(i => i.id === form.id); if (opp) openProposalModal(opp as any); }}
+                    className="btn-ghost text-xs flex items-center gap-1.5 px-3 py-1.5"
+                    title="Gerar link de proposta para este lead"
+                  >
+                    <FileSignature size={13} /> Gerar Proposta
+                  </button>
+                )}
+                <button onClick={closeModal} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+              </div>
             </div>
 
             {/* Modal body */}
@@ -2519,6 +2568,61 @@ export default function Opportunities() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Gerar Proposta ── */}
+      {proposalModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="modal-card w-full" style={{ maxWidth: 480 }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.12)' }}>
+              <h2 className="font-semibold text-white flex items-center gap-2">
+                <FileSignature size={16} className="text-blue-400" /> Proposta Comercial
+              </h2>
+              <button onClick={() => setProposalModal(null)} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <p className="text-sm text-slate-400">
+                Lead: <span className="text-white font-medium">{proposalModal.opp.client_name || proposalModal.opp.title}</span>
+              </p>
+
+              <div>
+                <label className="text-xs text-slate-400 font-medium block mb-1.5">Logo do cliente (URL)</label>
+                <input
+                  type="url"
+                  placeholder="https://cliente.com/logo.png"
+                  value={proposalLogoUrl}
+                  onChange={e => setProposalLogoUrl(e.target.value)}
+                  className="input-field w-full text-sm"
+                />
+                {proposalLogoUrl && (
+                  <img src={proposalLogoUrl} alt="preview" className="mt-2 h-10 object-contain rounded" onError={e => (e.currentTarget.style.display='none')} />
+                )}
+              </div>
+
+              {proposalLink && (
+                <div>
+                  <label className="text-xs text-slate-400 font-medium block mb-1.5">Link gerado</label>
+                  <div className="flex gap-2">
+                    <input readOnly value={proposalLink} className="input-field flex-1 text-xs text-slate-300" />
+                    <button onClick={copyProposalLink} className="btn-ghost px-3 flex items-center gap-1.5 text-xs shrink-0">
+                      {proposalCopied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                      {proposalCopied ? 'Copiado!' : 'Copiar'}
+                    </button>
+                    <a href={proposalLink} target="_blank" rel="noopener noreferrer" className="btn-ghost px-3 flex items-center gap-1.5 text-xs shrink-0">
+                      <ExternalLink size={13} /> Ver
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
+              <button onClick={() => setProposalModal(null)} className="btn-ghost text-sm">Fechar</button>
+              <button onClick={generateProposal} disabled={proposalGenerating} className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2">
+                <Link size={13} /> {proposalGenerating ? 'Gerando...' : proposalLink ? 'Regerar Link' : 'Gerar Link'}
+              </button>
+            </div>
           </div>
         </div>
       )}

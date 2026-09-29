@@ -25,6 +25,7 @@ import referralPrizesRouter from './routes/referral-prizes';
 import routineRouter from './routes/routine';
 import companiesRouter from './routes/companies';
 import notesRouter from './routes/notes';
+import proposalsRouter from './routes/proposals';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -451,11 +452,19 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_date DATE`);
   } catch (e) { console.error('[migration] opportunities contact fields error:', e); }
 
+  try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_logo_url TEXT`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_token TEXT`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_viewed_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_approved_at TIMESTAMPTZ`);
+  } catch (e) { console.error('[migration] opportunities proposal fields error:', e); }
+
   console.log('✅ Migrations concluídas');
 }
 
 // ─── Rotas públicas ──────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
+app.use('/api/proposals', proposalsRouter);
 
 // ─── Rotas protegidas ────────────────────────────────────────────────────────
 app.use('/api/dashboard',     requireAuth, dashboardRouter);

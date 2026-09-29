@@ -637,4 +637,26 @@ router.post('/:id/convert-to-client', async (req: Request, res: Response) => {
   }
 });
 
+// ─── Proposal generation ──────────────────────────────────────────────────────
+router.post('/:id/generate-proposal', async (req: Request, res: Response) => {
+  const { client_logo_url } = req.body;
+  const id = Number(req.params.id);
+  try {
+    const { rows: [opp] } = await pool.query('SELECT id, proposal_token FROM opportunities WHERE id = $1', [id]);
+    if (!opp) return res.status(404).json({ error: 'Oportunidade não encontrada' });
+
+    const token = opp.proposal_token || Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+    await pool.query(
+      `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
+       proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $3`,
+      [token, client_logo_url || null, id]
+    );
+
+    res.json({ token });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
