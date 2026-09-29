@@ -320,6 +320,28 @@ function OppCard({ opp, onEdit, onDelete, onDragStart, onDragEnd, isDragging, st
         )}
       </div>
 
+      {/* Proposal status badge */}
+      {opp.proposal_token && (
+        <div className="mt-2 flex items-center gap-1.5">
+          {opp.proposal_approved_at ? (
+            <span className="text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 font-medium"
+              style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)' }}>
+              <Check size={9} /> Proposta aprovada
+            </span>
+          ) : (opp.proposal_view_count ?? 0) > 0 ? (
+            <span className="text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1"
+              style={{ background: 'rgba(59,130,246,0.1)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.2)' }}>
+              <ExternalLink size={9} /> {opp.proposal_view_count} {(opp.proposal_view_count ?? 0) === 1 ? 'visualização' : 'visualizações'}
+            </span>
+          ) : (
+            <span className="text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1"
+              style={{ background: 'rgba(100,116,139,0.1)', color: '#64748b', border: '1px solid rgba(100,116,139,0.15)' }}>
+              <FileSignature size={9} /> Proposta enviada
+            </span>
+          )}
+        </div>
+      )}
+
       {onConvert && (
         <button
           onClick={e => {
@@ -579,7 +601,7 @@ export default function Opportunities() {
   const [showReferralDropdown, setShowReferralDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
-  const [modalTab, setModalTab] = useState<'dados' | 'atividades'>('dados');
+  const [modalTab, setModalTab] = useState<'dados' | 'negociacao' | 'atividades' | 'proposta'>('dados');
   const [form, setForm] = useState<Partial<Opportunity & { product_id?: number | null }>>(EMPTY);
   const [oppItems, setOppItems] = useState<OppItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -2169,6 +2191,15 @@ export default function Opportunities() {
                       {`Atividades${(items.find(i=>i.id===form.id)?.activity_count ?? 0) > 0 ? ` (${items.find(i=>i.id===form.id)?.activity_count})` : ''}`}
                     </button>
                   )}
+                  {form.id && items.find(i => i.id === form.id)?.proposal_token && (
+                    <button onClick={() => setModalTab('proposta')}
+                      className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors flex items-center gap-1 ${modalTab==='proposta' ? 'btn-primary' : 'btn-ghost'}`}>
+                      <FileSignature size={11} /> Proposta
+                      {items.find(i => i.id === form.id)?.proposal_approved_at && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2559,6 +2590,72 @@ export default function Opportunities() {
                     </div>
                   </div>
                 </div>
+              ) : modalTab === 'proposta' ? (
+                <div className="h-full overflow-y-auto p-6">
+                  {(() => {
+                    const opp = items.find(i => i.id === form.id);
+                    if (!opp?.proposal_token) return null;
+                    const link = `${window.location.origin}/proposta-comercial?token=${opp.proposal_token}&type=${opp.proposal_type || 'plano-360'}`;
+                    const fmtDt = (s: string) => new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    return (
+                      <div className="space-y-5">
+                        {/* Status */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(59,130,246,0.1)' }}>
+                            <div className="text-2xl font-bold text-blue-400">{opp.proposal_view_count ?? 0}</div>
+                            <div className="text-xs text-slate-500 mt-1">Visualizações</div>
+                          </div>
+                          <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(59,130,246,0.1)' }}>
+                            <div className="text-xs font-medium text-slate-300 mt-1">{opp.proposal_viewed_at ? fmtDt(opp.proposal_viewed_at) : '—'}</div>
+                            <div className="text-xs text-slate-500 mt-1">1ª visualização</div>
+                          </div>
+                          <div className="rounded-xl p-4 text-center" style={{
+                            background: opp.proposal_approved_at ? 'rgba(16,185,129,0.08)' : 'rgba(15,23,42,0.7)',
+                            border: opp.proposal_approved_at ? '1px solid rgba(16,185,129,0.25)' : '1px solid rgba(59,130,246,0.1)'
+                          }}>
+                            {opp.proposal_approved_at ? (
+                              <>
+                                <div className="text-xs font-medium text-emerald-400">{fmtDt(opp.proposal_approved_at)}</div>
+                                <div className="text-xs text-emerald-600 mt-1 flex items-center justify-center gap-1"><Check size={10} /> Aprovada</div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-sm text-slate-600">—</div>
+                                <div className="text-xs text-slate-600 mt-1">Aprovação</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Link */}
+                        <div>
+                          <div className="text-xs text-slate-400 font-medium mb-2">Link da proposta</div>
+                          <div className="flex gap-2">
+                            <input readOnly value={link} className="input-dark text-xs flex-1 text-slate-400" onClick={e => (e.target as HTMLInputElement).select()} />
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(link); }}
+                              className="btn-ghost text-xs flex items-center gap-1.5 px-3 shrink-0"
+                            >
+                              <Copy size={12} /> Copiar
+                            </button>
+                            <a href={link} target="_blank" rel="noreferrer"
+                              className="btn-ghost text-xs flex items-center gap-1.5 px-3 shrink-0">
+                              <ExternalLink size={12} /> Abrir
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Regenerar */}
+                        <button
+                          onClick={() => { const o = items.find(i => i.id === form.id); if (o) { setModal(false); openProposalModal(o as any); } }}
+                          className="btn-ghost text-xs flex items-center gap-1.5 w-full justify-center py-2"
+                        >
+                          <FileSignature size={12} /> Gerar nova proposta
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
               ) : (
                 <div className="h-full overflow-hidden p-6">
                   <ActivityPanel oppId={form.id!} authorDefault={user?.name || ''} />
@@ -2567,7 +2664,7 @@ export default function Opportunities() {
             </div>
 
             {/* Modal footer */}
-            {modalTab !== 'atividades' && (
+            {modalTab !== 'atividades' && modalTab !== 'proposta' && (
               <div className="flex justify-end gap-3 px-6 py-4 shrink-0"
                 style={{ borderTop: '1px solid rgba(59,130,246,0.12)' }}>
                 <button onClick={closeModal} className="btn-ghost text-sm">Cancelar</button>

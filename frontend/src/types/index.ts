@@ -182,6 +182,13 @@ export interface Opportunity {
   contact_whatsapp?: string | null;
   contact_instagram?: string | null;
   contact_date?: string | null;
+  // Proposta comercial
+  proposal_token?: string | null;
+  proposal_type?: string | null;
+  proposal_view_count?: number | null;
+  proposal_viewed_at?: string | null;
+  proposal_approved_at?: string | null;
+  client_logo_url?: string | null;
 }
 
 export interface SimpleEmployee { id: number; name: string; role?: string; }

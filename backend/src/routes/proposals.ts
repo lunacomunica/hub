@@ -7,20 +7,23 @@ const router = Router();
 router.get('/view/:token', async (req: Request, res: Response) => {
   const { token } = req.params;
   try {
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_view_count INTEGER DEFAULT 0`);
+
     const { rows } = await pool.query(
-      `SELECT id, title, contact_name, client_logo_url, proposal_viewed_at, proposal_approved_at
+      `SELECT id, title, contact_name, client_logo_url, proposal_viewed_at, proposal_approved_at, proposal_view_count
        FROM opportunities WHERE proposal_token = $1`,
       [token]
     );
     if (!rows.length) return res.status(404).json({ error: 'Proposta não encontrada' });
 
-    // Registra primeira visualização
-    if (!rows[0].proposal_viewed_at) {
-      await pool.query(
-        `UPDATE opportunities SET proposal_viewed_at = NOW() WHERE proposal_token = $1`,
-        [token]
-      );
-    }
+    // Incrementa contador a cada visualização e registra primeira vez
+    await pool.query(
+      `UPDATE opportunities
+       SET proposal_view_count = COALESCE(proposal_view_count, 0) + 1,
+           proposal_viewed_at  = COALESCE(proposal_viewed_at, NOW())
+       WHERE proposal_token = $1`,
+      [token]
+    );
 
     res.json(rows[0]);
   } catch (e: any) {
