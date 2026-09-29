@@ -647,11 +647,33 @@ router.post('/:id/generate-proposal', async (req: Request, res: Response) => {
 
     const token = opp.proposal_token || Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-    await pool.query(
-      `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
-       proposal_type = $3, proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $4`,
-      [token, client_logo_url || null, proposal_type || 'plano-360', id]
-    );
+    try {
+      await pool.query(
+        `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
+         proposal_type = $3, proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $4`,
+        [token, client_logo_url || null, proposal_type || 'plano-360', id]
+      );
+    } catch (e: any) {
+      if (e.message?.includes('proposal_type')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_type TEXT`);
+        await pool.query(
+          `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
+           proposal_type = $3, proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $4`,
+          [token, client_logo_url || null, proposal_type || 'plano-360', id]
+        );
+      } else if (e.message?.includes('client_logo_url')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_logo_url TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_token TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_viewed_at TIMESTAMPTZ`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_approved_at TIMESTAMPTZ`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_type TEXT`);
+        await pool.query(
+          `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
+           proposal_type = $3, proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $4`,
+          [token, client_logo_url || null, proposal_type || 'plano-360', id]
+        );
+      } else throw e;
+    }
 
     res.json({ token });
   } catch (e: any) {
