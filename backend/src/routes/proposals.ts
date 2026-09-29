@@ -3,20 +3,11 @@ import pool from '../db';
 
 const router = Router();
 
-// GET /api/proposals/view/:token — público, sem auth
-router.get('/view/:token', async (req: Request, res: Response) => {
+// POST /api/proposals/view/:token — chamado via sendBeacon, registra visualização
+router.post('/view/:token', async (req: Request, res: Response) => {
   const { token } = req.params;
   try {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_view_count INTEGER DEFAULT 0`);
-
-    const { rows } = await pool.query(
-      `SELECT id, title, contact_name, client_logo_url, proposal_viewed_at, proposal_approved_at, proposal_view_count
-       FROM opportunities WHERE proposal_token = $1`,
-      [token]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Proposta não encontrada' });
-
-    // Incrementa contador a cada visualização e registra primeira vez
     await pool.query(
       `UPDATE opportunities
        SET proposal_view_count = COALESCE(proposal_view_count, 0) + 1,
@@ -24,8 +15,22 @@ router.get('/view/:token', async (req: Request, res: Response) => {
        WHERE proposal_token = $1`,
       [token]
     );
+    res.status(204).end();
+  } catch (e: any) {
+    res.status(500).end();
+  }
+});
 
-    res.json(rows[0]);
+// GET /api/proposals/logo/:token — retorna só o logo, rápido, sem side-effects
+router.get('/logo/:token', async (req: Request, res: Response) => {
+  const { token } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT client_logo_url FROM opportunities WHERE proposal_token = $1`,
+      [token]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Proposta não encontrada' });
+    res.json({ client_logo_url: rows[0].client_logo_url });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
