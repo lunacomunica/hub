@@ -1,9 +1,10 @@
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2, BookOpen,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2, BookOpen, FileSignature,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +34,7 @@ const COMERCIAL_ITEMS = [
 
 const WORKSPACE_ITEMS = [
   { to: '/anotacoes', label: 'Anotações', icon: BookOpen },
+  { to: '/proposta-comercial', label: 'Proposta Comercial', icon: FileSignature, external: true },
 ];
 
 export default function Sidebar() {
@@ -222,7 +224,33 @@ export default function Sidebar() {
             )}
 
             <div className="space-y-0.5">
-              {mod.items.map(({ to, label, icon: Icon }) => (
+              {mod.items.map(({ to, label, icon: Icon, external }: { to: string; label: string; icon: React.ElementType; external?: boolean }) => (
+                external ? (
+                  <a
+                    key={to}
+                    href={to}
+                    title={collapsed ? label : undefined}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: collapsed ? 0 : '10px',
+                      padding: collapsed ? '8px 0' : '7px 10px',
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                      borderRadius: '8px',
+                      fontSize: '0.8125rem',
+                      fontWeight: 500,
+                      textDecoration: 'none',
+                      transition: 'all 0.15s ease',
+                      color: 'var(--text-nav-inactive)',
+                      background: 'transparent',
+                      border: '1px solid transparent',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Icon size={15} className="shrink-0" />
+                    {!collapsed && <span className="truncate">{label}</span>}
+                  </a>
+                ) : (
                 <NavLink
                   key={to}
                   to={to}
@@ -251,6 +279,7 @@ export default function Sidebar() {
                     </>
                   )}
                 </NavLink>
+                )
               ))}
             </div>
           </div>

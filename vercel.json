@@ -13,6 +13,8 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.ts" },
+    { "src": "/proposta-comercial/assets/(.*)", "dest": "/frontend/proposta-comercial/assets/$1" },
+    { "src": "/proposta-comercial(.*)", "dest": "/frontend/proposta-comercial/index.html" },
     { "src": "/assets/(.*)", "dest": "/frontend/assets/$1" },
     { "src": "/(.*\\..*)", "dest": "/frontend/$1" },
     { "src": "/(.*)", "dest": "/frontend/index.html" }

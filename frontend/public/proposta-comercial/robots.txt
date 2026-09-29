@@ -1,0 +1,4 @@
+# A proposta é um link privado, mandado direto para o cliente.
+# Tem preço, cases e conversa com cliente — nada disso indexado.
+User-agent: *
+Disallow: /
