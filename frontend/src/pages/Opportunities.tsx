@@ -2619,20 +2619,14 @@ export default function Opportunities() {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={async e => {
+                    onChange={e => {
                       const file = e.target.files?.[0];
-                      if (!file || !proposalModal) return;
-                      const fd = new FormData();
-                      fd.append('logo', file);
-                      try {
-                        const res = await fetch(`/api/proposals/upload-logo/${proposalModal.opp.id}`, {
-                          method: 'POST',
-                          headers: { Authorization: `Bearer ${localStorage.getItem('auth-token')}` },
-                          body: fd,
-                        });
-                        const data = await res.json();
-                        if (data.url) setProposalLogoUrl(data.url);
-                      } catch { alert('Erro ao fazer upload do logo'); }
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        if (ev.target?.result) setProposalLogoUrl(ev.target.result as string);
+                      };
+                      reader.readAsDataURL(file);
                     }}
                   />
                 </label>
