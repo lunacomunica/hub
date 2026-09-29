@@ -639,9 +639,9 @@ router.post('/:id/convert-to-client', async (req: Request, res: Response) => {
 
 // ─── Proposal generation ──────────────────────────────────────────────────────
 router.post('/:id/generate-proposal', async (req: Request, res: Response) => {
-  const { client_logo_url, proposal_type } = req.body;
-  const id = Number(req.params.id);
   try {
+  const { client_logo_url, proposal_type } = req.body || {};
+  const id = Number(req.params.id);
     const { rows: [opp] } = await pool.query('SELECT id, proposal_token FROM opportunities WHERE id = $1', [id]);
     if (!opp) return res.status(404).json({ error: 'Oportunidade não encontrada' });
 
