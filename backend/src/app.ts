@@ -457,6 +457,7 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_token TEXT`);
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_viewed_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_approved_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_type TEXT`);
   } catch (e) { console.error('[migration] opportunities proposal fields error:', e); }
 
   console.log('✅ Migrations concluídas');

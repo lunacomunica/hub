@@ -639,7 +639,7 @@ router.post('/:id/convert-to-client', async (req: Request, res: Response) => {
 
 // ─── Proposal generation ──────────────────────────────────────────────────────
 router.post('/:id/generate-proposal', async (req: Request, res: Response) => {
-  const { client_logo_url } = req.body;
+  const { client_logo_url, proposal_type } = req.body;
   const id = Number(req.params.id);
   try {
     const { rows: [opp] } = await pool.query('SELECT id, proposal_token FROM opportunities WHERE id = $1', [id]);
@@ -649,8 +649,8 @@ router.post('/:id/generate-proposal', async (req: Request, res: Response) => {
 
     await pool.query(
       `UPDATE opportunities SET proposal_token = $1, client_logo_url = $2,
-       proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $3`,
-      [token, client_logo_url || null, id]
+       proposal_type = $3, proposal_viewed_at = NULL, proposal_approved_at = NULL WHERE id = $4`,
+      [token, client_logo_url || null, proposal_type || 'plano-360', id]
     );
 
     res.json({ token });

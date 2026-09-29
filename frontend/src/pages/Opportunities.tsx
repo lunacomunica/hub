@@ -608,8 +608,15 @@ export default function Opportunities() {
   const [converting, setConverting] = useState(false);
 
   // Proposal modal
+  const PROPOSAL_TYPES = [
+    { value: 'plano-360', label: 'Plano 360' },
+    { value: 'identidade-visual', label: 'Identidade Visual' },
+    { value: 'website', label: 'Website' },
+    { value: 'mentoria', label: 'Mentoria' },
+  ];
   const [proposalModal, setProposalModal] = useState<{ opp: Opportunity } | null>(null);
   const [proposalLogoUrl, setProposalLogoUrl] = useState('');
+  const [proposalType, setProposalType] = useState('plano-360');
   const [proposalGenerating, setProposalGenerating] = useState(false);
   const [proposalLink, setProposalLink] = useState('');
   const [proposalCopied, setProposalCopied] = useState(false);
@@ -803,9 +810,10 @@ export default function Opportunities() {
   const openProposalModal = (opp: Opportunity) => {
     setProposalModal({ opp });
     setProposalLogoUrl((opp as any).client_logo_url || '');
-    setProposalLink((opp as any).proposal_token
-      ? `${window.location.origin}/proposta-comercial?token=${(opp as any).proposal_token}`
-      : '');
+    setProposalType((opp as any).proposal_type || 'plano-360');
+    const t = (opp as any).proposal_token;
+    const pt = (opp as any).proposal_type || 'plano-360';
+    setProposalLink(t ? `${window.location.origin}/proposta-comercial?token=${t}&type=${pt}` : '');
     setProposalCopied(false);
   };
 
@@ -815,9 +823,9 @@ export default function Opportunities() {
     try {
       const data = await req<{ token: string }>(
         `/api/opportunities/${proposalModal.opp.id}/generate-proposal`,
-        { method: 'POST', body: JSON.stringify({ client_logo_url: proposalLogoUrl || null }) }
+        { method: 'POST', body: JSON.stringify({ client_logo_url: proposalLogoUrl || null, proposal_type: proposalType }) }
       );
-      const link = `${window.location.origin}/proposta-comercial?token=${data.token}`;
+      const link = `${window.location.origin}/proposta-comercial?token=${data.token}&type=${proposalType}`;
       setProposalLink(link);
       load();
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Erro ao gerar proposta'); }
@@ -2586,6 +2594,19 @@ export default function Opportunities() {
               <p className="text-sm text-slate-400">
                 Lead: <span className="text-white font-medium">{proposalModal.opp.client_name || proposalModal.opp.title}</span>
               </p>
+
+              <div>
+                <label className="text-xs text-slate-400 font-medium block mb-1.5">Tipo de Proposta</label>
+                <select
+                  value={proposalType}
+                  onChange={e => setProposalType(e.target.value)}
+                  className="input-field w-full text-sm"
+                >
+                  {PROPOSAL_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
 
               <div>
                 <label className="text-xs text-slate-400 font-medium block mb-1.5">Logo do cliente (URL)</label>
