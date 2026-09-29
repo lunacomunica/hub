@@ -2609,16 +2609,38 @@ export default function Opportunities() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 font-medium block mb-1.5">Logo do cliente (URL)</label>
-                <input
-                  type="url"
-                  placeholder="https://cliente.com/logo.png"
-                  value={proposalLogoUrl}
-                  onChange={e => setProposalLogoUrl(e.target.value)}
-                  className="input-field w-full text-sm"
-                />
+                <label className="text-xs text-slate-400 font-medium block mb-1.5">Logo do cliente</label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="btn-ghost text-xs px-3 py-2 flex items-center gap-2 shrink-0">
+                    <FileSignature size={12} /> Escolher arquivo
+                  </div>
+                  <span className="text-xs text-slate-500 truncate">PNG, JPG ou SVG · máx 2MB</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file || !proposalModal) return;
+                      const fd = new FormData();
+                      fd.append('logo', file);
+                      try {
+                        const res = await fetch(`/api/proposals/upload-logo/${proposalModal.opp.id}`, {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${localStorage.getItem('auth-token')}` },
+                          body: fd,
+                        });
+                        const data = await res.json();
+                        if (data.url) setProposalLogoUrl(data.url);
+                      } catch { alert('Erro ao fazer upload do logo'); }
+                    }}
+                  />
+                </label>
                 {proposalLogoUrl && (
-                  <img src={proposalLogoUrl} alt="preview" className="mt-2 h-10 object-contain rounded" onError={e => (e.currentTarget.style.display='none')} />
+                  <div className="mt-3 flex items-center gap-3">
+                    <img src={proposalLogoUrl} alt="preview" className="h-12 object-contain rounded bg-white/5 p-1" />
+                    <button onClick={() => setProposalLogoUrl('')} className="text-xs text-slate-500 hover:text-red-400">Remover</button>
+                  </div>
                 )}
               </div>
 
