@@ -3,11 +3,19 @@ import pool from '../db';
 
 const router = Router();
 
+// Roda ALTER TABLE só uma vez por processo, não a cada request
+let migrated = false;
+async function ensureMigration() {
+  if (migrated) return;
+  await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_view_count INTEGER DEFAULT 0`);
+  migrated = true;
+}
+ensureMigration().catch(() => {});
+
 // POST /api/proposals/view/:token — chamado via sendBeacon, registra visualização
 router.post('/view/:token', async (req: Request, res: Response) => {
   const { token } = req.params;
   try {
-    await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS proposal_view_count INTEGER DEFAULT 0`);
     await pool.query(
       `UPDATE opportunities
        SET proposal_view_count = COALESCE(proposal_view_count, 0) + 1,
