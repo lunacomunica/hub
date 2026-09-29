@@ -822,7 +822,7 @@ export default function Opportunities() {
     setProposalGenerating(true);
     try {
       const data = await req<{ token: string }>(
-        `/api/opportunities/${proposalModal.opp.id}/generate-proposal`,
+        `/opportunities/${proposalModal.opp.id}/generate-proposal`,
         { method: 'POST', body: JSON.stringify({ client_logo_url: proposalLogoUrl || null, proposal_type: proposalType }) }
       );
       const link = `${window.location.origin}/proposta-comercial?token=${data.token}&type=${proposalType}`;
