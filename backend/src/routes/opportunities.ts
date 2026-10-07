@@ -357,6 +357,7 @@ router.post('/', async (req: Request, res: Response) => {
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items,
             contact_email, contact_whatsapp, contact_instagram, contact_date,
+            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe,
             company_id: bodyCompanyId } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
@@ -431,6 +432,30 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
+    // ── Marketing attribution — self-healing ────────────────────────────────
+    const icpEsp = ['oftalmo','cardio','gastro'];
+    const rqe = lead_possui_rqe === true || lead_possui_rqe === 'true';
+    const leadTipo = rqe && icpEsp.includes(lead_especialidade) ? 'A' : rqe && lead_especialidade === 'outra' ? 'B' : 'C';
+    try {
+      await pool.query(
+        `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
+        [lead_campanha||null,lead_criativo||null,lead_meio||null,lead_especialidade||null,rqe||null,leadTipo,created.id]
+      );
+    } catch (e: any) {
+      if (e.message?.includes('lead_')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_campanha TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_criativo TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_meio TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_especialidade TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_possui_rqe BOOLEAN`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_tipo VARCHAR(1)`);
+        await pool.query(
+          `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
+          [lead_campanha||null,lead_criativo||null,lead_meio||null,lead_especialidade||null,rqe||null,leadTipo,created.id]
+        );
+      }
+    }
+
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -444,7 +469,8 @@ router.put('/:id', async (req: Request, res: Response) => {
             service_type, product_id, notes, temperature, next_followup, owner_id, source, lost_reason,
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items, company_id,
-            contact_email, contact_whatsapp, contact_instagram, contact_date } = req.body;
+            contact_email, contact_whatsapp, contact_instagram, contact_date,
+            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe } = req.body;
     console.log('[opp PUT] contact_date recebido:', contact_date, '| company_id:', company_id);
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
@@ -540,6 +566,32 @@ router.put('/:id', async (req: Request, res: Response) => {
             [JSON.stringify(opp_items), req.params.id]
           );
         } else throw e;
+      }
+    }
+
+    // ── Marketing attribution — self-healing ────────────────────────────────
+    const icpEsp2 = ['oftalmo','cardio','gastro'];
+    const rqe2 = lead_possui_rqe === true || lead_possui_rqe === 'true';
+    const leadTipo2 = rqe2 && icpEsp2.includes(lead_especialidade) ? 'A' : rqe2 && lead_especialidade === 'outra' ? 'B' : 'C';
+    if (lead_campanha !== undefined || lead_criativo !== undefined || lead_meio !== undefined || lead_especialidade !== undefined || lead_possui_rqe !== undefined) {
+      try {
+        await pool.query(
+          `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
+          [lead_campanha||null,lead_criativo||null,lead_meio||null,lead_especialidade||null,rqe2||null,leadTipo2,req.params.id]
+        );
+      } catch (e: any) {
+        if (e.message?.includes('lead_')) {
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_campanha TEXT`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_criativo TEXT`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_meio TEXT`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_especialidade TEXT`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_possui_rqe BOOLEAN`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_tipo VARCHAR(1)`);
+          await pool.query(
+            `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
+            [lead_campanha||null,lead_criativo||null,lead_meio||null,lead_especialidade||null,rqe2||null,leadTipo2,req.params.id]
+          );
+        }
       }
     }
 

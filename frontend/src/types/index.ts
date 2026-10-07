@@ -189,6 +189,13 @@ export interface Opportunity {
   proposal_viewed_at?: string | null;
   proposal_approved_at?: string | null;
   client_logo_url?: string | null;
+  // Atribuição de campanha
+  lead_campanha?: string | null;
+  lead_criativo?: string | null;
+  lead_meio?: string | null;
+  lead_especialidade?: string | null;
+  lead_possui_rqe?: boolean | null;
+  lead_tipo?: string | null;
 }
 
 export interface SimpleEmployee { id: number; name: string; role?: string; }

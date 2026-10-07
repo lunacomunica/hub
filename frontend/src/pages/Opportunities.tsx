@@ -131,6 +131,7 @@ const EMPTY: Partial<Opportunity & { product_id?: number | null }> = {
   original_price: null, payment_method: null, installments: 1, payment_notes: null,
   referral_name: null, referral_type: null, referral_client_id: null, referral_employee_id: null,
   contact_email: null, contact_whatsapp: null, contact_instagram: null, contact_date: null,
+  lead_campanha: null, lead_criativo: null, lead_meio: null, lead_especialidade: null, lead_possui_rqe: null,
 };
 
 const STAGE_COLORS = [
@@ -2442,6 +2443,69 @@ export default function Opportunities() {
                         </div>
                       </Field>
                     )}
+
+                    {/* ── Atribuição de campanha ── */}
+                    {['Meta Ads','Google Ads','Instagram','Facebook'].includes(form.source || '') && (<>
+                      <Field label="Campanha">
+                        <input type="text" placeholder="ex: C1, Campanha-Oftalmo" value={(form as any).lead_campanha || ''}
+                          onChange={e => setForm(f => ({...f, lead_campanha: e.target.value || null} as any))}
+                          className="input-dark w-full" />
+                      </Field>
+                      <Field label="Criativo">
+                        <input type="text" placeholder="ex: AD01, Video-Depoimento" value={(form as any).lead_criativo || ''}
+                          onChange={e => setForm(f => ({...f, lead_criativo: e.target.value || null} as any))}
+                          className="input-dark w-full" />
+                      </Field>
+                    </>)}
+
+                    <Field label="Meio de captação">
+                      <select value={(form as any).lead_meio || ''} onChange={e => setForm(f => ({...f, lead_meio: e.target.value || null} as any))}
+                        className="input-dark w-full">
+                        <option value="">Não informado</option>
+                        <option value="formulario_nativo">Formulário nativo</option>
+                        <option value="site_lp">Site / LP</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="dm">DM / Direct</option>
+                        <option value="indicacao">Indicação direta</option>
+                      </select>
+                    </Field>
+
+                    <Field label="Especialidade">
+                      <select value={(form as any).lead_especialidade || ''} onChange={e => setForm(f => ({...f, lead_especialidade: e.target.value || null} as any))}
+                        className="input-dark w-full">
+                        <option value="">Não informado</option>
+                        <option value="oftalmo">Oftalmologia</option>
+                        <option value="cardio">Cardiologia</option>
+                        <option value="gastro">Gastroenterologia</option>
+                        <option value="outra">Outra especialidade</option>
+                        <option value="nao_medico">Não médico</option>
+                      </select>
+                    </Field>
+
+                    <div className="col-span-2 flex items-center justify-between rounded-xl px-4 py-3"
+                      style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.1)' }}>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-300">Possui RQE?</div>
+                        <div className="text-xs text-slate-500 mt-0.5">Registro de Qualificação do Especialista</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {(form as any).lead_especialidade && (() => {
+                          const rqe = (form as any).lead_possui_rqe;
+                          const esp = (form as any).lead_especialidade;
+                          const icp = ['oftalmo','cardio','gastro'];
+                          const tipo = rqe && icp.includes(esp) ? 'A' : rqe && esp === 'outra' ? 'B' : 'C';
+                          const cor = tipo === 'A' ? ['rgba(16,185,129,0.15)','#34d399','rgba(16,185,129,0.3)'] : tipo === 'B' ? ['rgba(59,130,246,0.15)','#93c5fd','rgba(59,130,246,0.3)'] : ['rgba(100,116,139,0.15)','#94a3b8','rgba(100,116,139,0.2)'];
+                          return <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: cor[0], color: cor[1], border: `1px solid ${cor[2]}` }}>Lead {tipo}</span>;
+                        })()}
+                        <button type="button"
+                          onClick={() => setForm(f => ({...f, lead_possui_rqe: !(f as any).lead_possui_rqe} as any))}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+                          style={{ background: (form as any).lead_possui_rqe ? '#6366f1' : 'rgba(100,116,139,0.3)' }}>
+                          <span className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                            style={{ transform: (form as any).lead_possui_rqe ? 'translateX(24px)' : 'translateX(4px)' }} />
+                        </button>
+                      </div>
+                    </div>
 
                     <Field label="Próximo follow-up">
                       <input type="date" value={form.next_followup || ''} onChange={e => setForm(f => ({...f, next_followup: e.target.value || null}))}
