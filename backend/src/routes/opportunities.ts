@@ -357,7 +357,7 @@ router.post('/', async (req: Request, res: Response) => {
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items,
             contact_email, contact_whatsapp, contact_instagram, contact_date,
-            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe,
+            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe, lead_tipo,
             lead_sdr, lead_closer,
             company_id: bodyCompanyId } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
