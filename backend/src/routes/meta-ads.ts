@@ -72,19 +72,32 @@ router.post('/import-leads', async (_req, res) => {
     );
     const stage = stages[0]?.key || 'prospeccao';
 
-    // 3. Busca todos os formulários de lead da conta
-    const formsUrl = `${BASE}/${AD_ACCOUNT_ID}/leadgen_forms?fields=id,name,leads_count&limit=50&access_token=${ACCESS_TOKEN}`;
-    const formsRes = await fetch(formsUrl);
-    const formsData = await formsRes.json() as any;
-    if (formsData.error) return res.status(400).json({ error: formsData.error.message });
+    // 3. Descobre os Pages do token para buscar os formulários de lead
+    const pagesUrl = `${BASE}/me/accounts?fields=id,name&limit=100&access_token=${ACCESS_TOKEN}`;
+    const pagesRes = await fetch(pagesUrl);
+    const pagesData = await pagesRes.json() as any;
+    if (pagesData.error) return res.status(400).json({ error: `Pages: ${pagesData.error.message}` });
 
-    const forms: {id:string;name:string}[] = formsData.data || [];
+    const pages: {id:string;name:string;access_token?:string}[] = pagesData.data || [];
+    if (pages.length === 0) return res.status(400).json({ error: 'Nenhuma Page encontrada para o token. Gere um token com permissão pages_read_engagement.' });
+
+    const forms: {id:string;name:string;page_token?:string}[] = [];
+    for (const page of pages) {
+      const pt = page.access_token || ACCESS_TOKEN;
+      const fUrl = `${BASE}/${page.id}/leadgen_forms?fields=id,name,leads_count&limit=100&access_token=${pt}`;
+      const fRes = await fetch(fUrl);
+      const fData = await fRes.json() as any;
+      if (!fData.error && fData.data) {
+        for (const f of fData.data) forms.push({ id: f.id, name: f.name, page_token: pt });
+      }
+    }
     let imported = 0;
     let skipped = 0;
 
     // 4. Para cada formulário, busca os leads
     for (const form of forms) {
-      let url: string | null = `${BASE}/${form.id}/leads?fields=field_data,created_time,ad_id,ad_name,adset_name,campaign_id,campaign_name&limit=100&access_token=${ACCESS_TOKEN}`;
+      const tok = (form as any).page_token || ACCESS_TOKEN;
+      let url: string | null = `${BASE}/${form.id}/leads?fields=field_data,created_time,ad_id,ad_name,adset_name,campaign_id,campaign_name&limit=100&access_token=${tok}`;
 
       while (url) {
         const r = await fetch(url);
