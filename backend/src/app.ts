@@ -28,6 +28,7 @@ import notesRouter from './routes/notes';
 import proposalsRouter from './routes/proposals';
 import metaAdsRouter from './routes/meta-ads';
 import metaLeadsWebhookRouter from './routes/meta-leads-webhook';
+import hubConversationsRouter from './routes/hub-conversations';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -490,8 +491,9 @@ app.use('/api/referral-prizes', requireAuth, referralPrizesRouter);
 app.use('/api/routine',         requireAuth, routineRouter);
 app.use('/api/companies',       requireAuth, companiesRouter);
 app.use('/api/notes',           requireAuth, notesRouter);
-app.use('/api/meta-ads',        requireAuth, metaAdsRouter);
-app.use('/api/meta-leads',      metaLeadsWebhookRouter); // público — chamado pela Meta
+app.use('/api/meta-ads',           requireAuth, metaAdsRouter);
+app.use('/api/meta-leads',         metaLeadsWebhookRouter); // público — chamado pela Meta
+app.use('/api/hub-conversations',  requireAuth, hubConversationsRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

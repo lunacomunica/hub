@@ -4,7 +4,7 @@ import {
   LayoutDashboard, TrendingUp, TrendingDown, Users, Calculator,
   Target, Briefcase, BarChart2, FileText, UserX, Package,
   ClipboardList, Sun, Moon, ChevronLeft, ChevronRight,
-  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2, BookOpen, FileSignature,
+  UsersRound, LogOut, CreditCard, UserRound, Settings, ListChecks, LayoutGrid, Building2, BookOpen, FileSignature, MessageSquare,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -29,6 +29,7 @@ const COMERCIAL_ITEMS = [
   { to: '/produtos',      label: 'Produtos & Serviços', icon: Package },
   { to: '/vendas',        label: 'Planejamento',        icon: Target },
   { to: '/oportunidades', label: 'Oportunidades',       icon: Briefcase },
+  { to: '/conversas',     label: 'Conversas',           icon: MessageSquare },
   { to: '/rotina',        label: 'Rotina Comercial',    icon: ListChecks },
 ];
 
