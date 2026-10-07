@@ -66,6 +66,21 @@ async function processLead(v: any) {
     console.error('[meta-leads-webhook] erro ao buscar lead data:', e);
   }
 
+  // Garante colunas extras existem (self-healing)
+  const extraCols = [
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_campanha TEXT`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_criativo TEXT`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_meio TEXT`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_especialidade TEXT`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_possui_rqe BOOLEAN`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_tipo VARCHAR(1)`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_whatsapp TEXT`,
+    `ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS contact_email TEXT`,
+  ];
+  for (const sql of extraCols) {
+    await pool.query(sql).catch(() => {});
+  }
+
   // Busca o primeiro estágio do funil
   const { rows: stages } = await pool.query(
     'SELECT key FROM pipeline_stages WHERE is_terminal = 0 ORDER BY position ASC LIMIT 1'
@@ -79,32 +94,15 @@ async function processLead(v: any) {
     `INSERT INTO opportunities
       (title, client_name, stage, probability, temperature, source,
        lead_campanha, lead_criativo, lead_meio,
-       contact_whatsapp, company_id, value)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       contact_whatsapp, contact_email, company_id, value)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING id`,
     [
-      title,
-      name,
-      stage,
-      10,
-      'frio',
-      'Meta Ads',
-      campaignName,
-      adName || adsetName,
-      'formulario_nativo',
-      phone,
-      COMPANY_ID,
-      0,
+      title, name, stage, 10, 'frio', 'Meta Ads',
+      campaignName, adName || adsetName, 'formulario_nativo',
+      phone, email, COMPANY_ID, 0,
     ]
   );
-
-  if (email && opp?.id) {
-    // salva email em contact_email se a coluna existir
-    await pool.query(
-      `UPDATE opportunities SET contact_email = $1 WHERE id = $2`,
-      [email, opp.id]
-    ).catch(() => {});
-  }
 
   console.log(`[meta-leads-webhook] lead criado: id=${opp?.id} nome="${title}" campanha="${campaignName}"`);
 }
