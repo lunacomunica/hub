@@ -29,6 +29,7 @@ import proposalsRouter from './routes/proposals';
 import metaAdsRouter from './routes/meta-ads';
 import metaLeadsWebhookRouter from './routes/meta-leads-webhook';
 import hubConversationsRouter from './routes/hub-conversations';
+import metricsRouter from './routes/metrics';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -494,6 +495,7 @@ app.use('/api/notes',           requireAuth, notesRouter);
 app.use('/api/meta-ads',           requireAuth, metaAdsRouter);
 app.use('/api/meta-leads',         metaLeadsWebhookRouter); // público — chamado pela Meta
 app.use('/api/hub-conversations',  requireAuth, hubConversationsRouter);
+app.use('/api/metrics',            requireAuth, metricsRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req: Request, res: Response) => {

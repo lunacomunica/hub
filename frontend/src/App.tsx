@@ -26,6 +26,7 @@ import Consolidado from './pages/Consolidado';
 import Empresas from './pages/Empresas';
 import Notes from './pages/Notes';
 import HubConversations from './pages/HubConversations';
+import Metrics from './pages/Metrics';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -93,6 +94,7 @@ export default function App() {
             <Route path="configuracoes" element={<Configuracoes />} />
             <Route path="anotacoes" element={<Notes />} />
             <Route path="conversas" element={<HubConversations />} />
+            <Route path="metricas" element={<Metrics />} />
           </Route>
         </Routes>
       </BrowserRouter>
