@@ -614,6 +614,20 @@ export default function Opportunities() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
 
+  // Importação de leads da Meta
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{imported:number;skipped:number;forms:number}|null>(null);
+
+  async function importMetaLeads() {
+    setImporting(true); setImportResult(null);
+    try {
+      const r = await req('/meta-ads/import-leads', { method: 'POST' }) as any;
+      setImportResult(r);
+      if (r.imported > 0) load();
+    } catch { /* silent */ }
+    setImporting(false);
+  }
+
   // Meta Ads picker
   const [metaPicker, setMetaPicker] = useState(false);
   const [metaCampaigns, setMetaCampaigns] = useState<{id:string;name:string}[]>([]);
@@ -1189,6 +1203,13 @@ export default function Opportunities() {
         <div className="flex items-center gap-2">
           <button onClick={load} className="p-1.5 text-slate-400 hover:text-blue-400 rounded-lg transition-colors">
             <RefreshCw size={15} />
+          </button>
+          <button onClick={importMetaLeads} disabled={importing}
+            title={importResult ? `${importResult.imported} importados, ${importResult.skipped} duplicados` : 'Importar leads da Meta Ads'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: 'rgba(99,102,241,0.12)', color: importing ? '#6366f1' : '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+            {importing ? <RefreshCw size={12} className="animate-spin" /> : <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>}
+            {importing ? 'Importando…' : importResult ? `✓ ${importResult.imported} importados` : 'Importar da Meta'}
           </button>
           <button onClick={() => openCreate()} className="btn-primary flex items-center gap-2 text-sm">
             <Plus size={16} /> Nova Oportunidade
