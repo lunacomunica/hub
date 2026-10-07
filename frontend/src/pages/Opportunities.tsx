@@ -614,6 +614,55 @@ export default function Opportunities() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dropStage, setDropStage] = useState<string | null>(null);
 
+  // Meta Ads picker
+  const [metaPicker, setMetaPicker] = useState(false);
+  const [metaCampaigns, setMetaCampaigns] = useState<{id:string;name:string}[]>([]);
+  const [metaAds, setMetaAds] = useState<{id:string;name:string}[]>([]);
+  const [metaSelCampaign, setMetaSelCampaign] = useState('');
+  const [metaSelAd, setMetaSelAd] = useState('');
+  const [metaLoadingC, setMetaLoadingC] = useState(false);
+  const [metaLoadingA, setMetaLoadingA] = useState(false);
+
+  async function openMetaPicker() {
+    setMetaPicker(true);
+    setMetaCampaigns([]); setMetaAds([]); setMetaSelCampaign(''); setMetaSelAd('');
+    setMetaLoadingC(true);
+    try {
+      const data = await req('/meta-ads/campaigns') as {id:string;name:string}[];
+      setMetaCampaigns(data);
+    } catch { /* silent */ }
+    setMetaLoadingC(false);
+  }
+
+  async function loadMetaAds(campaignId: string) {
+    setMetaSelCampaign(campaignId); setMetaAds([]); setMetaSelAd('');
+    if (!campaignId) return;
+    setMetaLoadingA(true);
+    try {
+      const adsets = await req(`/meta-ads/adsets?campaign_id=${campaignId}`) as {id:string;name:string}[];
+      const allAds: {id:string;name:string}[] = [];
+      await Promise.all(adsets.map(async (as: any) => {
+        try {
+          const ads = await req(`/meta-ads/ads?adset_id=${as.id}`) as {id:string;name:string}[];
+          allAds.push(...ads.map((a: any) => ({ id: a.id, name: a.name })));
+        } catch { /* silent */ }
+      }));
+      setMetaAds(allAds);
+    } catch { /* silent */ }
+    setMetaLoadingA(false);
+  }
+
+  function applyMetaSelection() {
+    const camp = metaCampaigns.find(c => c.id === metaSelCampaign);
+    const ad   = metaAds.find(a => a.id === metaSelAd);
+    setForm(f => ({
+      ...f,
+      lead_campanha: camp?.name || f.lead_campanha,
+      lead_criativo: ad?.name  || f.lead_criativo,
+    }));
+    setMetaPicker(false);
+  }
+
   // Lost reason modal
   const [lostModal, setLostModal] = useState<{ opp: Opportunity; targetStage: string; reason: string } | null>(null);
 
@@ -2446,16 +2495,47 @@ export default function Opportunities() {
 
                     {/* ── Atribuição de campanha ── */}
                     {['Meta Ads','Google Ads','Instagram','Facebook'].includes(form.source || '') && (<>
-                      <Field label="Campanha">
-                        <input type="text" placeholder="ex: C1, Campanha-Oftalmo" value={(form as any).lead_campanha || ''}
-                          onChange={e => setForm(f => ({...f, lead_campanha: e.target.value || null} as any))}
-                          className="input-dark w-full" />
-                      </Field>
-                      <Field label="Criativo">
-                        <input type="text" placeholder="ex: AD01, Video-Depoimento" value={(form as any).lead_criativo || ''}
-                          onChange={e => setForm(f => ({...f, lead_criativo: e.target.value || null} as any))}
-                          className="input-dark w-full" />
-                      </Field>
+                      <div className="col-span-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="label-dark text-xs">Campanha · Criativo</span>
+                          <button type="button" onClick={openMetaPicker}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                            style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                            Buscar da Meta
+                          </button>
+                        </div>
+                        {metaPicker && (
+                          <div className="rounded-xl p-3 mb-3 space-y-2" style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                            <select value={metaSelCampaign} onChange={e => loadMetaAds(e.target.value)}
+                              className="input-dark w-full text-xs" disabled={metaLoadingC}>
+                              <option value="">{metaLoadingC ? 'Carregando campanhas…' : 'Selecionar campanha'}</option>
+                              {metaCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            {metaSelCampaign && (
+                              <select value={metaSelAd} onChange={e => setMetaSelAd(e.target.value)}
+                                className="input-dark w-full text-xs" disabled={metaLoadingA}>
+                                <option value="">{metaLoadingA ? 'Carregando criativos…' : 'Selecionar criativo (opcional)'}</option>
+                                {metaAds.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                            )}
+                            <div className="flex gap-2 justify-end">
+                              <button type="button" onClick={() => setMetaPicker(false)}
+                                className="px-3 py-1 rounded-lg text-xs" style={{ color: '#94a3b8' }}>Cancelar</button>
+                              <button type="button" onClick={applyMetaSelection} disabled={!metaSelCampaign}
+                                className="px-3 py-1 rounded-lg text-xs font-medium" style={{ background: '#6366f1', color: '#fff', opacity: metaSelCampaign ? 1 : 0.4 }}>Aplicar</button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="Campanha" value={(form as any).lead_campanha || ''}
+                            onChange={e => setForm(f => ({...f, lead_campanha: e.target.value || null} as any))}
+                            className="input-dark w-full text-xs" />
+                          <input type="text" placeholder="Criativo" value={(form as any).lead_criativo || ''}
+                            onChange={e => setForm(f => ({...f, lead_criativo: e.target.value || null} as any))}
+                            className="input-dark w-full text-xs" />
+                        </div>
+                      </div>
                     </>)}
 
                     <Field label="Meio de captação">
