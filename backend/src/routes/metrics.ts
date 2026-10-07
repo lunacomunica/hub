@@ -8,6 +8,28 @@ let ready = false;
 async function ensureTables() {
   if (ready) return;
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS mkt_daily_entries (
+      id             SERIAL PRIMARY KEY,
+      company_id     INT            NOT NULL DEFAULT 1,
+      data           DATE           NOT NULL,
+      semana         VARCHAR(10)    NOT NULL DEFAULT 'Sem 01',
+      investimento   NUMERIC(12,2)  NOT NULL DEFAULT 0,
+      leads_pagos    INT            NOT NULL DEFAULT 0,
+      leads_organicos INT           NOT NULL DEFAULT 0,
+      leads_qualif   INT            NOT NULL DEFAULT 0,
+      criativos_novos INT           NOT NULL DEFAULT 0,
+      agendamentos   INT            NOT NULL DEFAULT 0,
+      reunioes_feitas INT           NOT NULL DEFAULT 0,
+      noshows        INT            NOT NULL DEFAULT 0,
+      propostas      INT            NOT NULL DEFAULT 0,
+      fechamentos    INT            NOT NULL DEFAULT 0,
+      receita_nova   NUMERIC(12,2)  NOT NULL DEFAULT 0,
+      created_at     TIMESTAMPTZ    DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ    DEFAULT NOW(),
+      UNIQUE(company_id, data)
+    )
+  `).catch(() => {});
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS mkt_investments (
       id           SERIAL PRIMARY KEY,
       company_id   INT            NOT NULL DEFAULT 1,
@@ -304,6 +326,216 @@ router.put('/goals', async (req: Request, res: Response) => {
       RETURNING *
     `, [COMPANY, mes, indicador, meta || 0]);
     res.json(row);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── GET /api/metrics/daily?mes=YYYY-MM ─────────────────────────────────────
+router.get('/daily', async (req: Request, res: Response) => {
+  await ensureTables();
+  const mes = monthStart(req.query.mes as string);
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM mkt_daily_entries WHERE company_id=$1 AND DATE_TRUNC('month',data)=$2::date ORDER BY data ASC`,
+      [COMPANY, mes]
+    );
+    res.json(rows);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── POST /api/metrics/daily ─────────────────────────────────────────────────
+router.post('/daily', async (req: Request, res: Response) => {
+  await ensureTables();
+  const { data, semana, investimento, leads_pagos, leads_organicos, leads_qualif,
+          criativos_novos, agendamentos, reunioes_feitas, noshows, propostas, fechamentos, receita_nova } = req.body;
+  if (!data) return res.status(400).json({ error: 'data é obrigatória' });
+  try {
+    const { rows: [row] } = await pool.query(`
+      INSERT INTO mkt_daily_entries
+        (company_id, data, semana, investimento, leads_pagos, leads_organicos, leads_qualif,
+         criativos_novos, agendamentos, reunioes_feitas, noshows, propostas, fechamentos, receita_nova)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      ON CONFLICT (company_id, data)
+      DO UPDATE SET semana=$3, investimento=$4, leads_pagos=$5, leads_organicos=$6, leads_qualif=$7,
+        criativos_novos=$8, agendamentos=$9, reunioes_feitas=$10, noshows=$11,
+        propostas=$12, fechamentos=$13, receita_nova=$14, updated_at=NOW()
+      RETURNING *
+    `, [COMPANY, data, semana||'Sem 01',
+        investimento||0, leads_pagos||0, leads_organicos||0, leads_qualif||0,
+        criativos_novos||0, agendamentos||0, reunioes_feitas||0, noshows||0,
+        propostas||0, fechamentos||0, receita_nova||0]);
+    res.json(row);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── PUT /api/metrics/daily/:id ──────────────────────────────────────────────
+router.put('/daily/:id', async (req: Request, res: Response) => {
+  await ensureTables();
+  const { semana, investimento, leads_pagos, leads_organicos, leads_qualif,
+          criativos_novos, agendamentos, reunioes_feitas, noshows, propostas, fechamentos, receita_nova } = req.body;
+  try {
+    const { rows: [row] } = await pool.query(`
+      UPDATE mkt_daily_entries SET
+        semana=$1, investimento=$2, leads_pagos=$3, leads_organicos=$4, leads_qualif=$5,
+        criativos_novos=$6, agendamentos=$7, reunioes_feitas=$8, noshows=$9,
+        propostas=$10, fechamentos=$11, receita_nova=$12, updated_at=NOW()
+      WHERE id=$13 AND company_id=$14
+      RETURNING *
+    `, [semana||'Sem 01', investimento||0, leads_pagos||0, leads_organicos||0, leads_qualif||0,
+        criativos_novos||0, agendamentos||0, reunioes_feitas||0, noshows||0,
+        propostas||0, fechamentos||0, receita_nova||0, req.params.id, COMPANY]);
+    if (!row) return res.status(404).json({ error: 'Entrada não encontrada' });
+    res.json(row);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── DELETE /api/metrics/daily/:id ───────────────────────────────────────────
+router.delete('/daily/:id', async (req: Request, res: Response) => {
+  try {
+    await pool.query(`DELETE FROM mkt_daily_entries WHERE id=$1 AND company_id=$2`, [req.params.id, COMPANY]);
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── GET /api/metrics/weekly?mes=YYYY-MM ─────────────────────────────────────
+router.get('/weekly', async (req: Request, res: Response) => {
+  await ensureTables();
+  const mes = monthStart(req.query.mes as string);
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        semana,
+        SUM(investimento)     AS investimento,
+        SUM(leads_pagos)      AS leads_pagos,
+        SUM(leads_organicos)  AS leads_organicos,
+        SUM(leads_qualif)     AS leads_qualif,
+        SUM(agendamentos)     AS agendamentos,
+        SUM(reunioes_feitas)  AS reunioes_feitas,
+        SUM(noshows)          AS noshows,
+        SUM(propostas)        AS propostas,
+        SUM(fechamentos)      AS fechamentos,
+        SUM(receita_nova)     AS receita_nova
+      FROM mkt_daily_entries
+      WHERE company_id=$1 AND DATE_TRUNC('month',data)=$2::date
+      GROUP BY semana
+      ORDER BY semana
+    `, [COMPANY, mes]);
+
+    const { rows: goals } = await pool.query(
+      `SELECT indicador, meta FROM mkt_goals WHERE company_id=$1 AND DATE_TRUNC('month',mes)=$2::date`,
+      [COMPANY, mes]
+    );
+    const goalsMap: Record<string,number> = {};
+    for (const g of goals) goalsMap[g.indicador] = Number(g.meta);
+
+    const metaMensal = goalsMap['faturamento'] || 0;
+    const metaSemanal = metaMensal > 0 ? metaMensal / 4 : 0;
+
+    const weeks = rows.map(r => ({
+      semana:          r.semana,
+      investimento:    Number(r.investimento),
+      leads_pagos:     Number(r.leads_pagos),
+      leads_organicos: Number(r.leads_organicos),
+      leads_qualif:    Number(r.leads_qualif),
+      agendamentos:    Number(r.agendamentos),
+      reunioes_feitas: Number(r.reunioes_feitas),
+      noshows:         Number(r.noshows),
+      propostas:       Number(r.propostas),
+      fechamentos:     Number(r.fechamentos),
+      receita_nova:    Number(r.receita_nova),
+      meta_semanal:    metaSemanal,
+      pct_meta:        metaSemanal > 0 ? Number(r.receita_nova) / metaSemanal : 0,
+    }));
+
+    res.json({ weeks, meta_mensal: metaMensal, meta_semanal: metaSemanal });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── GET /api/metrics/by-sdr?mes=YYYY-MM ────────────────────────────────────
+router.get('/by-sdr', async (req: Request, res: Response) => {
+  await ensureTables();
+  const mes = monthStart(req.query.mes as string);
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(lead_sdr, '(sem SDR)') AS sdr,
+        COUNT(*)                         AS leads,
+        COUNT(*) FILTER (WHERE lead_tipo = 'A') AS leads_a,
+        COUNT(*) FILTER (WHERE lead_tipo = 'B') AS leads_b,
+        COUNT(*) FILTER (WHERE lead_tipo = 'C') AS leads_c
+      FROM opportunities
+      WHERE company_id=$1 AND DATE_TRUNC('month', created_at)=$2::date
+      GROUP BY 1
+      ORDER BY leads DESC
+    `, [COMPANY, mes]);
+
+    const { rows: wonRows } = await pool.query(`
+      SELECT
+        COALESCE(o.lead_sdr, '(sem SDR)') AS sdr,
+        COUNT(o.*)                          AS fechados,
+        COALESCE(SUM(o.value),0)            AS faturamento
+      FROM opportunities o
+      JOIN pipeline_stages ps ON ps.key = o.stage
+      WHERE o.company_id=$1
+        AND ps.is_terminal=1
+        AND ps.key NOT ILIKE '%perd%' AND ps.key NOT ILIKE '%lost%' AND ps.key NOT ILIKE '%cancel%'
+        AND DATE_TRUNC('month', o.updated_at)=$2::date
+      GROUP BY 1
+    `, [COMPANY, mes]);
+
+    const wonMap: Record<string,any> = {};
+    for (const r of wonRows) wonMap[r.sdr] = r;
+
+    res.json(rows.map(r => {
+      const won   = wonMap[r.sdr] || {};
+      const leads = Number(r.leads);
+      const fech  = Number(won.fechados || 0);
+      return {
+        sdr:         r.sdr,
+        leads,
+        leads_a:     Number(r.leads_a),
+        leads_b:     Number(r.leads_b),
+        leads_c:     Number(r.leads_c),
+        fechados:    fech,
+        faturamento: Number(won.faturamento || 0),
+        win_rate:    leads > 0 ? fech / leads : 0,
+      };
+    }));
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── GET /api/metrics/by-closer?mes=YYYY-MM ──────────────────────────────────
+router.get('/by-closer', async (req: Request, res: Response) => {
+  await ensureTables();
+  const mes = monthStart(req.query.mes as string);
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(o.lead_closer, '(sem Closer)') AS closer,
+        COUNT(o.*)                               AS propostas,
+        COUNT(o.*) FILTER (WHERE ps.is_terminal=1 AND ps.key NOT ILIKE '%perd%' AND ps.key NOT ILIKE '%lost%' AND ps.key NOT ILIKE '%cancel%') AS fechados,
+        COALESCE(SUM(o.value) FILTER (WHERE ps.is_terminal=1 AND ps.key NOT ILIKE '%perd%' AND ps.key NOT ILIKE '%lost%' AND ps.key NOT ILIKE '%cancel%'), 0) AS faturamento,
+        COALESCE(SUM(o.value),0) AS pipeline_total
+      FROM opportunities o
+      JOIN pipeline_stages ps ON ps.key = o.stage
+      WHERE o.company_id=$1
+        AND DATE_TRUNC('month', o.updated_at)=$2::date
+      GROUP BY 1
+      ORDER BY faturamento DESC
+    `, [COMPANY, mes]);
+
+    res.json(rows.map(r => {
+      const prop  = Number(r.propostas);
+      const fech  = Number(r.fechados);
+      const fatur = Number(r.faturamento);
+      return {
+        closer:        r.closer,
+        propostas:     prop,
+        fechados:      fech,
+        faturamento:   fatur,
+        ticket_medio:  fech > 0 ? fatur / fech : null,
+        win_rate:      prop > 0 ? fech / prop : 0,
+      };
+    }));
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 

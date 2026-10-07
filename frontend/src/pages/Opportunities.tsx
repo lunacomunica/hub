@@ -2611,6 +2611,18 @@ export default function Opportunities() {
                       </div>
                     </div>
 
+                    {/* SDR / Closer */}
+                    <Field label="SDR">
+                      <input type="text" placeholder="Nome do SDR" value={(form as any).lead_sdr || ''}
+                        onChange={e => setForm(f => ({...f, lead_sdr: e.target.value || null} as any))}
+                        className="input-dark w-full" />
+                    </Field>
+                    <Field label="Closer">
+                      <input type="text" placeholder="Nome do Closer" value={(form as any).lead_closer || ''}
+                        onChange={e => setForm(f => ({...f, lead_closer: e.target.value || null} as any))}
+                        className="input-dark w-full" />
+                    </Field>
+
                     {/* Tipo do lead — override manual */}
                     <div className="col-span-2 flex items-center justify-between rounded-xl px-4 py-3"
                       style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.1)' }}>

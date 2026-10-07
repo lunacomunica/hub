@@ -358,6 +358,7 @@ router.post('/', async (req: Request, res: Response) => {
             referral_type, referral_client_id, referral_employee_id, opp_items,
             contact_email, contact_whatsapp, contact_instagram, contact_date,
             lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe,
+            lead_sdr, lead_closer,
             company_id: bodyCompanyId } = req.body;
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
@@ -457,6 +458,17 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
+    // ── SDR / Closer — self-healing ─────────────────────────────────────────
+    try {
+      await pool.query(`UPDATE opportunities SET lead_sdr=$1, lead_closer=$2 WHERE id=$3`, [lead_sdr||null, lead_closer||null, created.id]);
+    } catch (e: any) {
+      if (e.message?.includes('lead_sdr') || e.message?.includes('lead_closer')) {
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_sdr TEXT`);
+        await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_closer TEXT`);
+        await pool.query(`UPDATE opportunities SET lead_sdr=$1, lead_closer=$2 WHERE id=$3`, [lead_sdr||null, lead_closer||null, created.id]);
+      }
+    }
+
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -471,7 +483,8 @@ router.put('/:id', async (req: Request, res: Response) => {
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items, company_id,
             contact_email, contact_whatsapp, contact_instagram, contact_date,
-            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe } = req.body;
+            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe,
+            lead_sdr, lead_closer } = req.body;
     console.log('[opp PUT] contact_date recebido:', contact_date, '| company_id:', company_id);
 
     const { rows: [existing] } = await pool.query<{ id: number; stage: string; closed_at: string | null }>(
@@ -593,6 +606,19 @@ router.put('/:id', async (req: Request, res: Response) => {
             `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
             [lead_campanha||null,lead_criativo||null,lead_meio||null,lead_especialidade||null,rqe2||null,leadTipo2,req.params.id]
           );
+        }
+      }
+    }
+
+    // ── SDR / Closer — self-healing ─────────────────────────────────────────
+    if (lead_sdr !== undefined || lead_closer !== undefined) {
+      try {
+        await pool.query(`UPDATE opportunities SET lead_sdr=$1, lead_closer=$2 WHERE id=$3`, [lead_sdr||null, lead_closer||null, req.params.id]);
+      } catch (e: any) {
+        if (e.message?.includes('lead_sdr') || e.message?.includes('lead_closer')) {
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_sdr TEXT`);
+          await pool.query(`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS lead_closer TEXT`);
+          await pool.query(`UPDATE opportunities SET lead_sdr=$1, lead_closer=$2 WHERE id=$3`, [lead_sdr||null, lead_closer||null, req.params.id]);
         }
       }
     }
