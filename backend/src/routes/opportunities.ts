@@ -483,7 +483,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             original_price, payment_method, installments, payment_notes, referral_name,
             referral_type, referral_client_id, referral_employee_id, opp_items, company_id,
             contact_email, contact_whatsapp, contact_instagram, contact_date,
-            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe,
+            lead_campanha, lead_criativo, lead_meio, lead_especialidade, lead_possui_rqe, lead_tipo,
             lead_sdr, lead_closer } = req.body;
     console.log('[opp PUT] contact_date recebido:', contact_date, '| company_id:', company_id);
 
