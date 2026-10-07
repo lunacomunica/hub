@@ -2611,6 +2611,29 @@ export default function Opportunities() {
                       </div>
                     </div>
 
+                    {/* Tipo do lead — override manual */}
+                    <div className="col-span-2 flex items-center justify-between rounded-xl px-4 py-3"
+                      style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(59,130,246,0.1)' }}>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-300">Tipo do lead</div>
+                        <div className="text-xs text-slate-500 mt-0.5">Override manual (sobrescreve a regra automática)</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(['A','B','C'] as const).map(t => {
+                          const cor = t === 'A' ? ['rgba(16,185,129,0.15)','#34d399','rgba(16,185,129,0.4)'] : t === 'B' ? ['rgba(59,130,246,0.15)','#93c5fd','rgba(59,130,246,0.4)'] : ['rgba(100,116,139,0.15)','#94a3b8','rgba(100,116,139,0.3)'];
+                          const sel = (form as any).lead_tipo === t;
+                          return (
+                            <button key={t} type="button"
+                              onClick={() => setForm(f => ({...f, lead_tipo: sel ? null : t} as any))}
+                              className="text-xs font-bold px-3 py-1.5 rounded-full transition-all"
+                              style={{ background: sel ? cor[0] : 'transparent', color: sel ? cor[1] : '#475569', border: `1px solid ${sel ? cor[2] : 'rgba(100,116,139,0.2)'}` }}>
+                              {t}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <Field label="Próximo follow-up">
                       <input type="date" value={form.next_followup || ''} onChange={e => setForm(f => ({...f, next_followup: e.target.value || null}))}
                         className="input-dark w-full" />

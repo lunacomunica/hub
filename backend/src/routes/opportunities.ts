@@ -435,7 +435,8 @@ router.post('/', async (req: Request, res: Response) => {
     // ── Marketing attribution — self-healing ────────────────────────────────
     const icpEsp = ['oftalmo','cardio','gastro'];
     const rqe = lead_possui_rqe === true || lead_possui_rqe === 'true';
-    const leadTipo = rqe && icpEsp.includes(lead_especialidade) ? 'A' : rqe && lead_especialidade === 'outra' ? 'B' : 'C';
+    const autoTipo = rqe && icpEsp.includes(lead_especialidade) ? 'A' : rqe && lead_especialidade === 'outra' ? 'B' : 'C';
+    const leadTipo = (lead_tipo && ['A','B','C'].includes(lead_tipo)) ? lead_tipo : autoTipo;
     try {
       await pool.query(
         `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
@@ -572,8 +573,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     // ── Marketing attribution — self-healing ────────────────────────────────
     const icpEsp2 = ['oftalmo','cardio','gastro'];
     const rqe2 = lead_possui_rqe === true || lead_possui_rqe === 'true';
-    const leadTipo2 = rqe2 && icpEsp2.includes(lead_especialidade) ? 'A' : rqe2 && lead_especialidade === 'outra' ? 'B' : 'C';
-    if (lead_campanha !== undefined || lead_criativo !== undefined || lead_meio !== undefined || lead_especialidade !== undefined || lead_possui_rqe !== undefined) {
+    const autoTipo2 = rqe2 && icpEsp2.includes(lead_especialidade) ? 'A' : rqe2 && lead_especialidade === 'outra' ? 'B' : 'C';
+    const leadTipo2 = (lead_tipo && ['A','B','C'].includes(lead_tipo)) ? lead_tipo : autoTipo2;
+    if (lead_campanha !== undefined || lead_criativo !== undefined || lead_meio !== undefined || lead_especialidade !== undefined || lead_possui_rqe !== undefined || lead_tipo !== undefined) {
       try {
         await pool.query(
           `UPDATE opportunities SET lead_campanha=$1,lead_criativo=$2,lead_meio=$3,lead_especialidade=$4,lead_possui_rqe=$5,lead_tipo=$6 WHERE id=$7`,
